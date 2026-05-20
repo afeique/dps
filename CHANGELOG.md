@@ -77,9 +77,18 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   `EnemyKind::Hunter`. A basic wave spawner (`systems::wave`) drops enemies on a
   timer at the top edge, cycling the ported roster — replacing the single
   hardcoded drifter. Enemies with a `FireCooldown` shoot via the generic aimed
-  `enemy_fire`. Per-kind fire patterns (spread / machinegun / laser / missile),
-  the remaining six kinds, and the data-driven wave tables (`wave-data.js`) are
-  subsequent increments.
+  `enemy_fire`.
+- **Phase 3 — full enemy roster (increment 2).** Ported the remaining six kinds
+  (in parallel, same module pattern): **Stalker** (cyan sword, `arc` swoop),
+  **Prowler** (magenta, slow `keep_distance` missile turret), **Weaver** (yellow
+  `weaver_spinup`), **Sentinel** (green `weaver_spinup`), **Tangerine/Bomber**
+  (orange `spiked_circle`, `chase`), **Titan** (big pink `boulder` tank). The
+  wave spawner now cycles the full 10-kind roster, and `despawn_offscreen_enemies`
+  caps stray counts. FixedUpdate's per-kind AI is nested as a chained sub-group
+  (keeps the system tuple under Bevy's 20-element limit). Subsequent increments:
+  per-kind fire patterns (spread / machinegun / laser / missile / mine), the
+  data-driven wave tables (`wave-data.js`), weapons + defense skills, drops,
+  asteroids.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

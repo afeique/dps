@@ -82,13 +82,25 @@ impl Plugin for GamePlugin {
                 FixedUpdate,
                 (
                     systems::movement::ship_control,
+                    // Per-kind enemy AI, nested as one chained sub-group so the
+                    // outer tuple stays under Bevy's 20-element limit. Runs
+                    // before `integrate` so steering applies the same tick.
+                    (
+                        systems::enemy_ai::drifter_ai,
+                        systems::enemy::hunter::ai,
+                        systems::enemy::guardian::ai,
+                        systems::enemy::wasp::ai,
+                        systems::enemy::stalker::ai,
+                        systems::enemy::prowler::ai,
+                        systems::enemy::weaver::ai,
+                        systems::enemy::sentinel::ai,
+                        systems::enemy::tangerine::ai,
+                        systems::enemy::titan::ai,
+                    )
+                        .chain(),
+                    systems::wave::spawn_waves,
                     systems::movement::integrate,
                     systems::movement::confine_player,
-                    systems::enemy_ai::drifter_ai,
-                    systems::enemy::hunter::ai,
-                    systems::enemy::guardian::ai,
-                    systems::enemy::wasp::ai,
-                    systems::wave::spawn_waves,
                     systems::enemy_fire::enemy_fire,
                     systems::weapons::player_fire,
                     systems::weapons::spawn_bullets,
@@ -99,6 +111,7 @@ impl Plugin for GamePlugin {
                     systems::damage::tick_invulnerability,
                     systems::cleanup::tick_lifetimes,
                     systems::cleanup::despawn_offscreen_bullets,
+                    systems::cleanup::despawn_offscreen_enemies,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

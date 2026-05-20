@@ -5,6 +5,7 @@
 //! build" capture. A no-op when the env var is unset, so normal runs are
 //! unaffected.
 
+use crate::components::{Invulnerable, Ship};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
@@ -20,7 +21,7 @@ impl Plugin for ScreenshotPlugin {
     fn build(&self, app: &mut App) {
         if let Ok(path) = std::env::var("DPS_SCREENSHOT") {
             app.insert_resource(ScreenshotPlan { path, taken: false })
-                .add_systems(Update, capture_then_exit);
+                .add_systems(Update, (capture_then_exit, keep_player_alive));
         }
     }
 }
@@ -33,15 +34,24 @@ fn capture_then_exit(
     mut frame: Local<u32>,
 ) {
     *frame += 1;
-    if !plan.taken && *frame >= 60 {
+    if !plan.taken && *frame >= 540 {
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(plan.path.clone()));
         plan.taken = true;
         info!("DPS_SCREENSHOT: captured frame -> {}", plan.path);
     }
-    if *frame >= 150 {
+    if *frame >= 660 {
         info!("DPS_SCREENSHOT: exiting");
         std::process::exit(0);
+    }
+}
+
+/// Screenshot-only: keep the player invulnerable so a late capture shows a
+/// populated mid-game scene rather than an early GameOver. Env-gated, so it
+/// never runs in normal play.
+fn keep_player_alive(mut commands: Commands, q: Query<Entity, With<Ship>>) {
+    for e in &q {
+        commands.entity(e).insert(Invulnerable { seconds: 999.0 });
     }
 }

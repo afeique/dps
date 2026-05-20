@@ -10,7 +10,13 @@
 
 pub mod guardian;
 pub mod hunter;
+pub mod prowler;
+pub mod sentinel;
+pub mod stalker;
+pub mod tangerine;
+pub mod titan;
 pub mod wasp;
+pub mod weaver;
 
 use crate::components::*;
 use crate::render::shapes;
@@ -32,7 +38,13 @@ fn shape_for(kind: EnemyKind) -> Shape {
         EnemyKind::Hunter => hunter::shape(),
         EnemyKind::Guardian => guardian::shape(),
         EnemyKind::Wasp => wasp::shape(),
-        _ => shapes::drifter_star(18.0), // Drifter + not-yet-ported kinds
+        EnemyKind::Stalker => stalker::shape(),
+        EnemyKind::Prowler => prowler::shape(),
+        EnemyKind::Weaver => weaver::shape(),
+        EnemyKind::Sentinel => sentinel::shape(),
+        EnemyKind::Tangerine => tangerine::shape(),
+        EnemyKind::Titan => titan::shape(),
+        EnemyKind::Drifter => shapes::drifter_star(18.0),
     }
 }
 
@@ -41,7 +53,13 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
         EnemyKind::Hunter => hunter::stats(),
         EnemyKind::Guardian => guardian::stats(),
         EnemyKind::Wasp => wasp::stats(),
-        _ => EnemyStats {
+        EnemyKind::Stalker => stalker::stats(),
+        EnemyKind::Prowler => prowler::stats(),
+        EnemyKind::Weaver => weaver::stats(),
+        EnemyKind::Sentinel => sentinel::stats(),
+        EnemyKind::Tangerine => tangerine::stats(),
+        EnemyKind::Titan => titan::stats(),
+        EnemyKind::Drifter => EnemyStats {
             health: 30.0,
             radius: 18.0,
             speed: 60.0,

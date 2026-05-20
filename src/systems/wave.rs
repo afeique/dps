@@ -20,18 +20,24 @@ impl Default for Wave {
     fn default() -> Self {
         Self {
             timer: 0.0,
-            interval: 2.0,
+            interval: 1.2,
             spawned: 0,
         }
     }
 }
 
-/// Roster spawned by the basic cadence (the kinds ported so far).
-const ROSTER: [EnemyKind; 4] = [
+/// Roster spawned by the basic cadence — the full 10-kind roster.
+const ROSTER: [EnemyKind; 10] = [
     EnemyKind::Drifter,
     EnemyKind::Hunter,
     EnemyKind::Guardian,
     EnemyKind::Wasp,
+    EnemyKind::Stalker,
+    EnemyKind::Prowler,
+    EnemyKind::Weaver,
+    EnemyKind::Sentinel,
+    EnemyKind::Tangerine,
+    EnemyKind::Titan,
 ];
 
 /// Reset the wave state — run on `OnEnter(Playing)` so restarts start fresh.
