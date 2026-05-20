@@ -9,9 +9,10 @@
 //! `bevy_hanabi` GPU-compute particles, audio, and UI — is staged in
 //! `docs/Rust + Bevy Port Plan – 2026-05-20.md`.
 
-use bevy::core_pipeline::bloom::Bloom;
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::post_process::bloom::Bloom; // 0.18: bloom moved to the bevy_post_process crate
 use bevy::prelude::*;
+use bevy::render::view::Hdr; // 0.18: HDR is a marker component, not a `Camera` field
 
 fn main() {
     App::new()
@@ -45,12 +46,9 @@ fn setup(
     // Real bloom replaces the web build's per-canvas `shadowBlur` fakery.
     commands.spawn((
         Camera2d,
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         Tonemapping::TonyMcMapface,
-        Bloom::default(),
+        Bloom::NATURAL,
     ));
 
     // Over-bright (>1.0) emissive colors so Bloom produces a real glow halo.
