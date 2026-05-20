@@ -31,6 +31,14 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   systems through an ad-hoc `Schedule`, and assert on the result — no rendering.
   Covers contact damage + i-frame gating, i-frame expiry, player death →
   `GameOver`, and the enemy-kill/score path.
+- **Phase 2 renderer — first silhouettes (lyon).** Added `bevy_prototype_lyon`
+  and a `render::shapes` module that ports the Canvas2D vector art from
+  `js/modules/render/shapes.js`: the player ship hull (16-vertex silhouette +
+  cockpit highlight) and the Drifter's 10-point electric star (+ white-hot
+  core). Colors are HDR-emissive so the camera's `Bloom` does the glow (no
+  per-shape blur); `ShapePlugin` is registered in `GamePlugin`. Replaces the
+  placeholder `RegularPolygon` meshes. Particles (`bevy_hanabi`), the bullet
+  layer, and the starfield are the next Phase-2 increments.
 
 ### Notes
 

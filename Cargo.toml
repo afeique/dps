@@ -9,6 +9,10 @@ publish = false
 
 [dependencies]
 bevy = "0.18.1"
+# Vector-path → Mesh2d tessellation: port the Canvas2D silhouettes from
+# `shapes.js` to lyon paths. Glow comes from HDR-emissive colors + camera bloom
+# (not per-shape blur). See docs/port-plan.md §3.1.
+bevy_prototype_lyon = "0.16.0"
 
 # ── Build-speed profiles (Bevy's recommended dev setup) ──────────────
 # Compile our own code with light optimization, but optimize all

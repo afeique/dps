@@ -10,6 +10,7 @@
 //!                     touch rendering; rendering/UI never mutate sim state.
 
 use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::ShapePlugin;
 
 use crate::messages::{Collision, Damage, Death, Fire};
 use crate::resources::{PlayBounds, Score};
@@ -21,6 +22,9 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app
+            // ── third-party plugins ─────────────────────────────────────
+            // lyon vector-path tessellation → Mesh2d for the silhouettes.
+            .add_plugins(ShapePlugin)
             // ── global flow + shared data ───────────────────────────────
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
