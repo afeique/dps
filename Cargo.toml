@@ -1,0 +1,28 @@
+[package]
+name = "dps"
+version = "0.1.0"
+edition = "2024"
+description = "Dark Prism Solid — a native Rust + Bevy port of the Rainboids single-player game, built for best-in-class graphics (HDR bloom, glow, GPU-compute particles)."
+authors = ["Afeique Sheikh"]
+license-file = "LICENSE"
+publish = false
+
+[dependencies]
+bevy = "0.18.1"
+
+# ── Build-speed profiles (Bevy's recommended dev setup) ──────────────
+# Compile our own code with light optimization, but optimize all
+# dependencies (Bevy + friends) fully so the dev runtime is fast while
+# incremental rebuilds of *our* crate stay quick.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# ── Release tuning ───────────────────────────────────────────────────
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
