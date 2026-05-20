@@ -42,6 +42,10 @@ pub fn spawn_enemy(
             kind: EnemyKind::Drifter,
         },
         AiState::default(),
+        FireCooldown {
+            cooldown: 1.4,
+            timer: 1.0,
+        },
         Velocity(Vec2::new(55.0, -18.0)),
         Collider { radius: 18.0 },
         Health::new(30.0),

@@ -46,3 +46,12 @@ pub enum Faction {
 pub struct Lifetime {
     pub seconds: f32,
 }
+
+/// Brief post-hit invulnerability (i-frames). While present, the entity ignores
+/// incoming `Damage`; `systems::damage::tick_invulnerability` counts it down and
+/// removes it at expiry. Stops rapid contact/fire from melting the player in a
+/// single tick burst — mirrors the JS ship's hit-cooldown grace window.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Invulnerable {
+    pub seconds: f32,
+}

@@ -23,6 +23,9 @@ mod resources;
 mod states;
 mod systems;
 
+#[cfg(test)]
+mod gate_tests;
+
 use app::GamePlugin;
 use bevy::prelude::*;
 

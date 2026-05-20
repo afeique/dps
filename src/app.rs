@@ -43,6 +43,15 @@ impl Plugin for GamePlugin {
                 Update,
                 systems::input::gather_input.run_if(in_state(GameState::Playing)),
             )
+            // ── death → GameOver → restart flow ─────────────────────────
+            .add_systems(
+                OnEnter(GameState::GameOver),
+                systems::flow::game_over_cleanup,
+            )
+            .add_systems(
+                Update,
+                systems::flow::restart_input.run_if(in_state(GameState::GameOver)),
+            )
             // ── simulation: fixed timestep, ordered ─────────────────────
             .add_systems(
                 FixedUpdate,
@@ -51,10 +60,14 @@ impl Plugin for GamePlugin {
                     systems::movement::integrate,
                     systems::movement::confine_player,
                     systems::enemy_ai::drifter_ai,
+                    systems::enemy_fire::enemy_fire,
                     systems::weapons::player_fire,
                     systems::weapons::spawn_bullets,
                     systems::collision::bullet_hits_enemy,
+                    systems::collision::enemy_bullet_hits_player,
+                    systems::collision::enemy_contact_player,
                     systems::damage::apply_damage,
+                    systems::damage::tick_invulnerability,
                     systems::cleanup::tick_lifetimes,
                     systems::cleanup::despawn_offscreen_bullets,
                 )

@@ -11,6 +11,8 @@
 
 use bevy::prelude::*;
 
+use crate::components::Faction;
+
 /// Broadphase/narrowphase output: entity `a` overlapped entity `b` this tick.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Collision {
@@ -31,11 +33,13 @@ pub struct Death {
     pub entity: Entity,
 }
 
-/// A weapon fired: spawn a bullet from `origin` along unit `dir`.
+/// A weapon fired: spawn a bullet from `origin` along unit `dir`. `faction`
+/// selects the bullet's kind / team / color (player gold vs enemy magenta).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Fire {
     pub origin: Vec2,
     pub dir: Vec2,
     pub damage: f32,
     pub speed: f32,
+    pub faction: Faction,
 }

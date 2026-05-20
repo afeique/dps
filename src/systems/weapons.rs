@@ -26,6 +26,7 @@ pub fn player_fire(
                 dir,
                 damage: weapon.damage,
                 speed: weapon.bullet_speed,
+                faction: Faction::Player,
             });
         }
     }
@@ -41,18 +42,23 @@ pub fn spawn_bullets(
     mut fire: MessageReader<Fire>,
 ) {
     for shot in fire.read() {
-        let mesh = meshes.add(Circle::new(3.0));
-        let mat = materials.add(ColorMaterial::from(glow(9.0, 6.5, 2.0))); // hot gold
+        // Per-team look + collider/lifetime: player gold, enemy magenta.
+        let (kind, radius, color, life) = match shot.faction {
+            Faction::Player => (BulletKind::Player, 3.0, glow(9.0, 6.5, 2.0), 1.5),
+            Faction::Enemy => (BulletKind::Enemy, 4.0, glow(9.0, 0.7, 3.0), 3.0),
+        };
+        let mesh = meshes.add(Circle::new(radius));
+        let mat = materials.add(ColorMaterial::from(color));
 
         commands.spawn((
             Bullet {
-                kind: BulletKind::Player,
+                kind,
                 damage: shot.damage,
             },
             Velocity(shot.dir * shot.speed),
-            Collider { radius: 3.0 },
-            Faction::Player,
-            Lifetime { seconds: 1.5 },
+            Collider { radius },
+            shot.faction,
+            Lifetime { seconds: life },
             Mesh2d(mesh),
             MeshMaterial2d(mat),
             Transform::from_translation(shot.origin.extend(0.0)),
