@@ -5,7 +5,7 @@
 //! build" capture. A no-op when the env var is unset, so normal runs are
 //! unaffected.
 
-use crate::components::{Invulnerable, Ship};
+use crate::components::{Intent, Invulnerable, Ship};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
@@ -21,7 +21,16 @@ impl Plugin for ScreenshotPlugin {
     fn build(&self, app: &mut App) {
         if let Ok(path) = std::env::var("DPS_SCREENSHOT") {
             app.insert_resource(ScreenshotPlan { path, taken: false })
-                .add_systems(Update, (capture_then_exit, keep_player_alive));
+                .add_systems(
+                    Update,
+                    (
+                        capture_then_exit,
+                        keep_player_alive,
+                        // Hold fire so captures show the player shooting (kills →
+                        // explosions + orbs). Ordered after input so it wins.
+                        force_fire.after(crate::systems::input::gather_input),
+                    ),
+                );
         }
     }
 }
@@ -53,5 +62,13 @@ fn capture_then_exit(
 fn keep_player_alive(mut commands: Commands, q: Query<Entity, With<Ship>>) {
     for e in &q {
         commands.entity(e).insert(Invulnerable { seconds: 999.0 });
+    }
+}
+
+/// Screenshot-only: hold the fire button so the capture shows player bullets,
+/// kills, explosions, and dropped orbs. Env-gated.
+fn force_fire(mut q: Query<&mut Intent, With<Ship>>) {
+    for mut intent in &mut q {
+        intent.firing = true;
     }
 }

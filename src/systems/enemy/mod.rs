@@ -8,6 +8,7 @@
 //! Guardian, Wasp. Stalker / Prowler / Weaver / Sentinel / Tangerine / Titan
 //! are subsequent increments; they fall back to the drifter visual for now.
 
+pub mod firing;
 pub mod guardian;
 pub mod hunter;
 pub mod prowler;

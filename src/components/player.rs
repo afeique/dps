@@ -3,6 +3,21 @@
 
 use bevy::prelude::*;
 
+/// Spare ships. On player death, if `count > 0` the ship respawns in place
+/// (full health + shield, brief i-frames) instead of triggering `GameOver` —
+/// the spare-ship death parity from the JS game.
+#[derive(Component, Debug)]
+pub struct Lives {
+    pub count: u32,
+}
+
+/// Energy shield that absorbs incoming damage before `Health` is touched.
+#[derive(Component, Debug)]
+pub struct Shield {
+    pub current: f32,
+    pub max: f32,
+}
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

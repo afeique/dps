@@ -8,7 +8,7 @@
 //!
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
-use crate::components::{Health, Invulnerable, Ship};
+use crate::components::{Health, Invulnerable, Lives, Shield, Ship};
 use crate::messages::{Damage, Death};
 use crate::resources::Score;
 use crate::states::GameState;
@@ -20,35 +20,67 @@ pub fn apply_damage(
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut q: Query<(&mut Health, &Transform, Has<Ship>, Has<Invulnerable>)>,
+    mut q: Query<(
+        &mut Health,
+        &Transform,
+        Option<&mut Shield>,
+        Option<&mut Lives>,
+        Has<Ship>,
+        Has<Invulnerable>,
+    )>,
 ) {
     for ev in dmg.read() {
-        let Ok((mut hp, tf, is_player, invulnerable)) = q.get_mut(ev.target) else {
+        let Ok((mut hp, tf, mut shield, mut lives, is_player, invulnerable)) = q.get_mut(ev.target)
+        else {
             continue; // target already gone this tick
         };
         if invulnerable {
             continue; // i-frames active — eat the hit silently
         }
-        hp.current -= ev.amount;
+
+        // Shield absorbs first; the remainder hits Health.
+        let mut remaining = ev.amount;
+        if let Some(s) = shield.as_mut() {
+            let absorbed = remaining.min(s.current);
+            s.current -= absorbed;
+            remaining -= absorbed;
+        }
+        hp.current -= remaining;
+
         if hp.current <= 0.0 {
             let position = tf.translation.truncate();
-            deaths.write(Death {
-                entity: ev.target,
-                position,
-            });
             if is_player {
+                // Spare ship? Respawn in place (refill HP + shield, longer
+                // i-frames) instead of ending the run.
+                if let Some(l) = lives.as_mut().filter(|l| l.count > 0) {
+                    l.count -= 1;
+                    hp.current = hp.max;
+                    if let Some(s) = shield.as_mut() {
+                        s.current = s.max;
+                    }
+                    commands
+                        .entity(ev.target)
+                        .insert(Invulnerable { seconds: 1.5 });
+                    continue;
+                }
+                deaths.write(Death {
+                    entity: ev.target,
+                    position,
+                });
                 next_state.set(GameState::GameOver);
                 commands.entity(ev.target).despawn();
-                // do NOT increment kills — the player is not a kill
             } else {
+                deaths.write(Death {
+                    entity: ev.target,
+                    position,
+                });
                 score.kills += 1;
                 commands.entity(ev.target).despawn();
             }
         } else if is_player {
-            // Grant i-frames so the next hit doesn't land immediately.
-            // Note: `insert` is a deferred command, so multiple `Damage`
-            // messages aimed at the player within the SAME tick can all land
-            // before i-frames take effect — acceptable for the Phase 1 slice.
+            // Grant i-frames so the next hit doesn't land immediately. The
+            // deferred `insert` means several same-tick hits can still land —
+            // acceptable.
             commands
                 .entity(ev.target)
                 .insert(Invulnerable { seconds: 0.6 });

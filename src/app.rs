@@ -32,6 +32,8 @@ impl Plugin for GamePlugin {
             .init_resource::<PlayBounds>()
             .init_resource::<Score>()
             .init_resource::<systems::wave::Wave>()
+            .init_resource::<systems::asteroids::AsteroidSpawner>()
+            .init_resource::<systems::weapons::CurrentWeapon>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -66,7 +68,8 @@ impl Plugin for GamePlugin {
             // ── input: read devices every frame → Intent ────────────────
             .add_systems(
                 Update,
-                systems::input::gather_input.run_if(in_state(GameState::Playing)),
+                (systems::input::gather_input, systems::weapons::cycle_weapon)
+                    .run_if(in_state(GameState::Playing)),
             )
             // ── death → GameOver → restart flow ─────────────────────────
             .add_systems(
@@ -98,20 +101,46 @@ impl Plugin for GamePlugin {
                         systems::enemy::titan::ai,
                     )
                         .chain(),
-                    systems::wave::spawn_waves,
+                    // Spawners (enemies + asteroids).
+                    (
+                        systems::wave::spawn_waves,
+                        systems::asteroids::spawn_asteroids,
+                    )
+                        .chain(),
+                    // Fire intent → bullets.
+                    (
+                        systems::enemy::firing::enemy_firing,
+                        systems::weapons::player_fire,
+                        systems::weapons::spawn_bullets,
+                    )
+                        .chain(),
                     systems::movement::integrate,
                     systems::movement::confine_player,
-                    systems::enemy_fire::enemy_fire,
-                    systems::weapons::player_fire,
-                    systems::weapons::spawn_bullets,
-                    systems::collision::bullet_hits_enemy,
-                    systems::collision::enemy_bullet_hits_player,
-                    systems::collision::enemy_contact_player,
+                    // Collisions → Damage.
+                    (
+                        systems::collision::bullet_hits_enemy,
+                        systems::collision::enemy_bullet_hits_player,
+                        systems::collision::enemy_contact_player,
+                        systems::asteroids::asteroid_hits,
+                    )
+                        .chain(),
                     systems::damage::apply_damage,
+                    // Drops — runs after apply_damage so `Death` is available.
+                    (
+                        systems::drops::spawn_drops,
+                        systems::drops::attract_orbs,
+                        systems::drops::collect_orbs,
+                    )
+                        .chain(),
                     systems::damage::tick_invulnerability,
-                    systems::cleanup::tick_lifetimes,
-                    systems::cleanup::despawn_offscreen_bullets,
-                    systems::cleanup::despawn_offscreen_enemies,
+                    // Cleanup.
+                    (
+                        systems::cleanup::tick_lifetimes,
+                        systems::cleanup::despawn_offscreen_bullets,
+                        systems::cleanup::despawn_offscreen_enemies,
+                        systems::asteroids::cull_asteroids,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

@@ -89,6 +89,29 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   per-kind fire patterns (spread / machinegun / laser / missile / mine), the
   data-driven wave tables (`wave-data.js`), weapons + defense skills, drops,
   asteroids.
+- **Phase 3 — combat systems (increment 3).** A large batch built by parallel
+  subagents on disjoint files:
+  - **Per-kind enemy fire patterns** (`systems/enemy/firing.rs`) — aimed /
+    spread / machinegun / charged / wide-arc / rotating-spiral / sweeping /
+    slow-mine, dispatched by `EnemyKind`, replacing the generic aimed shot.
+  - **Splitting asteroids** (`systems/asteroids.rs`) — rocky lyon polygons spawn
+    on a timer and split into smaller tiers when shot; offscreen-culled.
+  - **Drops** (`systems/drops.rs`) — gold/point orbs drop on enemy death, drift
+    magnetically toward the player, and add to `Score` on pickup.
+  - **Data-driven wave tables** (`systems/wave.rs`) — a 12-wave escalating table
+    ported from `wave-data.js` (enemy-type introduction order, boss waves,
+    endless loop with scaling), replacing the basic timed cycle.
+  - **Player weapon variety** (`systems/weapons.rs`) — switchable primary
+    weapons (Single / Twin / TripleSpread / Rapid / WideArc), cycled with
+    **Tab** or **1**–**5**.
+  - **Shields + spare ships** — the player now has a `Shield` (absorbs damage
+    before `Health`) and `Lives` (respawn in place on death until exhausted,
+    then `GameOver`).
+  FixedUpdate is organized into chained sub-groups (AI / spawners / fire /
+  collisions / drops / cleanup). Lasers, missiles, and mines are bullet
+  approximations for now; homing / piercing power weapons remain for a later
+  pass. The screenshot tool gained env-gated `keep_player_alive` + `force_fire`
+  so captures show a populated combat scene.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

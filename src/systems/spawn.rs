@@ -16,6 +16,11 @@ pub fn spawn_player(mut commands: Commands) {
             Velocity::default(),
             Collider { radius: 20.0 },
             Health::new(100.0),
+            Lives { count: 2 },
+            Shield {
+                current: 50.0,
+                max: 50.0,
+            },
             Faction::Player,
             shapes::ship_hull(),
             Transform::from_xyz(0.0, -140.0, 0.0),
