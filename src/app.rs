@@ -31,6 +31,7 @@ impl Plugin for GamePlugin {
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
             .init_resource::<Score>()
+            .init_resource::<systems::wave::Wave>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -60,7 +61,7 @@ impl Plugin for GamePlugin {
             // ── spawn the slice on entering Playing ─────────────────────
             .add_systems(
                 OnEnter(GameState::Playing),
-                (systems::spawn::spawn_player, systems::spawn::spawn_enemy),
+                (systems::spawn::spawn_player, systems::wave::reset),
             )
             // ── input: read devices every frame → Intent ────────────────
             .add_systems(
@@ -84,6 +85,10 @@ impl Plugin for GamePlugin {
                     systems::movement::integrate,
                     systems::movement::confine_player,
                     systems::enemy_ai::drifter_ai,
+                    systems::enemy::hunter::ai,
+                    systems::enemy::guardian::ai,
+                    systems::enemy::wasp::ai,
+                    systems::wave::spawn_waves,
                     systems::enemy_fire::enemy_fire,
                     systems::weapons::player_fire,
                     systems::weapons::spawn_bullets,

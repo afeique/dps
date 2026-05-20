@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-/// The ten enemy archetypes from the JS game.
+/// The ten enemy archetypes from the JS game (`enemy-data.js` `ENEMY_TYPES`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnemyKind {
     Drifter,
@@ -16,6 +16,7 @@ pub enum EnemyKind {
     Sentinel,
     Tangerine,
     Titan,
+    Hunter,
 }
 
 #[derive(Component, Debug)]

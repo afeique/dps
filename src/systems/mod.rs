@@ -7,10 +7,12 @@
 pub mod cleanup;
 pub mod collision;
 pub mod damage;
+pub mod enemy;
 pub mod enemy_ai;
 pub mod enemy_fire;
 pub mod flow;
 pub mod input;
 pub mod movement;
 pub mod spawn;
+pub mod wave;
 pub mod weapons;

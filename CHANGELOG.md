@@ -68,6 +68,18 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
     palette — wispy filaments, dark dust lanes, and HDR emission cores that the
     bloom lights. Animated via the global time uniform. (Shader embedded in the
     binary via `embedded_asset!`, so it works regardless of the working dir.)
+- **Phase 3 — enemy roster + waves (increment 1).** Added a per-enemy module
+  pattern (`systems/enemy/<kind>.rs`, each exposing `shape()` / `stats()` /
+  `ai()`) plus a spawn dispatch (`systems::enemy::spawn`). Ported three new
+  enemies from `js/modules/enemy/*` as lyon silhouettes + simplified-faithful
+  movement: **Hunter** (red, orbital `hunter_arc`), **Guardian** (green,
+  `square` patrol), **Wasp** (yellow, fast `wasp_zigzag`); added
+  `EnemyKind::Hunter`. A basic wave spawner (`systems::wave`) drops enemies on a
+  timer at the top edge, cycling the ported roster — replacing the single
+  hardcoded drifter. Enemies with a `FireCooldown` shoot via the generic aimed
+  `enemy_fire`. Per-kind fire patterns (spread / machinegun / laser / missile),
+  the remaining six kinds, and the data-driven wave tables (`wave-data.js`) are
+  subsequent increments.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.
