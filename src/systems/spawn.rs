@@ -15,7 +15,7 @@ pub fn spawn_player(mut commands: Commands) {
             Intent::default(),
             Weapon::default(),
             Velocity::default(),
-            Collider { radius: 16.0 },
+            Collider { radius: 20.0 },
             Health::new(100.0),
             Faction::Player,
             shapes::ship_hull(),

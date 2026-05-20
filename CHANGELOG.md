@@ -53,6 +53,12 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   near/bright/fast) drifting downward and wrapping, on a far background z behind
   all gameplay (dependency-free deterministic scatter). Remaining Phase-2 work:
   bullet trails, nebula, bloom tuning, and the lyon-vs-`vello` evaluation.
+- **Screenshot hook + ship-scale tuning.** `render::screenshot` adds an
+  env-gated (`DPS_SCREENSHOT=<path>`) in-app framebuffer capture via Bevy's
+  `Screenshot` API — for visual checks without OS screen-recording permission,
+  and the `docs/port-plan.md` §9 web-vs-native diff hook. Bumped the player
+  ship's authored radius (`SHIP_R` 15 → 22) and collider (16 → 20) so it reads
+  larger than the enemies at the native window scale.
 
 ### Notes
 

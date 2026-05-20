@@ -39,5 +39,6 @@ fn main() {
             ..default()
         }))
         .add_plugins(GamePlugin)
+        .add_plugins(render::screenshot::ScreenshotPlugin)
         .run();
 }

@@ -7,6 +7,7 @@
 
 pub mod bullets;
 pub mod explosion;
+pub mod screenshot;
 pub mod shapes;
 pub mod starfield;
 

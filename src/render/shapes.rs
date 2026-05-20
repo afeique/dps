@@ -8,12 +8,16 @@ use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::TAU;
 
+/// Player ship authored radius (world units). Bumped from the JS `r = 15` so
+/// the hero element reads larger than the enemies at the native window scale.
+pub const SHIP_R: f32 = 22.0;
+
 /// The player ship hull: the full 16-vertex silhouette from
 /// `player/renderer.js` (central hull + wings + wing tips), authored at
 /// `r = 15` and flipped into Bevy space so the nose points +Y — the ship's
 /// forward vector (`tf.rotation * Vec3::Y`).
 pub fn ship_hull() -> Shape {
-    const R: f32 = 15.0;
+    const R: f32 = SHIP_R;
     // (x, y) in Canvas space (+Y down); Y is negated when fed to lyon below.
     let pts = [
         (0.0, -R),
@@ -49,7 +53,7 @@ pub fn ship_hull() -> Shape {
 /// Bright cockpit highlight — spawned as a child of the hull (z above it).
 /// JS cockpit sits at Canvas `(0, -r*0.42)` → Bevy `(0, +r*0.42)`.
 pub fn ship_cockpit() -> Shape {
-    const R: f32 = 15.0;
+    const R: f32 = SHIP_R;
     let cockpit = shapes::Ellipse {
         radii: Vec2::new(R * 0.17, R * 0.21),
         center: Vec2::ZERO,
@@ -60,7 +64,7 @@ pub fn ship_cockpit() -> Shape {
 }
 
 /// Local-space offset of the cockpit child relative to the hull (Bevy space).
-pub const SHIP_COCKPIT_OFFSET: Vec2 = Vec2::new(0.0, 15.0 * 0.42);
+pub const SHIP_COCKPIT_OFFSET: Vec2 = Vec2::new(0.0, SHIP_R * 0.42);
 
 /// The Drifter: a 10-point electric star (`render/shapes.js`
 /// `drawEnemyDrifterShape`) with alternating outer/inner radii, a near-black
