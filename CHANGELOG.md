@@ -37,8 +37,15 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   cockpit highlight) and the Drifter's 10-point electric star (+ white-hot
   core). Colors are HDR-emissive so the camera's `Bloom` does the glow (no
   per-shape blur); `ShapePlugin` is registered in `GamePlugin`. Replaces the
-  placeholder `RegularPolygon` meshes. Particles (`bevy_hanabi`), the bullet
-  layer, and the starfield are the next Phase-2 increments.
+  placeholder `RegularPolygon` meshes.
+- **Phase 2 renderer — GPU explosions (`bevy_hanabi`).** Added `bevy_hanabi`
+  (2D-only) and a `render::explosion` module: a one-shot 120-particle burst
+  `EffectAsset` (HDR white-yellow → orange → red → transparent over a 0.35–0.7 s
+  life, shrinking, with linear drag) built once at startup and spawned at each
+  `Death`. The `Death` message now carries the death `position` (captured in
+  `apply_damage` before despawn) so the burst lands where the entity died;
+  spent effect entities are reaped by a lifetime timer. The bullet layer and a
+  parallax starfield are the next Phase-2 increments.
 
 ### Notes
 

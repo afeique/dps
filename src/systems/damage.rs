@@ -20,10 +20,10 @@ pub fn apply_damage(
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut q: Query<(&mut Health, Has<Ship>, Has<Invulnerable>)>,
+    mut q: Query<(&mut Health, &Transform, Has<Ship>, Has<Invulnerable>)>,
 ) {
     for ev in dmg.read() {
-        let Ok((mut hp, is_player, invulnerable)) = q.get_mut(ev.target) else {
+        let Ok((mut hp, tf, is_player, invulnerable)) = q.get_mut(ev.target) else {
             continue; // target already gone this tick
         };
         if invulnerable {
@@ -31,7 +31,11 @@ pub fn apply_damage(
         }
         hp.current -= ev.amount;
         if hp.current <= 0.0 {
-            deaths.write(Death { entity: ev.target });
+            let position = tf.translation.truncate();
+            deaths.write(Death {
+                entity: ev.target,
+                position,
+            });
             if is_player {
                 next_state.set(GameState::GameOver);
                 commands.entity(ev.target).despawn();

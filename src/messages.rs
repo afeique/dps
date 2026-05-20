@@ -27,10 +27,12 @@ pub struct Damage {
     pub amount: f32,
 }
 
-/// `entity` reached 0 HP. Drives drops, score, and death FX (Phase 3+).
+/// `entity` reached 0 HP at `position` (captured before despawn so death FX
+/// can place an explosion there). Drives death FX now; drops + score in Phase 3.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Death {
     pub entity: Entity,
+    pub position: Vec2,
 }
 
 /// A weapon fired: spawn a bullet from `origin` along unit `dir`. `faction`

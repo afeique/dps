@@ -13,6 +13,9 @@ bevy = "0.18.1"
 # `shapes.js` to lyon paths. Glow comes from HDR-emissive colors + camera bloom
 # (not per-shape blur). See docs/port-plan.md §3.1.
 bevy_prototype_lyon = "0.16.0"
+# GPU-compute particles (explosions, trails, debris) — the payoff over the web
+# build's 600-particle cap. 2D-only (no 3d/serde). See docs/port-plan.md §3.2.
+bevy_hanabi = { version = "0.18.0", default-features = false, features = ["2d"] }
 
 # ── Build-speed profiles (Bevy's recommended dev setup) ──────────────
 # Compile our own code with light optimization, but optimize all

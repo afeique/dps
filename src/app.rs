@@ -10,6 +10,7 @@
 //!                     touch rendering; rendering/UI never mutate sim state.
 
 use bevy::prelude::*;
+use bevy_hanabi::prelude::HanabiPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 
 use crate::messages::{Collision, Damage, Death, Fire};
@@ -23,8 +24,9 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app
             // ── third-party plugins ─────────────────────────────────────
-            // lyon vector-path tessellation → Mesh2d for the silhouettes.
-            .add_plugins(ShapePlugin)
+            // lyon vector-path tessellation → Mesh2d for the silhouettes;
+            // hanabi GPU-compute particles for explosions.
+            .add_plugins((ShapePlugin, HanabiPlugin))
             // ── global flow + shared data ───────────────────────────────
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
@@ -36,7 +38,18 @@ impl Plugin for GamePlugin {
             .add_message::<Death>()
             .add_message::<Fire>()
             // ── one-time setup ──────────────────────────────────────────
-            .add_systems(Startup, render::spawn_camera)
+            .add_systems(
+                Startup,
+                (render::spawn_camera, render::explosion::setup_explosion_effect),
+            )
+            // ── death FX: spawn + reap GPU explosions ───────────────────
+            .add_systems(
+                Update,
+                (
+                    render::explosion::spawn_on_death,
+                    render::explosion::tick_explosion_timers,
+                ),
+            )
             // ── spawn the slice on entering Playing ─────────────────────
             .add_systems(
                 OnEnter(GameState::Playing),
