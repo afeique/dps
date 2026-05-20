@@ -26,7 +26,7 @@ impl Plugin for GamePlugin {
             // ── third-party plugins ─────────────────────────────────────
             // lyon vector-path tessellation → Mesh2d for the silhouettes;
             // hanabi GPU-compute particles for explosions.
-            .add_plugins((ShapePlugin, HanabiPlugin))
+            .add_plugins((ShapePlugin, HanabiPlugin, render::nebula::NebulaPlugin))
             // ── global flow + shared data ───────────────────────────────
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
@@ -55,7 +55,6 @@ impl Plugin for GamePlugin {
                     render::explosion::spawn_on_death,
                     render::explosion::tick_explosion_timers,
                     render::starfield::drift_stars,
-                    render::nebula::drift_nebula,
                 ),
             )
             // ── spawn the slice on entering Playing ─────────────────────

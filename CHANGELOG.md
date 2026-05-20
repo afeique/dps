@@ -62,8 +62,12 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   - **Starfield diversified:** 4 depth layers, 6 shared color tiers
     (white / blue-white / amber / HDR-cyan), size jitter, and per-star twinkle
     (scale pulse, no per-frame material writes).
-  - **Parallax nebula** (`render::nebula`): soft low-alpha blue/purple/magenta
-    blobs on a far layer (z ≈ -65..-60) drifting slowly behind the stars.
+  - **Procedural nebula** (`render::nebula` + embedded `nebula.wgsl`): a
+    full-field background quad with a custom `Material2d` whose WGSL shader
+    builds domain-warped fractal-noise gas clouds in a JWST-style teal/gold
+    palette — wispy filaments, dark dust lanes, and HDR emission cores that the
+    bloom lights. Animated via the global time uniform. (Shader embedded in the
+    binary via `embedded_asset!`, so it works regardless of the working dir.)
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.
