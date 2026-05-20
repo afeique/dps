@@ -44,8 +44,15 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   life, shrinking, with linear drag) built once at startup and spawned at each
   `Death`. The `Death` message now carries the death `position` (captured in
   `apply_damage` before despawn) so the burst lands where the entity died;
-  spent effect entities are reaped by a lifetime timer. The bullet layer and a
-  parallax starfield are the next Phase-2 increments.
+  spent effect entities are reaped by a lifetime timer.
+- **Phase 2 renderer — bullet layer + parallax starfield.** Bullets now draw
+  from a shared `BulletAssets` cache (one unit-circle mesh + per-team materials,
+  scaled per shot — no more per-shot mesh/material allocation): player shots are
+  bright `#FFFF00` with a white-hot core child, enemy shots hot magenta. Added
+  `render::starfield` — three parallax depth layers of stars (far/dim/slow →
+  near/bright/fast) drifting downward and wrapping, on a far background z behind
+  all gameplay (dependency-free deterministic scatter). Remaining Phase-2 work:
+  bullet trails, nebula, bloom tuning, and the lyon-vs-`vello` evaluation.
 
 ### Notes
 

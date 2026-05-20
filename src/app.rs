@@ -40,14 +40,20 @@ impl Plugin for GamePlugin {
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,
-                (render::spawn_camera, render::explosion::setup_explosion_effect),
+                (
+                    render::spawn_camera,
+                    render::explosion::setup_explosion_effect,
+                    render::bullets::setup_bullet_assets,
+                    render::starfield::spawn_starfield,
+                ),
             )
-            // ── death FX: spawn + reap GPU explosions ───────────────────
+            // ── presentation: death FX + parallax starfield ─────────────
             .add_systems(
                 Update,
                 (
                     render::explosion::spawn_on_death,
                     render::explosion::tick_explosion_timers,
+                    render::starfield::drift_stars,
                 ),
             )
             // ── spawn the slice on entering Playing ─────────────────────

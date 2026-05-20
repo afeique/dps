@@ -5,8 +5,10 @@
 //! placeholder `RegularPolygon` meshes with lyon-tessellated ports of
 //! `js/modules/render/shapes.js`, and adds the particle/bullet pipelines.
 
+pub mod bullets;
 pub mod explosion;
 pub mod shapes;
+pub mod starfield;
 
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::post_process::bloom::Bloom;
