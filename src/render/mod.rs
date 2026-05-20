@@ -7,6 +7,7 @@
 
 pub mod bullets;
 pub mod explosion;
+pub mod nebula;
 pub mod screenshot;
 pub mod shapes;
 pub mod starfield;
@@ -19,7 +20,17 @@ use bevy::render::view::Hdr;
 /// Spawn the single 2D camera with HDR + bloom enabled. Bloom is what turns
 /// the over-bright emissive colors below into glow.
 pub fn spawn_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, Hdr, Tonemapping::TonyMcMapface, Bloom::NATURAL));
+    commands.spawn((
+        Camera2d,
+        Hdr,
+        Tonemapping::TonyMcMapface,
+        // Slightly punchier than NATURAL so the emissive silhouettes/particles
+        // glow harder than the web build (the Phase-2 "beat the web" target).
+        Bloom {
+            intensity: 0.2,
+            ..Bloom::NATURAL
+        },
+    ));
 }
 
 /// Build an over-bright (HDR, components > 1.0) emissive color. With the

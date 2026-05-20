@@ -8,6 +8,7 @@ use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
 use bevy::prelude::*;
+use bevy_hanabi::prelude::ParticleEffect;
 
 /// Tick the player's weapon cooldown; emit `Fire` while held + ready.
 pub fn player_fire(
@@ -59,6 +60,7 @@ pub fn spawn_bullets(mut commands: Commands, assets: Res<BulletAssets>, mut fire
 
         if shot.faction == Faction::Player {
             let (circle, core) = (assets.circle.clone(), assets.player_core.clone());
+            let trail = assets.player_trail.clone();
             bullet.with_children(|b| {
                 // local scale 0.5 → core radius = bullet radius * 0.5; z in front.
                 b.spawn((
@@ -66,6 +68,10 @@ pub fn spawn_bullets(mut commands: Commands, assets: Res<BulletAssets>, mut fire
                     MeshMaterial2d(core),
                     Transform::from_xyz(0.0, 0.0, 0.5).with_scale(Vec3::splat(0.5)),
                 ));
+                // GPU particle trail.  SimulationSpace::Global keeps emitted
+                // particles in world space, so they linger behind the moving
+                // bullet as a streak rather than riding along with it.
+                b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
         }
     }

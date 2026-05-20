@@ -45,6 +45,7 @@ impl Plugin for GamePlugin {
                     render::explosion::setup_explosion_effect,
                     render::bullets::setup_bullet_assets,
                     render::starfield::spawn_starfield,
+                    render::nebula::spawn_nebula,
                 ),
             )
             // ── presentation: death FX + parallax starfield ─────────────
@@ -54,6 +55,7 @@ impl Plugin for GamePlugin {
                     render::explosion::spawn_on_death,
                     render::explosion::tick_explosion_timers,
                     render::starfield::drift_stars,
+                    render::nebula::drift_nebula,
                 ),
             )
             // ── spawn the slice on entering Playing ─────────────────────

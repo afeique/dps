@@ -51,14 +51,25 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   bright `#FFFF00` with a white-hot core child, enemy shots hot magenta. Added
   `render::starfield` — three parallax depth layers of stars (far/dim/slow →
   near/bright/fast) drifting downward and wrapping, on a far background z behind
-  all gameplay (dependency-free deterministic scatter). Remaining Phase-2 work:
-  bullet trails, nebula, bloom tuning, and the lyon-vs-`vello` evaluation.
+  all gameplay (dependency-free deterministic scatter).
 - **Screenshot hook + ship-scale tuning.** `render::screenshot` adds an
   env-gated (`DPS_SCREENSHOT=<path>`) in-app framebuffer capture via Bevy's
   `Screenshot` API — for visual checks without OS screen-recording permission,
   and the `docs/port-plan.md` §9 web-vs-native diff hook. Bumped the player
   ship's authored radius (`SHIP_R` 15 → 22) and collider (16 → 20) so it reads
   larger than the enemies at the native window scale.
+- **Phase 2 renderer — remaining items completed.**
+  - **Starfield diversified:** 4 depth layers, 6 shared color tiers
+    (white / blue-white / amber / HDR-cyan), size jitter, and per-star twinkle
+    (scale pulse, no per-frame material writes).
+  - **Parallax nebula** (`render::nebula`): soft low-alpha blue/purple/magenta
+    blobs on a far layer (z ≈ -65..-60) drifting slowly behind the stars.
+  - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
+    simulation space) stream behind player shots and fade out.
+  - **Bloom** nudged up (`intensity` 0.2) for a harder glow.
+  - **lyon vs vello evaluated** (`docs/lyon-vs-vello.md`): **stay on lyon** —
+    `bevy_vello` rasterizes to an 8-bit SDR target that clamps emissive > 1.0,
+    which would break the HDR → bloom glow the whole look depends on.
 
 ### Notes
 
