@@ -130,8 +130,15 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
 - **Phase 4 — input (gamepad).** The first connected controller now drives the
   ship: left stick steers (thrust/strafe, mirroring WASD) and South /
   right-trigger fires, OR-combined with the keyboard into the same `Intent`
-  (Bevy 0.18's entity-based `Gamepad`). Mouse-aim / twin-stick, gamepad bindings
-  for the power weapon + skills, and audio are the next Phase-4 increments.
+  (Bevy 0.18's entity-based `Gamepad`).
+- **Phase 4 — native SFX.** A procedural sound-effects synth (`src/audio.rs`),
+  the Rust equivalent of `sound-defs.js` (port-plan §4's documented fallback to
+  baked samples): generates PCM in Rust (oscillators + envelopes + deterministic
+  noise), encodes 16-bit mono WAV byte buffers, and plays them on events —
+  player/enemy shots (on `Fire`), explosions (on `Death`), and player hits (on
+  `Damage` to the ship). Enables Bevy's `wav` feature so rodio decodes the
+  runtime-generated buffers. Remaining Phase-4: mouse-aim / twin-stick, gamepad
+  bindings for the power weapon + skills, and music streaming.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

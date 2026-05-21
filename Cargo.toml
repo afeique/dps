@@ -8,7 +8,9 @@ license-file = "LICENSE"
 publish = false
 
 [dependencies]
-bevy = "0.18.1"
+# `wav` enables rodio's WAV decoder — the native SFX synth (src/audio.rs) plays
+# PCM-16 WAV byte buffers it generates at runtime (not in Bevy's defaults).
+bevy = { version = "0.18.1", features = ["wav"] }
 # Vector-path → Mesh2d tessellation: port the Canvas2D silhouettes from
 # `shapes.js` to lyon paths. Glow comes from HDR-emissive colors + camera bloom
 # (not per-shape blur). See docs/port-plan.md §3.1.

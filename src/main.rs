@@ -16,6 +16,7 @@
 #![allow(dead_code)]
 
 mod app;
+mod audio;
 mod components;
 mod messages;
 mod render;

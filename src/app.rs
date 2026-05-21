@@ -16,7 +16,7 @@ use bevy_prototype_lyon::prelude::ShapePlugin;
 use crate::messages::{Collision, Damage, Death, Fire};
 use crate::resources::{PlayBounds, Score};
 use crate::states::GameState;
-use crate::{render, systems};
+use crate::{audio, render, systems};
 
 pub struct GamePlugin;
 
@@ -51,6 +51,7 @@ impl Plugin for GamePlugin {
                     render::bullets::setup_bullet_assets,
                     render::starfield::spawn_starfield,
                     render::nebula::spawn_nebula,
+                    audio::setup_sfx,
                 ),
             )
             // ── presentation: death FX + parallax starfield ─────────────
@@ -60,6 +61,9 @@ impl Plugin for GamePlugin {
                     render::explosion::spawn_on_death,
                     render::explosion::tick_explosion_timers,
                     render::starfield::drift_stars,
+                    audio::play_shoot,
+                    audio::play_explosion,
+                    audio::play_player_hit,
                 ),
             )
             // ── spawn the slice on entering Playing ─────────────────────
