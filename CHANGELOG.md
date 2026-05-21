@@ -195,6 +195,17 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   a random variant + specific→generic fallback (`enemyDestroy_HUNTER` →
   `enemyDestroy`), a 30 ms per-event throttle, master volume 0.8. The in-house
   procedural **synth is retained** as the fallback when an event has no file.
+- **Mixed nebula — wispy look restored.** Brought back the original
+  domain-warped fbm JWST nebula (teal/gold filaments, dust lanes), but **baked
+  once to a high-res texture** at startup so it's free per frame (no 15 fps live
+  shader), layered with the smooth gaussian color clouds. Both layers are dim
+  with dark gaps so the **starfield stays visible** on top; tint/alpha/threshold
+  constants in `render::nebula` are the fine-tuning knobs.
+- **Diverse star shapes + twinkle** (`render::starfield`, from `../rainboids`
+  `STAR_SHAPES`/`NORMAL_STAR_COLORS`/`webgl-starfield-renderer`): stars now use
+  point/circle/diamond/triangle/hexagon/star4-6 meshes, a ~30-entry palette
+  (incl. HDR sparkle tiers), and slow-breathe + size-pulse + 5 Hz blink twinkle.
+  Parallax (player-relative) retained.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.
