@@ -19,6 +19,7 @@ mod app;
 mod audio;
 mod components;
 mod messages;
+mod music;
 mod render;
 mod resources;
 mod states;
@@ -42,6 +43,7 @@ fn main() {
         ..default()
     }))
     .add_plugins(GamePlugin)
+    .add_plugins(music::MusicPlugin)
     .add_plugins(render::screenshot::ScreenshotPlugin);
 
     // Opt-in perf logging: `DPS_FPS=1` logs frame rate / frame time each second.

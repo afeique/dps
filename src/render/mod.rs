@@ -12,8 +12,8 @@ pub mod screenshot;
 pub mod shapes;
 pub mod starfield;
 
-use bevy::core_pipeline::tonemapping::Tonemapping;
-use bevy::post_process::bloom::Bloom;
+use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
+use bevy::post_process::bloom::{Bloom, BloomPrefilter};
 use bevy::prelude::*;
 use bevy::render::view::Hdr;
 
@@ -24,10 +24,21 @@ pub fn spawn_camera(mut commands: Commands) {
         Camera2d,
         Hdr,
         Tonemapping::TonyMcMapface,
-        // Slightly punchier than NATURAL so the emissive silhouettes/particles
-        // glow harder than the web build (the Phase-2 "beat the web" target).
+        // Dither the tonemap output — without it the TonyMcMapface 3D LUT
+        // posterizes smooth dim gradients (the nebula) into triangular facets.
+        DebandDither::Enabled,
+        // Only HDR-emissive gameplay (>1.0) blooms; the dim nebula clouds
+        // (<1.0) never feed bloom. Feeding those broad, dim, full-screen clouds
+        // through bloom was what produced the rectangular blocks AND the
+        // triangular bloom-upsampling facets. With the threshold, the clouds
+        // render as plain smooth sprites and only the neon bullets/ship/
+        // explosions glow.
         Bloom {
-            intensity: 0.2,
+            intensity: 0.22,
+            prefilter: BloomPrefilter {
+                threshold: 1.0,
+                threshold_softness: 0.5,
+            },
             ..Bloom::NATURAL
         },
     ));

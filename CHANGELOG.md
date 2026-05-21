@@ -179,6 +179,22 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   raised the density/region thresholds for more dark gaps, so gameplay reads
   clearly on top and bloom stays clean. (`DPS_SCREENSHOT` now captures *normal*
   play; `DPS_DEMO=1` re-enables the immortal/auto-fire demo capture.)
+- **Nebula rebuilt as smooth cloud blobs.** Replaced the full-screen
+  turbulent-fbm sprite (which read as jagged / torn) with a handful of soft
+  gaussian cloud sprites in teal/gold/rose tints (port spec VII.5). Organic
+  shape comes from **analytic sine lobes**, not value noise — noise modulation
+  through `exp()` amplified its lattice creases into triangular facets. Bloom
+  now uses a **prefilter threshold of 1.0** so only HDR-emissive gameplay glows
+  and the dim clouds never feed bloom (that broad dim source caused both the
+  rectangular blocks and the triangular bloom facets); `DebandDither::Enabled`
+  on the camera.
+- **Local music player** (`src/music.rs`, `MusicPlugin`): shuffles and
+  auto-advances the ~73 `music/*.mp3` tracks (Fisher-Yates, loops), volume 0.5.
+  Added bevy's `mp3` cargo feature; replaces the planned CDN streaming.
+- **Recorded SFX** from `sfx/*.wav` (~530 jsfxr files) play by event name with
+  a random variant + specific→generic fallback (`enemyDestroy_HUNTER` →
+  `enemyDestroy`), a 30 ms per-event throttle, master volume 0.8. The in-house
+  procedural **synth is retained** as the fallback when an event has no file.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

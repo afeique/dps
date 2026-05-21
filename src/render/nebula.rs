@@ -1,45 +1,67 @@
-//! Deep-space nebula backdrop (`docs/port-plan.md` §3.4). The procedural
-//! JWST-style gas clouds (teal/gold domain-warped fbm, dust lanes, hot cores)
-//! are **baked once to a texture at startup** and shown as a single
-//! screen-covering sprite. The per-frame cost is one texture sample instead of
-//! the ~60 noise evaluations per pixel the live shader did every frame — that
-//! full-screen procedural shader was tanking the framerate (~15 fps). An HDR
-//! color tint pushes the bright baked cores past 1.0 so the camera bloom still
-//! lights them.
+//! Deep-space nebula backdrop — smooth gaussian cloud blobs.
+//!
+//! The earlier full-screen turbulent-fbm nebula looked jagged / torn up. Per
+//! the port spec (VII.5) the live nebula is a handful of HUGE low-alpha cloud
+//! sprites layered in different teal / gold / rose tints (JWST multi-hue). We
+//! bake a few cloud textures once and spawn a few dim, varied, low-alpha
+//! sprites behind the starfield.
+//!
+//! Smoothness: the shape is a gaussian falloff whose radius is gently modulated
+//! by a few **analytic sine lobes** (C-infinity smooth → organic but never
+//! faceted). Value-noise modulation was tried first and produced triangular
+//! facets — `exp()` amplifies the curvature discontinuities at the noise
+//! lattice into visible creases — so we avoid noise here entirely.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-/// Baked texture resolution (square). The nebula is soft, so this need not
-/// match the framebuffer; it's stretched across the screen with linear filter.
-const BAKE_SIZE: u32 = 1024;
-/// Noise-domain scale (matched the old shader's `params.y`).
-const SCALE: f32 = 4.0;
+/// Baked cloud texture resolution (small — it's magnified and soft).
+const CLOUD_SIZE: u32 = 256;
+
+/// One nebula cloud: `(x, y, width, height, rotation°, texture idx, tint rgb, alpha)`.
+/// Spread across (and a bit beyond) the ~1280×720 view with dark gaps between.
+/// Tints are dim (RGB < 1) so the clouds stay a subtle backdrop; they're below
+/// the bloom threshold so they never glow/bloom.
+const CLOUDS: &[(f32, f32, f32, f32, f32, usize, [f32; 3], f32)] = &[
+    (-380.0, 180.0, 960.0, 700.0, 18.0, 0, [0.12, 0.55, 0.78], 0.52),
+    (340.0, -170.0, 880.0, 760.0, -14.0, 1, [0.85, 0.46, 0.12], 0.46),
+    (120.0, 260.0, 760.0, 580.0, 42.0, 2, [0.55, 0.18, 0.52], 0.40),
+    (-320.0, -240.0, 700.0, 780.0, 68.0, 1, [0.20, 0.32, 0.70], 0.42),
+    (480.0, 230.0, 620.0, 540.0, -32.0, 0, [0.12, 0.55, 0.78], 0.40),
+    (-560.0, -40.0, 580.0, 660.0, 10.0, 2, [0.85, 0.46, 0.12], 0.36),
+    (40.0, -300.0, 820.0, 520.0, 54.0, 1, [0.55, 0.18, 0.52], 0.36),
+    (280.0, 70.0, 540.0, 500.0, -50.0, 0, [0.20, 0.32, 0.70], 0.44),
+];
 
 pub fn spawn_nebula(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     // Perf diagnostic: `DPS_NO_NEBULA=1` skips the nebula entirely.
     if std::env::var("DPS_NO_NEBULA").is_ok() {
         return;
     }
-    let image = images.add(bake_nebula(BAKE_SIZE));
-    commands.spawn((
-        Sprite {
-            image,
-            custom_size: Some(Vec2::new(2200.0, 1300.0)),
-            // Dim backdrop tint — keep the nebula well below the neon gameplay
-            // so it reads as a subtle background and doesn't overload bloom
-            // (a too-bright full-screen HDR area produced rectangular bloom
-            // blocks and washed out the ship/enemies).
-            color: Color::linear_rgb(0.5, 0.5, 0.5),
-            ..default()
-        },
-        Transform::from_xyz(0.0, 0.0, -60.0),
-    ));
+
+    // A few cloud variants with different lobe phases → different organic shapes.
+    let textures: Vec<Handle<Image>> = (0..3)
+        .map(|s| images.add(bake_cloud(CLOUD_SIZE, s as f32 * 2.3 + 0.7)))
+        .collect();
+
+    for (i, &(x, y, w, h, rot, tex, [r, g, b], a)) in CLOUDS.iter().enumerate() {
+        commands.spawn((
+            Sprite {
+                image: textures[tex].clone(),
+                custom_size: Some(Vec2::new(w, h)),
+                color: Color::linear_rgba(r, g, b, a),
+                ..default()
+            },
+            // All behind the starfield (z -50..-45); slight z spread to layer.
+            Transform::from_xyz(x, y, -60.0 + i as f32 * 0.2)
+                .with_rotation(Quat::from_rotation_z(rot.to_radians())),
+        ));
+    }
 }
 
-// ── CPU bake (mirrors the former nebula.wgsl, evaluated once at startup) ────
+// ── CPU bake: one smooth gaussian cloud texture ─────────────────────────────
 
 #[inline]
 fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
@@ -47,85 +69,35 @@ fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// Cheap arithmetic hash (Dave Hoskins' hash12).
-#[inline]
-fn hash2(p: Vec2) -> f32 {
-    let mut p3 = (Vec3::new(p.x, p.y, p.x) * 0.1031).fract();
-    let d = p3.dot(Vec3::new(p3.y, p3.z, p3.x) + Vec3::splat(33.33));
-    p3 += Vec3::splat(d);
-    ((p3.x + p3.y) * p3.z).fract()
-}
-
-fn vnoise(p: Vec2) -> f32 {
-    let i = p.floor();
-    let f = p.fract();
-    let u = f * f * (Vec2::splat(3.0) - 2.0 * f);
-    let a = hash2(i);
-    let b = hash2(i + Vec2::new(1.0, 0.0));
-    let c = hash2(i + Vec2::new(0.0, 1.0));
-    let d = hash2(i + Vec2::new(1.0, 1.0));
-    let ab = a + (b - a) * u.x;
-    let cd = c + (d - c) * u.x;
-    ab + (cd - ab) * u.y
-}
-
-fn fbm(p0: Vec2) -> f32 {
-    let mut p = p0;
-    let mut v = 0.0;
-    let mut amp = 0.6;
-    // Same column-major rotation as the old shader's mat2x2(1.6,1.2,-1.2,1.6).
-    let m = Mat2::from_cols(Vec2::new(1.6, 1.2), Vec2::new(-1.2, 1.6));
-    // 5 octaves: 1024px bake gives enough headroom for the extra detail without
-    // aliasing into grain when stretched to screen.
-    for _ in 0..5 {
-        v += amp * vnoise(p);
-        p = m * p;
-        amp *= 0.5;
-    }
-    v
-}
-
-fn bake_nebula(size: u32) -> Image {
+fn bake_cloud(size: u32, phase: f32) -> Image {
     let n = size as usize;
     let mut data = vec![0u8; n * n * 4];
-    let teal = Vec3::new(0.0, 0.62, 0.85);
-    let gold = Vec3::new(1.0, 0.42, 0.06);
 
     for y in 0..n {
         for x in 0..n {
-            // Aspect-correct the noise domain so a noise cell is square *on screen*
-            // after the texture is stretched onto the 2200×1300 quad (aspect ≈ 1.692).
-            // Without this, circular cloud features are stretched ~1.7× horizontally.
-            let aspect = 2200.0_f32 / 1300.0;
-            let uv = Vec2::new(
-                x as f32 / size as f32 * aspect,
-                y as f32 / size as f32,
-            ) * SCALE;
+            let px = (x as f32 + 0.5) / size as f32 * 2.0 - 1.0; // -1..1
+            let py = (y as f32 + 0.5) / size as f32 * 2.0 - 1.0;
+            let r = (px * px + py * py).sqrt();
+            let ang = py.atan2(px);
 
-            let warp = Vec2::new(
-                fbm(uv * 1.1 + Vec2::new(0.0, 1.7)),
-                fbm(uv * 1.1 + Vec2::new(5.2, 9.3)),
-            );
-            let density = fbm(uv * 1.6 + warp * 2.5);
-            // Full fbm for region/hue/dust (rich, vivid — free at bake time).
-            let region = fbm(uv * 0.35 + Vec2::new(11.3, 4.7));
-            let hue = fbm(uv * 0.28 + Vec2::new(20.0, -7.0));
-            let dust = fbm(uv * 0.8 + Vec2::new(30.0, 12.0));
+            // Smooth organic lobing — analytic sines, so no faceting. A few
+            // harmonics at different phases make a non-circular, cloud-like edge.
+            let lobe = 1.0
+                + 0.18 * (ang * 2.0 + phase).sin()
+                + 0.11 * (ang * 3.0 - phase * 1.7).sin()
+                + 0.07 * (ang * 5.0 + phase * 0.6).sin();
+            let rr = r / lobe.max(0.45);
 
-            // Higher thresholds → more empty dark space between clouds so the
-            // gameplay reads clearly against the backdrop (was screen-filling).
-            let neb = smoothstep(0.50, 0.95, density) * smoothstep(0.45, 0.82, region);
-            let base = teal.lerp(gold, smoothstep(0.45, 0.85, hue));
-            let mut col = base * (neb * 1.6);
-            let core = smoothstep(0.80, 1.0, density) * neb;
-            col += Vec3::new(1.6, 1.35, 1.05) * core;
-            col *= 0.35 + 0.65 * smoothstep(0.30, 0.70, dust);
+            // Gaussian core + edge vignette → alpha is 0 by the sprite boundary.
+            let gaussian = (-rr * rr * 2.4).exp();
+            let vignette = smoothstep(1.0, 0.5, r);
+            let alpha = (gaussian * vignette).clamp(0.0, 1.0);
 
             let idx = (y * n + x) * 4;
-            data[idx] = (col.x.clamp(0.0, 1.0) * 255.0) as u8;
-            data[idx + 1] = (col.y.clamp(0.0, 1.0) * 255.0) as u8;
-            data[idx + 2] = (col.z.clamp(0.0, 1.0) * 255.0) as u8;
-            data[idx + 3] = (neb.clamp(0.0, 1.0) * 255.0) as u8;
+            data[idx] = 255; // white; tinted per-sprite via Sprite.color
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = (alpha * 255.0) as u8;
         }
     }
 
