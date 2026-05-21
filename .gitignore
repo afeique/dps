@@ -15,4 +15,11 @@
 # Bevy: keep the assets dir tracked; ignore any local asset import caches
 imported_assets/
 
+# Audio assets read at runtime from the project dir (src/music.rs reads
+# music/*.mp3, src/audio.rs reads sfx/*.wav). These are large (~400 MB of mp3 +
+# ~47 MB of wav) — do NOT commit them to plain git. Track via git-lfs or a
+# separate asset pipeline if you want them versioned (see docs/port-plan.md §4).
+/music/
+/sfx/
+
 # NOTE: Cargo.lock IS committed (this is a binary crate).
