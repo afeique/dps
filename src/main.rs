@@ -25,6 +25,8 @@ mod systems;
 
 #[cfg(test)]
 mod gate_tests;
+#[cfg(test)]
+mod wave_tests;
 
 use app::GamePlugin;
 use bevy::prelude::*;

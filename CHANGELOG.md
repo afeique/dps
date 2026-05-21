@@ -112,6 +112,21 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   approximations for now; homing / piercing power weapons remain for a later
   pass. The screenshot tool gained env-gated `keep_player_alive` + `force_fire`
   so captures show a populated combat scene.
+- **Phase 3 — power weapons, skills, powerups + scenario tests (increment 4).**
+  - **Homing power weapon** (`systems/power_weapon.rs`) — key **E** fires a
+    salvo of homing missiles (a `Homing` component + steering system; they're
+    player bullets, so the existing collision handles damage).
+  - **Active defense skills** (`systems/skills.rs`) — **LShift** dash (forward
+    burst + brief i-frames), **C** shield-burst (refill shield + i-frames),
+    **X** bomb (clear the field: `Death` + score + despawn), each cooldown-gated.
+  - **Powerups** (`systems/powerups.rs`) — enemies rarely drop gem pickups
+    (ShieldRestore / ExtraLife / Bomb), applied on contact.
+  - **Headless Phase-3 scenario tests** (`src/wave_tests.rs`) — wave spawning
+    grows the enemy count, a player bullet kills an enemy (+score, emits
+    `Death`), asteroids split when shot, and a ready enemy emits a `Fire`. **8
+    tests pass** total. This is a representative cut of the §9 gate, not full
+    web-build E2E parity. Remaining polish: weapon-modifying powerups, true
+    laser/mine/homing projectile fidelity, per-kind firing tuning.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

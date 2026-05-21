@@ -34,6 +34,8 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::asteroids::AsteroidSpawner>()
             .init_resource::<systems::weapons::CurrentWeapon>()
+            .init_resource::<systems::power_weapon::PowerWeaponCooldown>()
+            .init_resource::<systems::skills::Skills>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -68,7 +70,12 @@ impl Plugin for GamePlugin {
             // ── input: read devices every frame → Intent ────────────────
             .add_systems(
                 Update,
-                (systems::input::gather_input, systems::weapons::cycle_weapon)
+                (
+                    systems::input::gather_input,
+                    systems::weapons::cycle_weapon,
+                    systems::power_weapon::fire_power_weapon,
+                    systems::skills::use_skills,
+                )
                     .run_if(in_state(GameState::Playing)),
             )
             // ── death → GameOver → restart flow ─────────────────────────
@@ -99,6 +106,7 @@ impl Plugin for GamePlugin {
                         systems::enemy::sentinel::ai,
                         systems::enemy::tangerine::ai,
                         systems::enemy::titan::ai,
+                        systems::power_weapon::homing_steer,
                     )
                         .chain(),
                     // Spawners (enemies + asteroids).
@@ -128,8 +136,10 @@ impl Plugin for GamePlugin {
                     // Drops — runs after apply_damage so `Death` is available.
                     (
                         systems::drops::spawn_drops,
+                        systems::powerups::spawn_powerups,
                         systems::drops::attract_orbs,
                         systems::drops::collect_orbs,
+                        systems::powerups::collect_powerups,
                     )
                         .chain(),
                     systems::damage::tick_invulnerability,
