@@ -75,7 +75,7 @@ impl Plugin for GamePlugin {
             .add_systems(
                 Update,
                 (
-                    systems::input::gather_input,
+                    (systems::input::gather_input, systems::input::update_aim).chain(),
                     systems::weapons::cycle_weapon,
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,

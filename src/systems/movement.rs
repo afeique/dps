@@ -9,8 +9,24 @@ use bevy::prelude::*;
 pub fn ship_control(time: Res<Time>, mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>) {
     let dt = time.delta_secs();
     for (ship, intent, mut vel, mut tf) in &mut q {
-        // Strafe rotates the hull; thrust accelerates along the facing.
-        tf.rotate_z(-intent.strafe * ship.turn_rate * dt);
+        // Rotation: face the mouse aim point when active, else strafe-rotate.
+        if intent.aim_active {
+            let to_aim = intent.aim - tf.translation.truncate();
+            if to_aim.length_squared() > 1.0 {
+                let desired = to_aim.to_angle();
+                let current = (tf.rotation * Vec3::Y).truncate().to_angle();
+                // Shortest signed delta, wrapped to (-PI, PI].
+                let delta = (desired - current + std::f32::consts::PI)
+                    .rem_euclid(std::f32::consts::TAU)
+                    - std::f32::consts::PI;
+                let max = ship.turn_rate * dt;
+                tf.rotate_z(delta.clamp(-max, max));
+            }
+        } else {
+            tf.rotate_z(-intent.strafe * ship.turn_rate * dt);
+        }
+
+        // Thrust accelerates along the facing.
         let forward = (tf.rotation * Vec3::Y).truncate();
         vel.0 += forward * (intent.thrust * ship.thrust * dt);
 

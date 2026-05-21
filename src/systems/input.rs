@@ -7,6 +7,7 @@
 
 use crate::components::Intent;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 /// Below this magnitude the analog stick is treated as centered (guards against
 /// resting drift on top of Bevy's built-in deadzone).
@@ -61,5 +62,32 @@ pub fn gather_input(
         intent.thrust = thrust;
         intent.strafe = strafe;
         intent.firing = firing;
+    }
+}
+
+/// Mouse-aim: project the cursor into world space and write it to `Intent`,
+/// flagging `aim_active` so the ship turns to face it (`ship_control`). Cursor
+/// outside the window (or no camera) → `aim_active = false`, so keyboard /
+/// gamepad strafe-rotation takes over. Runs after `gather_input`.
+pub fn update_aim(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    mut q: Query<&mut Intent>,
+) {
+    let world = windows
+        .single()
+        .ok()
+        .and_then(|w| w.cursor_position())
+        .zip(cameras.single().ok())
+        .and_then(|(cursor, (cam, cam_tf))| cam.viewport_to_world_2d(cam_tf, cursor).ok());
+
+    for mut intent in &mut q {
+        match world {
+            Some(p) => {
+                intent.aim = p;
+                intent.aim_active = true;
+            }
+            None => intent.aim_active = false,
+        }
     }
 }

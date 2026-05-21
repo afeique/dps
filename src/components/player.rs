@@ -48,8 +48,11 @@ pub struct Intent {
     pub thrust: f32,
     /// Left/right (rotation) input, -1..=1.
     pub strafe: f32,
-    /// World-space aim point (mouse) — unused until Phase 4.
+    /// World-space aim point (mouse cursor), valid while `aim_active`.
     pub aim: Vec2,
+    /// True when mouse-aim is driving the ship (cursor in-window): the hull
+    /// turns toward `aim` instead of strafe-rotating.
+    pub aim_active: bool,
     /// Primary fire held.
     pub firing: bool,
 }

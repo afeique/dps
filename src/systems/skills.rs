@@ -39,6 +39,7 @@ impl Default for Skills {
 ///   each enemy triggers a `Death` message so explosion FX fire normally.
 pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
     time: Res<Time>,
     mut commands: Commands,
     mut skills: ResMut<Skills>,
@@ -55,6 +56,12 @@ pub fn use_skills(
     skills.shield_cd = (skills.shield_cd - dt).max(0.0);
     skills.bomb_cd = (skills.bomb_cd - dt).max(0.0);
 
+    // Gamepad triggers (first connected pad): LT = dash, LB = shield, North = bomb.
+    let pad = gamepads.iter().next();
+    let dash_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger2));
+    let shield_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger));
+    let bomb_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::North));
+
     // Bail if the player ship is absent (GameOver, not yet spawned, etc.).
     let Ok((player_entity, mut vel, mut shield, tf)) = player.single_mut() else {
         return;
@@ -62,7 +69,7 @@ pub fn use_skills(
 
     // --- DASH (LeftShift) ------------------------------------------------
     // Strong forward impulse along the ship's facing direction + brief i-frames.
-    if keys.just_pressed(KeyCode::ShiftLeft) && skills.dash_cd <= 0.0 {
+    if (keys.just_pressed(KeyCode::ShiftLeft) || dash_btn) && skills.dash_cd <= 0.0 {
         let forward = (tf.rotation * Vec3::Y).truncate();
         vel.0 += forward * 600.0;
         commands
@@ -73,7 +80,7 @@ pub fn use_skills(
 
     // --- SHIELD BURST (C) ------------------------------------------------
     // Instantly refills the shield to maximum and grants extended i-frames.
-    if keys.just_pressed(KeyCode::KeyC) && skills.shield_cd <= 0.0 {
+    if (keys.just_pressed(KeyCode::KeyC) || shield_btn) && skills.shield_cd <= 0.0 {
         shield.current = shield.max;
         commands
             .entity(player_entity)
@@ -84,7 +91,7 @@ pub fn use_skills(
     // --- BOMB (X) --------------------------------------------------------
     // Clear the field: emit Death for every enemy (triggers FX + drops), then
     // despawn it. Also hard-despawn all enemy-faction bullets immediately.
-    if keys.just_pressed(KeyCode::KeyX) && skills.bomb_cd <= 0.0 {
+    if (keys.just_pressed(KeyCode::KeyX) || bomb_btn) && skills.bomb_cd <= 0.0 {
         for (enemy_entity, enemy_tf) in &enemies {
             deaths.write(Death {
                 entity: enemy_entity,

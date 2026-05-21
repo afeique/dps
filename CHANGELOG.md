@@ -137,8 +137,15 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   noise), encodes 16-bit mono WAV byte buffers, and plays them on events —
   player/enemy shots (on `Fire`), explosions (on `Death`), and player hits (on
   `Damage` to the ship). Enables Bevy's `wav` feature so rodio decodes the
-  runtime-generated buffers. Remaining Phase-4: mouse-aim / twin-stick, gamepad
-  bindings for the power weapon + skills, and music streaming.
+  runtime-generated buffers.
+- **Phase 4 — mouse-aim + full gamepad bindings.** Mouse-aim: the cursor is
+  projected into world space (`Intent.aim` / `aim_active`); while active the
+  ship turns to face the cursor (turn-rate-limited) instead of strafe-rotating,
+  falling back to strafe when the cursor leaves the window. Gamepad now covers
+  every action alongside keyboard/mouse — **West** fires the power weapon,
+  **LT** dashes, **LB** shield-bursts, **North** bombs (plus left-stick steer +
+  South/RT fire from before). Remaining Phase-4: a mouse crosshair sprite and
+  music streaming (CDN + disk cache).
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

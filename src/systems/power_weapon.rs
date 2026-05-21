@@ -107,6 +107,7 @@ fn steer_toward(current: Vec2, desired_dir: Vec2, max_angle: f32) -> Vec2 {
 /// `homing_steer` will curve it toward the nearest enemy each frame.
 pub fn fire_power_weapon(
     keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
     time: Res<Time>,
     mut cd: ResMut<PowerWeaponCooldown>,
     mut commands: Commands,
@@ -117,7 +118,11 @@ pub fn fire_power_weapon(
     // Tick down; clamp so we never go negative.
     cd.0 = (cd.0 - dt).max(0.0);
 
-    if !keys.just_pressed(KeyCode::KeyE) {
+    // Trigger: keyboard E, or the gamepad West face button (X / square).
+    let pad_fire = gamepads
+        .iter()
+        .any(|gp| gp.just_pressed(GamepadButton::West));
+    if !keys.just_pressed(KeyCode::KeyE) && !pad_fire {
         return;
     }
     if cd.0 > 0.0 {
