@@ -9,6 +9,9 @@
 .vscode/
 *.swp
 
+# Claude Code local session / harness state
+.claude/
+
 # Bevy: keep the assets dir tracked; ignore any local asset import caches
 imported_assets/
 
