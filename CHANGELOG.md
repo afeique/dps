@@ -156,6 +156,23 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   detail stays ≥ 1 texel and doesn't alias into grain.) Removed the live nebula
   shader + `Material2d`. Added opt-in `DPS_FPS=1` (frame-rate logging) and
   `DPS_NO_NEBULA=1` (isolate cost) dev toggles.
+- **Nebula look fixed (jaggies / stretch).** The baked nebula was a *square*
+  512² texture stretched to a wide screen quad → features stretched ~1.7× and
+  edges stair-stepped. Now baked at **1024²** with the noise domain
+  **aspect-corrected** so features are round on screen, **5 octaves** of detail,
+  linear filtering, and softer alpha edges. Smooth, undistorted, vivid.
+
+### Changed
+
+- **Starfield reworked.** Removed the scrolling-shooter vertical drift; stars
+  now **parallax off the player's position** (far layers barely move, near
+  layers shift visibly → depth in the fixed-camera arena). Expanded to ~10 color
+  tiers (white / blue / cyan / amber / red / purple + HDR accents), more size
+  variance, and per-star twinkle. (`drift_stars` → `parallax_stars`.)
+- **Controls → twin-stick (WASD + mouse).** WASD / gamepad left stick now set a
+  screen-space MOVE direction independent of facing; the **mouse aims** — the
+  ship instantly faces the cursor and fires toward it (`Intent.move_dir`;
+  `ship_control` faces `aim`). Replaces the old thrust + rotate scheme.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

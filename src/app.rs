@@ -60,7 +60,7 @@ impl Plugin for GamePlugin {
                 (
                     render::explosion::spawn_on_death,
                     render::explosion::tick_explosion_timers,
-                    render::starfield::drift_stars,
+                    render::starfield::parallax_stars,
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,

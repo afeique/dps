@@ -1,30 +1,43 @@
-//! Parallax starfield (`docs/port-plan.md` §3.4). Four depth layers of stars
-//! drift downward at different speeds — nearer layers are bigger, brighter, and
-//! faster — giving a parallax sense of forward flight. Stars live at z ≈ -50..-45
-//! behind all gameplay and wrap vertically. Color variety, size jitter, and
-//! per-star twinkle (scale pulsing) enrich the field without per-frame material
-//! mutations. Scatter uses a dependency-free deterministic hash.
+//! Arena parallax starfield (`docs/port-plan.md` §3.4).
+//!
+//! Stars are scattered in four depth layers (z ≈ -50 .. -45.5) and **do not
+//! scroll**. Instead each star has a parallax factor: every frame the star is
+//! repositioned at `base_pos − player_pos × parallax` so distant layers barely
+//! shift while near layers shift visibly as the player moves — giving an
+//! organic sense of depth without any camera movement.
+//!
+//! Twinkle is kept: each star pulsates its scale sinusoidally with an
+//! independent phase and frequency so the field shimmers.
+//!
+//! Ten shared color-material tiers (no per-star material allocation).
+//! Scatter uses a dependency-free deterministic hash — no `rand` crate.
 
+use crate::components::Ship;
 use crate::resources::PlayBounds;
 use bevy::prelude::*;
 
-/// A background star.
+// ── Star component ────────────────────────────────────────────────────────────
+
+/// A background star. Stores everything needed by `parallax_stars`.
 #[derive(Component)]
 pub struct Star {
-    /// Downward drift speed in world-units/second.
-    pub drift: f32,
-    /// Twinkle oscillation frequency (radians/second).
-    pub twinkle_freq: f32,
-    /// Twinkle phase offset so stars pulse at different times.
-    pub twinkle_phase: f32,
-    /// Base scale (no-twinkle size) — twinkle modulates around this.
+    /// Resting world-space position (where the star sits when the player is at
+    /// the arena centre).
+    pub base_pos: Vec2,
+    /// How much the star shifts opposite the player. Far layers: ~0.02–0.05;
+    /// near layers: ~0.12–0.20.
+    pub parallax: f32,
+    /// Base (no-twinkle) render scale.
     pub base_scale: f32,
-    /// Twinkle amplitude as fraction of base_scale (0 → no pulse).
+    /// Twinkle amplitude as a fraction of `base_scale` (0 → no pulse).
     pub twinkle_amp: f32,
+    /// Twinkle oscillation frequency (radians / second).
+    pub twinkle_freq: f32,
+    /// Per-star phase offset so stars don't all pulse together.
+    pub twinkle_phase: f32,
 }
 
-/// Field extends 15% past the play bounds so wrap-around stays off-screen.
-const FIELD_MARGIN: f32 = 1.15;
+// ── Deterministic hash ────────────────────────────────────────────────────────
 
 /// Cheap deterministic [0, 1) hash (murmur-style finalizer) — no `rand` dep.
 fn rand01(seed: u32) -> f32 {
@@ -35,126 +48,143 @@ fn rand01(seed: u32) -> f32 {
     x as f32 / u32::MAX as f32
 }
 
-/// Map rand01 output to `[lo, hi)`.
+/// Map `rand01` output to `[lo, hi)`.
 #[inline]
 fn randf(seed: u32, lo: f32, hi: f32) -> f32 {
     lo + rand01(seed) * (hi - lo)
 }
 
-// ── Color palette ────────────────────────────────────────────────────────────
+// ── Colour palette (10 tiers) ─────────────────────────────────────────────────
 //
-// Six shared material handles (one per color/brightness tier).
-// We intentionally keep no per-star material so there is zero per-frame
-// material churn — twinkle is expressed through Transform.scale only.
+// All values are linear RGB.  Values > 1.0 intentionally exceed SDR so they
+// contribute to bloom in a HDR-enabled pipeline.
 //
-// Tier naming: D = distant/dim, M = mid, N = near; suffix W/B/A/C =
-// white / blue-white / amber / cyan.
+// Tier naming:
+//   d_ = distant/dim   m_ = mid   n_ = near
+//   suffix: W = cool-white  Ww = warm-white  B = blue  Bw = blue-white
+//           C = cyan  A = amber  R = red (faint)  P = purple (faint)
+//   _hdr   = HDR accent (> 1.0 peak component, bloom-ready)
 
-const NUM_PALETTES: usize = 6;
+const NUM_PALETTES: usize = 10;
 
-/// Build the six shared palette materials and return their handles.
 fn build_palette(materials: &mut Assets<ColorMaterial>) -> [Handle<ColorMaterial>; NUM_PALETTES] {
-    // Distant, cool-white (very dim)
-    let d_white = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.18, 0.18, 0.22)));
-    // Distant, blue-tinted (very dim)
-    let d_blue = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.12, 0.15, 0.30)));
-    // Mid-layer, neutral white
-    let m_white = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.55, 0.55, 0.60)));
-    // Mid-layer, blue-white
-    let m_blue = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.45, 0.50, 0.85)));
-    // Near, warm amber accent (sparse)
-    let n_amber = materials.add(ColorMaterial::from_color(Color::linear_rgb(1.20, 0.80, 0.30)));
-    // Near, cool cyan / HDR bloom
-    let n_cyan = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.80, 1.60, 2.20)));
+    // 0 — distant cool-white (very dim)
+    let d_w   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.16, 0.16, 0.20)));
+    // 1 — distant warm-white (very dim, slightly yellowish)
+    let d_ww  = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.20, 0.18, 0.14)));
+    // 2 — distant blue (faint)
+    let d_b   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.10, 0.14, 0.32)));
+    // 3 — mid neutral white
+    let m_w   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.55, 0.56, 0.60)));
+    // 4 — mid blue-white
+    let m_bw  = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.42, 0.50, 0.90)));
+    // 5 — mid faint red
+    let m_r   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.50, 0.18, 0.18)));
+    // 6 — mid faint purple
+    let m_p   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.36, 0.20, 0.52)));
+    // 7 — near warm amber (moderate HDR)
+    let n_a   = materials.add(ColorMaterial::from_color(Color::linear_rgb(1.30, 0.75, 0.20)));
+    // 8 — near cyan HDR (bloom-ready)
+    let n_c   = materials.add(ColorMaterial::from_color(Color::linear_rgb(0.70, 1.80, 2.40)));
+    // 9 — near warm-white HDR accent (hottest, very sparse)
+    let n_hdr = materials.add(ColorMaterial::from_color(Color::linear_rgb(2.20, 2.00, 1.80)));
 
-    [d_white, d_blue, m_white, m_blue, n_amber, n_cyan]
+    [d_w, d_ww, d_b, m_w, m_bw, m_r, m_p, n_a, n_c, n_hdr]
 }
 
-/// Per-layer definition.
+// ── Layer definitions ─────────────────────────────────────────────────────────
+
+/// Field extends 15 % beyond play-bounds so parallax offsets stay filled.
+const FIELD_MARGIN: f32 = 1.20;
+
 struct LayerDef {
-    count:      u32,
-    z:          f32,
-    scale_lo:   f32,
-    scale_hi:   f32,
-    drift_lo:   f32,
-    drift_hi:   f32,
-    twink_amp:  f32, // fraction of base scale
-    twink_freq_lo: f32,
-    twink_freq_hi: f32,
-    /// Palette indices this layer may draw from (picked via hash).
-    palette:    &'static [usize],
+    count:          u32,
+    z:              f32,
+    parallax_lo:    f32,
+    parallax_hi:    f32,
+    scale_lo:       f32,
+    scale_hi:       f32,
+    twink_amp:      f32,
+    twink_freq_lo:  f32,
+    twink_freq_hi:  f32,
+    /// Weighted palette index list; entry picked via hash.
+    palette:        &'static [usize],
 }
 
-/// Four depth layers, far → near (index 0 = furthest back).
+/// Four layers, far → near.  Star counts: 110 + 85 + 55 + 30 = 280 total.
 const LAYERS: [LayerDef; 4] = [
-    // Layer 0 — deep background, very small/dim/slow, cool tones
+    // Layer 0 — deep background: barely moves (parallax ≈ 0.02), tiny, dim
     LayerDef {
-        count: 110,
-        z: -50.0,
-        scale_lo: 0.45, scale_hi: 0.80,
-        drift_lo: 5.0,  drift_hi: 12.0,
-        twink_amp: 0.08,
-        twink_freq_lo: 0.3, twink_freq_hi: 1.0,
-        palette: &[0, 1, 0, 0, 1, 0], // mostly d_white, sprinkle d_blue
+        count: 110, z: -50.0,
+        parallax_lo: 0.015, parallax_hi: 0.035,
+        scale_lo: 0.40,     scale_hi: 0.85,
+        twink_amp: 0.07,
+        twink_freq_lo: 0.25, twink_freq_hi: 0.90,
+        // cool-white dominant, warm-white & blue sprinkled
+        palette: &[0, 0, 1, 0, 2, 0, 1, 0, 0, 2],
     },
-    // Layer 1 — mid-distant, slightly bigger, mostly white with blue accents
+    // Layer 1 — mid-distant: slight parallax, neutral/blue whites, rare purple
     LayerDef {
-        count: 80,
-        z: -48.5,
-        scale_lo: 0.70, scale_hi: 1.20,
-        drift_lo: 14.0, drift_hi: 24.0,
+        count: 85, z: -48.5,
+        parallax_lo: 0.04, parallax_hi: 0.07,
+        scale_lo: 0.65,    scale_hi: 1.30,
         twink_amp: 0.12,
-        twink_freq_lo: 0.5, twink_freq_hi: 1.5,
-        palette: &[2, 2, 3, 2, 3, 2], // mostly m_white, blue accent
+        twink_freq_lo: 0.45, twink_freq_hi: 1.50,
+        // mid-white dominant, blue-white + faint purple/red
+        palette: &[3, 3, 4, 3, 4, 6, 3, 3, 5, 4],
     },
-    // Layer 2 — mid-near, brighter, mixed white/blue, rare amber
+    // Layer 2 — mid-near: noticeable parallax, brighter, mixed palette
     LayerDef {
-        count: 50,
-        z: -47.0,
-        scale_lo: 1.00, scale_hi: 1.80,
-        drift_lo: 28.0, drift_hi: 44.0,
+        count: 55, z: -47.0,
+        parallax_lo: 0.08, parallax_hi: 0.12,
+        scale_lo: 0.90,    scale_hi: 1.90,
         twink_amp: 0.18,
-        twink_freq_lo: 0.8, twink_freq_hi: 2.2,
-        palette: &[2, 3, 3, 4, 2, 3], // white/blue, 1-in-6 amber
+        twink_freq_lo: 0.70, twink_freq_hi: 2.20,
+        // white/blue-white core, amber + purple accents
+        palette: &[3, 4, 4, 7, 3, 6, 4, 3, 5, 4],
     },
-    // Layer 3 — nearest, HDR bloom, fast, cyan+amber accents
+    // Layer 3 — nearest: strong parallax (0.12–0.20), HDR bloom, shimmery
     LayerDef {
-        count: 24,
-        z: -45.5,
-        scale_lo: 1.40, scale_hi: 2.60,
-        drift_lo: 50.0, drift_hi: 78.0,
-        twink_amp: 0.25,
-        twink_freq_lo: 1.0, twink_freq_hi: 3.0,
-        palette: &[5, 5, 4, 5, 3, 5], // mostly cyan bloom, amber + blue-white
+        count: 30, z: -45.5,
+        parallax_lo: 0.12, parallax_hi: 0.20,
+        scale_lo: 1.30,    scale_hi: 2.80,
+        twink_amp: 0.28,
+        twink_freq_lo: 1.00, twink_freq_hi: 3.20,
+        // mostly cyan HDR + amber; a few warm-white HDR accents
+        palette: &[8, 8, 7, 9, 8, 7, 8, 9, 4, 8],
     },
 ];
 
+// ── Startup system ────────────────────────────────────────────────────────────
+
 pub fn spawn_starfield(
-    mut commands: Commands,
-    mut meshes:   ResMut<Assets<Mesh>>,
+    mut commands:  Commands,
+    mut meshes:    ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    bounds: Res<PlayBounds>,
+    bounds:        Res<PlayBounds>,
 ) {
-    let circle = meshes.add(Circle::new(1.0));
+    let circle  = meshes.add(Circle::new(1.0));
     let palette = build_palette(&mut materials);
-    let field = bounds.half * FIELD_MARGIN;
+    // Scatter field is wider than the play-area so parallax offsets don't
+    // expose a gap at the edges even when the player is at a corner.
+    let field   = bounds.half * FIELD_MARGIN;
 
     let mut seed: u32 = 0xDEAD_BEEF;
 
     for (li, layer) in LAYERS.iter().enumerate() {
         for i in 0..layer.count {
-            // Unique seeds per attribute — stride by a large prime to avoid
-            // correlation between fields for the same star index.
-            let s0 = seed.wrapping_add(li as u32 * 100_003).wrapping_add(i * 17);
+            // Stride seeds by a large prime to de-correlate fields.
+            let s0 = seed
+                .wrapping_add(li as u32 * 100_003)
+                .wrapping_add(i.wrapping_mul(17));
 
-            let x       = randf(s0,              -field.x, field.x);
-            let y       = randf(s0.wrapping_add(1), -field.y, field.y);
-            let scale   = randf(s0.wrapping_add(2), layer.scale_lo, layer.scale_hi);
-            let drift   = randf(s0.wrapping_add(3), layer.drift_lo, layer.drift_hi);
-            let phase   = randf(s0.wrapping_add(4), 0.0, std::f32::consts::TAU);
-            let freq    = randf(s0.wrapping_add(5), layer.twink_freq_lo, layer.twink_freq_hi);
+            let x         = randf(s0,                  -field.x, field.x);
+            let y         = randf(s0.wrapping_add(1),  -field.y, field.y);
+            let scale     = randf(s0.wrapping_add(2),  layer.scale_lo,    layer.scale_hi);
+            let parallax  = randf(s0.wrapping_add(3),  layer.parallax_lo, layer.parallax_hi);
+            let phase     = randf(s0.wrapping_add(4),  0.0, std::f32::consts::TAU);
+            let freq      = randf(s0.wrapping_add(5),  layer.twink_freq_lo, layer.twink_freq_hi);
 
-            // Pick palette entry from the layer's weighted list.
             let palette_slot = ((rand01(s0.wrapping_add(6)) * layer.palette.len() as f32) as usize)
                 .min(layer.palette.len() - 1);
             let mat = palette[layer.palette[palette_slot]].clone();
@@ -163,11 +193,12 @@ pub fn spawn_starfield(
 
             commands.spawn((
                 Star {
-                    drift,
-                    twinkle_freq:  freq,
-                    twinkle_phase: phase,
+                    base_pos:      Vec2::new(x, y),
+                    parallax,
                     base_scale:    scale,
                     twinkle_amp:   layer.twink_amp,
+                    twinkle_freq:  freq,
+                    twinkle_phase: phase,
                 },
                 Mesh2d(circle.clone()),
                 MeshMaterial2d(mat),
@@ -177,28 +208,34 @@ pub fn spawn_starfield(
     }
 }
 
-/// Drift stars down (wrap at field edge) and pulse each star's scale to twinkle.
-pub fn drift_stars(
-    time:   Res<Time>,
-    bounds: Res<PlayBounds>,
-    mut q:  Query<(&Star, &mut Transform)>,
+// ── Per-frame system ──────────────────────────────────────────────────────────
+
+/// Reposition stars relative to the player (parallax) and pulse their scale
+/// (twinkle).  No vertical drift; no wrapping.
+pub fn parallax_stars(
+    time:       Res<Time>,
+    player_q:   Query<&Transform, With<Ship>>,
+    mut star_q: Query<(&Star, &mut Transform), Without<Ship>>,
 ) {
-    let dt      = time.delta_secs();
     let elapsed = time.elapsed_secs();
-    let field_h = bounds.half.y * FIELD_MARGIN;
-    let span    = field_h * 2.0;
 
-    for (star, mut tf) in &mut q {
-        // Vertical drift + vertical wrap.
-        tf.translation.y -= star.drift * dt;
-        if tf.translation.y < -field_h {
-            tf.translation.y += span;
-        }
+    // Bevy 0.18: single() returns Result — fall back to zero if no player.
+    let player_pos: Vec2 = match player_q.single() {
+        Ok(tf) => tf.translation.truncate(),
+        Err(_) => Vec2::ZERO,
+    };
 
-        // Twinkle: subtle sinusoidal scale pulse, no material mutation.
-        let pulse = 1.0 + star.twinkle_amp
-            * (elapsed * star.twinkle_freq + star.twinkle_phase).sin();
-        let s = star.base_scale * pulse;
-        tf.scale = Vec3::splat(s);
+    for (star, mut tf) in &mut star_q {
+        // Parallax offset: stars shift opposite to player motion.
+        let offset = star.base_pos - player_pos * star.parallax;
+        tf.translation.x = offset.x;
+        tf.translation.y = offset.y;
+        // z is set at spawn and never changes.
+
+        // Twinkle: sinusoidal scale pulse.
+        let pulse = 1.0
+            + star.twinkle_amp
+                * (elapsed * star.twinkle_freq + star.twinkle_phase).sin();
+        tf.scale = Vec3::splat(star.base_scale * pulse);
     }
 }

@@ -9,31 +9,23 @@ use bevy::prelude::*;
 pub fn ship_control(time: Res<Time>, mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>) {
     let dt = time.delta_secs();
     for (ship, intent, mut vel, mut tf) in &mut q {
-        // Rotation: face the mouse aim point when active, else strafe-rotate.
-        if intent.aim_active {
-            let to_aim = intent.aim - tf.translation.truncate();
-            if to_aim.length_squared() > 1.0 {
-                let desired = to_aim.to_angle();
-                let current = (tf.rotation * Vec3::Y).truncate().to_angle();
-                // Shortest signed delta, wrapped to (-PI, PI].
-                let delta = (desired - current + std::f32::consts::PI)
-                    .rem_euclid(std::f32::consts::TAU)
-                    - std::f32::consts::PI;
-                let max = ship.turn_rate * dt;
-                tf.rotate_z(delta.clamp(-max, max));
-            }
-        } else {
-            tf.rotate_z(-intent.strafe * ship.turn_rate * dt);
-        }
+        // Move: accelerate in the WASD / left-stick screen-space direction,
+        // independent of facing (twin-stick).
+        vel.0 += intent.move_dir * (ship.thrust * dt);
 
-        // Thrust accelerates along the facing.
-        let forward = (tf.rotation * Vec3::Y).truncate();
-        vel.0 += forward * (intent.thrust * ship.thrust * dt);
-
-        // Mild drag + hard speed cap (tune against the JS feel in Phase 3).
+        // Mild drag + hard speed cap.
         vel.0 *= 0.985;
         if vel.0.length() > ship.max_speed {
             vel.0 = vel.0.normalize() * ship.max_speed;
+        }
+
+        // Face the mouse aim point instantly. Forward is +Y, so rotate by
+        // (aim_angle - PI/2); the player then fires along this facing.
+        if intent.aim_active {
+            let to_aim = intent.aim - tf.translation.truncate();
+            if to_aim.length_squared() > 0.01 {
+                tf.rotation = Quat::from_rotation_z(to_aim.to_angle() - std::f32::consts::FRAC_PI_2);
+            }
         }
     }
 }

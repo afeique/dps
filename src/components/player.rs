@@ -44,10 +44,8 @@ impl Default for Ship {
 /// `js/modules/ui/input-handler.js`). Phase 4 adds mouse-aim + gamepad.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct Intent {
-    /// Forward/back throttle, -1..=1.
-    pub thrust: f32,
-    /// Left/right (rotation) input, -1..=1.
-    pub strafe: f32,
+    /// Screen-space move direction (WASD / left stick), length ≤ 1.
+    pub move_dir: Vec2,
     /// World-space aim point (mouse cursor), valid while `aim_active`.
     pub aim: Vec2,
     /// True when mouse-aim is driving the ship (cursor in-window): the hull

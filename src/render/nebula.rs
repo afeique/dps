@@ -14,7 +14,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 /// Baked texture resolution (square). The nebula is soft, so this need not
 /// match the framebuffer; it's stretched across the screen with linear filter.
-const BAKE_SIZE: u32 = 512;
+const BAKE_SIZE: u32 = 1024;
 /// Noise-domain scale (matched the old shader's `params.y`).
 const SCALE: f32 = 4.0;
 
@@ -73,9 +73,9 @@ fn fbm(p0: Vec2) -> f32 {
     let mut amp = 0.6;
     // Same column-major rotation as the old shader's mat2x2(1.6,1.2,-1.2,1.6).
     let m = Mat2::from_cols(Vec2::new(1.6, 1.2), Vec2::new(-1.2, 1.6));
-    // 4 octaves: matched to the 512px bake so the finest detail stays ≥ a texel
-    // (more octaves alias into grain when the texture is stretched to screen).
-    for _ in 0..4 {
+    // 5 octaves: 1024px bake gives enough headroom for the extra detail without
+    // aliasing into grain when stretched to screen.
+    for _ in 0..5 {
         v += amp * vnoise(p);
         p = m * p;
         amp *= 0.5;
@@ -91,7 +91,14 @@ fn bake_nebula(size: u32) -> Image {
 
     for y in 0..n {
         for x in 0..n {
-            let uv = Vec2::new(x as f32 / size as f32, y as f32 / size as f32) * SCALE;
+            // Aspect-correct the noise domain so a noise cell is square *on screen*
+            // after the texture is stretched onto the 2200×1300 quad (aspect ≈ 1.692).
+            // Without this, circular cloud features are stretched ~1.7× horizontally.
+            let aspect = 2200.0_f32 / 1300.0;
+            let uv = Vec2::new(
+                x as f32 / size as f32 * aspect,
+                y as f32 / size as f32,
+            ) * SCALE;
 
             let warp = Vec2::new(
                 fbm(uv * 1.1 + Vec2::new(0.0, 1.7)),
@@ -103,7 +110,8 @@ fn bake_nebula(size: u32) -> Image {
             let hue = fbm(uv * 0.28 + Vec2::new(20.0, -7.0));
             let dust = fbm(uv * 0.8 + Vec2::new(30.0, 12.0));
 
-            let neb = smoothstep(0.45, 0.95, density) * smoothstep(0.40, 0.80, region);
+            // Slightly wider smoothstep range for softer alpha feathering on cloud edges.
+            let neb = smoothstep(0.40, 0.98, density) * smoothstep(0.35, 0.80, region);
             let base = teal.lerp(gold, smoothstep(0.45, 0.85, hue));
             let mut col = base * (neb * 1.6);
             let core = smoothstep(0.80, 1.0, density) * neb;
