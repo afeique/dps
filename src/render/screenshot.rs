@@ -21,16 +21,19 @@ impl Plugin for ScreenshotPlugin {
     fn build(&self, app: &mut App) {
         if let Ok(path) = std::env::var("DPS_SCREENSHOT") {
             app.insert_resource(ScreenshotPlan { path, taken: false })
-                .add_systems(
+                .add_systems(Update, capture_then_exit);
+            // `DPS_DEMO=1` (with DPS_SCREENSHOT) keeps the player alive + auto-
+            // firing so a late capture shows a populated combat scene. Without
+            // it, the capture reflects *normal* play.
+            if std::env::var("DPS_DEMO").is_ok() {
+                app.add_systems(
                     Update,
                     (
-                        capture_then_exit,
                         keep_player_alive,
-                        // Hold fire so captures show the player shooting (kills →
-                        // explosions + orbs). Ordered after input so it wins.
                         force_fire.after(crate::systems::input::gather_input),
                     ),
                 );
+            }
         }
     }
 }
@@ -43,14 +46,14 @@ fn capture_then_exit(
     mut frame: Local<u32>,
 ) {
     *frame += 1;
-    if !plan.taken && *frame >= 540 {
+    if !plan.taken && *frame >= 150 {
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(plan.path.clone()));
         plan.taken = true;
         info!("DPS_SCREENSHOT: captured frame -> {}", plan.path);
     }
-    if *frame >= 660 {
+    if *frame >= 280 {
         info!("DPS_SCREENSHOT: exiting");
         std::process::exit(0);
     }

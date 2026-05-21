@@ -173,6 +173,12 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   screen-space MOVE direction independent of facing; the **mouse aims** — the
   ship instantly faces the cursor and fires toward it (`Intent.move_dir`;
   `ship_control` faces `aim`). Replaces the old thrust + rotate scheme.
+- **Nebula dimmed to a backdrop.** It had become so bright/dense (tint 1.6,
+  near screen-filling) that it drowned out the ship + enemies and overloaded
+  bloom into rectangular block artifacts. Dropped the sprite tint to 0.5 and
+  raised the density/region thresholds for more dark gaps, so gameplay reads
+  clearly on top and bloom stays clean. (`DPS_SCREENSHOT` now captures *normal*
+  play; `DPS_DEMO=1` re-enables the immortal/auto-fire demo capture.)
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

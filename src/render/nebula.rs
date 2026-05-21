@@ -28,9 +28,11 @@ pub fn spawn_nebula(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Sprite {
             image,
             custom_size: Some(Vec2::new(2200.0, 1300.0)),
-            // HDR tint: lifts the brightest baked pixels (cores) past 1.0 so
-            // they bloom, while dim gas stays sub-threshold.
-            color: Color::linear_rgb(1.6, 1.6, 1.6),
+            // Dim backdrop tint — keep the nebula well below the neon gameplay
+            // so it reads as a subtle background and doesn't overload bloom
+            // (a too-bright full-screen HDR area produced rectangular bloom
+            // blocks and washed out the ship/enemies).
+            color: Color::linear_rgb(0.5, 0.5, 0.5),
             ..default()
         },
         Transform::from_xyz(0.0, 0.0, -60.0),
@@ -110,8 +112,9 @@ fn bake_nebula(size: u32) -> Image {
             let hue = fbm(uv * 0.28 + Vec2::new(20.0, -7.0));
             let dust = fbm(uv * 0.8 + Vec2::new(30.0, 12.0));
 
-            // Slightly wider smoothstep range for softer alpha feathering on cloud edges.
-            let neb = smoothstep(0.40, 0.98, density) * smoothstep(0.35, 0.80, region);
+            // Higher thresholds → more empty dark space between clouds so the
+            // gameplay reads clearly against the backdrop (was screen-filling).
+            let neb = smoothstep(0.50, 0.95, density) * smoothstep(0.45, 0.82, region);
             let base = teal.lerp(gold, smoothstep(0.45, 0.85, hue));
             let mut col = base * (neb * 1.6);
             let core = smoothstep(0.80, 1.0, density) * neb;
