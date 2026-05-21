@@ -26,7 +26,7 @@ impl Plugin for GamePlugin {
             // ── third-party plugins ─────────────────────────────────────
             // lyon vector-path tessellation → Mesh2d for the silhouettes;
             // hanabi GPU-compute particles for explosions.
-            .add_plugins((ShapePlugin, HanabiPlugin, render::nebula::NebulaPlugin))
+            .add_plugins((ShapePlugin, HanabiPlugin))
             // ── global flow + shared data ───────────────────────────────
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()

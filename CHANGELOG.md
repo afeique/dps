@@ -146,6 +146,16 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
   **LT** dashes, **LB** shield-bursts, **North** bombs (plus left-stick steer +
   South/RT fire from before). Remaining Phase-4: a mouse crosshair sprite and
   music streaming (CDN + disk cache).
+- **Perf: nebula baked to a texture — fixes a major framerate dip.** The
+  procedural nebula was a full-screen fragment shader evaluating ~6 fbm (≈144
+  `sin`) per pixel every frame; on the dev GPU (Radeon Pro 5500M, Retina) that
+  ran at only **~15 fps / 66 ms**. It's now **baked once to a 512² texture at
+  startup** (`render::nebula`, CPU fbm) and shown as a single screen-covering
+  sprite with an HDR tint for bloom — same look, but the per-frame cost is one
+  texture sample, restoring **~60 fps / 16.7 ms**. (Bake matched to 4 octaves so
+  detail stays ≥ 1 texel and doesn't alias into grain.) Removed the live nebula
+  shader + `Material2d`. Added opt-in `DPS_FPS=1` (frame-rate logging) and
+  `DPS_NO_NEBULA=1` (isolate cost) dev toggles.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.

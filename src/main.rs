@@ -33,15 +33,24 @@ use app::GamePlugin;
 use bevy::prelude::*;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Dark Prism Solid".into(),
-                ..default()
-            }),
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Dark Prism Solid".into(),
             ..default()
-        }))
-        .add_plugins(GamePlugin)
-        .add_plugins(render::screenshot::ScreenshotPlugin)
-        .run();
+        }),
+        ..default()
+    }))
+    .add_plugins(GamePlugin)
+    .add_plugins(render::screenshot::ScreenshotPlugin);
+
+    // Opt-in perf logging: `DPS_FPS=1` logs frame rate / frame time each second.
+    if std::env::var("DPS_FPS").is_ok() {
+        app.add_plugins((
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+            bevy::diagnostic::LogDiagnosticsPlugin::default(),
+        ));
+    }
+
+    app.run();
 }
