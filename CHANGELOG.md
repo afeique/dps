@@ -127,6 +127,11 @@ while pre-1.0; it promotes to `1.0.0` when the solo port is feature-complete.
     tests pass** total. This is a representative cut of the §9 gate, not full
     web-build E2E parity. Remaining polish: weapon-modifying powerups, true
     laser/mine/homing projectile fidelity, per-kind firing tuning.
+- **Phase 4 — input (gamepad).** The first connected controller now drives the
+  ship: left stick steers (thrust/strafe, mirroring WASD) and South /
+  right-trigger fires, OR-combined with the keyboard into the same `Intent`
+  (Bevy 0.18's entity-based `Gamepad`). Mouse-aim / twin-stick, gamepad bindings
+  for the power weapon + skills, and audio are the next Phase-4 increments.
   - **GPU bullet trails** (`bevy_hanabi`, continuous emission + global
     simulation space) stream behind player shots and fade out.
   - **Bloom** nudged up (`intensity` 0.2) for a harder glow.
