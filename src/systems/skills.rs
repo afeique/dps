@@ -28,6 +28,8 @@ pub struct Skills {
     pub repair_cd: f32,
     /// Remaining cooldown for Deflector Orbs (J). Ready at 0.
     pub deflector_cd: f32,
+    /// Remaining cooldown for Tractor Shield (K). Ready at 0.
+    pub tractor_cd: f32,
 }
 
 impl Default for Skills {
@@ -40,6 +42,7 @@ impl Default for Skills {
             bulwark_cd: 0.0,
             repair_cd: 0.0,
             deflector_cd: 0.0,
+            tractor_cd: 0.0,
         }
     }
 }
@@ -59,6 +62,8 @@ impl Default for Skills {
 ///   component, applied by `tick_repair`).
 /// * **Deflector Orbs** (`J`, 15 s CD) — 3 orbiting orbs that each absorb 3
 ///   enemy bullets (`cast_deflectors`/`orbit_deflectors`/`deflector_blocks`).
+/// * **Tractor Shield** (`K`, 18 s CD) — a 4 s forward-arc field that absorbs
+///   enemy bullets into coins (`TractorShield`, `tractor_absorb`).
 pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
@@ -79,6 +84,7 @@ pub fn use_skills(
     skills.bomb_cd = (skills.bomb_cd - dt).max(0.0);
     skills.bulwark_cd = (skills.bulwark_cd - dt).max(0.0);
     skills.repair_cd = (skills.repair_cd - dt).max(0.0);
+    skills.tractor_cd = (skills.tractor_cd - dt).max(0.0);
 
     // Gamepad triggers (first connected pad): LT = dash, LB = shield, North = bomb,
     // DPadDown = bulwark, DPadUp = repair (East is EMP).
@@ -155,6 +161,69 @@ pub fn use_skills(
             rate: 3.0,
         });
         skills.repair_cd = 25.0;
+    }
+
+    // --- TRACTOR SHIELD (K) ----------------------------------------------
+    // A 4 s window absorbing forward-arc enemy bullets into coins (spec III.4).
+    if (keys.just_pressed(KeyCode::KeyK) || keys.just_pressed(KeyCode::KeyL))
+        && skills.tractor_cd <= 0.0
+    {
+        commands
+            .entity(player_entity)
+            .insert(TractorShield { seconds: 4.0 });
+        skills.tractor_cd = 18.0;
+    }
+}
+
+/// Count down the Tractor Shield window and remove it on expiry.
+pub fn tick_tractor(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut TractorShield)>,
+) {
+    for (e, mut t) in &mut q {
+        t.seconds -= time.delta_secs();
+        if t.seconds <= 0.0 {
+            commands.entity(e).remove::<TractorShield>();
+        }
+    }
+}
+
+/// Is `to_bullet` (player→bullet) inside the tractor capture cone — within
+/// `range` and within `half_arc` of `facing`? `facing` is normalized.
+pub fn in_tractor_arc(facing: Vec2, to_bullet: Vec2, half_arc: f32, range: f32) -> bool {
+    let dist = to_bullet.length();
+    if dist < 1e-4 {
+        return true; // sitting on the ship — capture it
+    }
+    if dist > range {
+        return false;
+    }
+    facing.dot(to_bullet / dist) >= half_arc.cos()
+}
+
+/// While Tractor Shield is up, absorb forward-arc enemy bullets into coins
+/// (spec III.4). Runs in the collision group, before the bullet can hit the ship.
+pub fn tractor_absorb(
+    mut commands: Commands,
+    mut score: ResMut<Score>,
+    player: Query<&Transform, (With<Ship>, With<TractorShield>)>,
+    bullets: Query<(Entity, &Transform, &Bullet)>,
+) {
+    let Ok(ptf) = player.single() else {
+        return; // tractor not active
+    };
+    let ppos = ptf.translation.truncate();
+    let facing = (ptf.rotation * Vec3::Y).truncate().normalize_or_zero();
+    for (be, btf, bullet) in &bullets {
+        if bullet.kind != BulletKind::Enemy {
+            continue;
+        }
+        let to_bullet = btf.translation.truncate() - ppos;
+        if in_tractor_arc(facing, to_bullet, TRACTOR_HALF_ARC, TRACTOR_RANGE) {
+            commands.entity(be).despawn();
+            score.gold = score.gold.saturating_add(TRACTOR_COINS);
+        }
     }
 }
 

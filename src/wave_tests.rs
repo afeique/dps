@@ -1146,6 +1146,56 @@ fn deflector_orb_blocks_enemy_bullets() {
     assert!(world.get::<DeflectorOrb>(orb).is_none(), "orb pops at 0 blocks");
 }
 
+// ── 30. tractor_shield_absorbs_forward_bullets ────────────────────────────────
+
+/// Tractor Shield absorbs in-arc, in-range enemy bullets into coins, but not
+/// bullets behind the ship or out of range (spec III.4).
+#[test]
+fn tractor_shield_absorbs_forward_bullets() {
+    use crate::components::TractorShield;
+    use crate::systems::skills::{in_tractor_arc, tractor_absorb};
+
+    // Arc helper: facing +Y. Dead ahead in range → in; behind → out; far → out.
+    let up = Vec2::new(0.0, 1.0);
+    assert!(in_tractor_arc(up, Vec2::new(0.0, 40.0), std::f32::consts::FRAC_PI_4, 55.0));
+    assert!(!in_tractor_arc(up, Vec2::new(0.0, -40.0), std::f32::consts::FRAC_PI_4, 55.0));
+    assert!(!in_tractor_arc(up, Vec2::new(0.0, 90.0), std::f32::consts::FRAC_PI_4, 55.0));
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Ship facing +Y (identity rotation → forward +Y), tractor active.
+    world.spawn((
+        Ship::default(),
+        TractorShield { seconds: 4.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    // In-arc enemy bullet (ahead, in range) → absorbed for coins.
+    let front = world
+        .spawn((
+            Bullet { kind: BulletKind::Enemy, damage: 5.0, pierce: 0 },
+            Faction::Enemy,
+            Transform::from_xyz(0.0, 40.0, 0.0),
+        ))
+        .id();
+    // Behind the ship → untouched.
+    let behind = world
+        .spawn((
+            Bullet { kind: BulletKind::Enemy, damage: 5.0, pierce: 0 },
+            Faction::Enemy,
+            Transform::from_xyz(0.0, -40.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tractor_absorb);
+    step.run(world);
+
+    assert!(world.get::<Bullet>(front).is_none(), "in-arc bullet absorbed");
+    assert!(world.get::<Bullet>(behind).is_some(), "bullet behind the ship is not");
+    assert_eq!(world.resource::<Score>().gold, 5, "absorb minted coins");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

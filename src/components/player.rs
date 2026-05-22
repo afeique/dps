@@ -60,6 +60,21 @@ pub struct DeflectorOrb {
 /// Deflector-orb orbit radius (spec III.4: r=45).
 pub const DEFLECTOR_RADIUS: f32 = 45.0;
 
+/// Active **Tractor Shield** skill window (spec III.4): for `seconds`, enemy
+/// bullets inside a forward arc within range are absorbed into coins. Counted
+/// down by `skills::tick_tractor`, consumed by `skills::tractor_absorb`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct TractorShield {
+    pub seconds: f32,
+}
+
+/// Tractor capture range (spec III.4: bullets within 55 px).
+pub const TRACTOR_RANGE: f32 = 55.0;
+/// Tractor forward half-arc (spec III.4 base arc π/2 → half π/4).
+pub const TRACTOR_HALF_ARC: f32 = std::f32::consts::FRAC_PI_4;
+/// Coins minted per absorbed bullet (spec III.4: `5 + 5*PROFIT`; base 5).
+pub const TRACTOR_COINS: u64 = 5;
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

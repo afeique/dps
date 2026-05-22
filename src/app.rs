@@ -224,8 +224,10 @@ impl Plugin for GamePlugin {
                     (
                         systems::collision::bullet_hits_enemy,
                         systems::collision::apply_knockback,
-                        // Orbs absorb enemy bullets before they reach the player.
+                        // Orbs + tractor absorb enemy bullets before they reach
+                        // the player.
                         systems::skills::deflector_blocks,
+                        systems::skills::tractor_absorb,
                         systems::collision::enemy_bullet_hits_player,
                         systems::collision::enemy_contact_player,
                         systems::asteroids::asteroid_hits,
@@ -252,6 +254,7 @@ impl Plugin for GamePlugin {
                     systems::status::tick_stun,
                     systems::skills::tick_bulwark,
                     systems::skills::tick_repair,
+                    systems::skills::tick_tractor,
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,
