@@ -957,6 +957,41 @@ fn thorns_reflects_to_nearest_enemy() {
     assert!(world.get::<Health>(near).is_some());
 }
 
+// ── 25. survivor_cards_distinct + wave reward gate ────────────────────────────
+
+/// The survivor pick offers 3 distinct cards drawn from the passive pool (spec
+/// V.6 / III.5), and the wave only advances once the reward is taken.
+#[test]
+fn survivor_cards_and_wave_gate() {
+    use crate::resources::GameRng;
+    use crate::systems::survivor::{choose_cards, POOL};
+    use crate::systems::wave::Wave;
+
+    // choose_cards: 3 distinct, all from the pool, over many seeds.
+    let mut rng = GameRng::default();
+    for _ in 0..200 {
+        let cards = choose_cards(&mut rng);
+        let picked: Vec<_> = cards.iter().flatten().copied().collect();
+        assert_eq!(picked.len(), 3, "three cards offered");
+        for c in &picked {
+            assert!(POOL.contains(c), "card {c:?} comes from the pool");
+        }
+        for i in 0..picked.len() {
+            for j in (i + 1)..picked.len() {
+                assert_ne!(picked[i], picked[j], "cards are distinct");
+            }
+        }
+    }
+
+    // The reward gate: advance only happens via advance_after_reward.
+    let mut w = Wave::default();
+    assert_eq!(w.number(), 1);
+    w.awaiting_reward = true;
+    w.advance_after_reward();
+    assert!(!w.awaiting_reward, "gate cleared");
+    assert_eq!(w.number(), 2, "advanced to wave 2 after the reward");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

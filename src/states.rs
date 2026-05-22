@@ -18,6 +18,8 @@ pub enum GameState {
     Paused,
     /// On-demand upgrade shop (pauses the sim); B/Esc → `Playing`.
     Shop,
+    /// Wave-clear survivor-card pick (pauses the sim); 1/2/3 → `Playing`.
+    Survivor,
     /// Death / results screen; ENTER → `Title`.
     GameOver,
     /// Campaign cleared (all 30 waves); ENTER → `Title`.

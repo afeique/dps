@@ -20,5 +20,6 @@ pub mod shop;
 pub mod skills;
 pub mod spawn;
 pub mod status;
+pub mod survivor;
 pub mod wave;
 pub mod weapons;

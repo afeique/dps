@@ -42,6 +42,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::shop::Upgrades>()
             .init_resource::<systems::shop::ShopSel>()
             .init_resource::<systems::drops::HealthDropTimer>()
+            .init_resource::<systems::survivor::SurvivorChoice>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -145,7 +146,25 @@ impl Plugin for GamePlugin {
             // ── campaign cleared → GameComplete → title flow ────────────
             .add_systems(
                 Update,
-                systems::flow::check_campaign_complete.run_if(in_state(GameState::Playing)),
+                (
+                    systems::flow::check_campaign_complete,
+                    systems::survivor::check_survivor,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
+            // ── survivor-card pick (wave clear; pauses the sim) ─────────
+            .add_systems(OnEnter(GameState::Survivor), systems::survivor::enter_survivor)
+            .add_systems(
+                OnExit(GameState::Survivor),
+                systems::flow::despawn_screen::<systems::survivor::SurvivorScreen>,
+            )
+            .add_systems(
+                Update,
+                (
+                    systems::survivor::survivor_ui_update,
+                    systems::survivor::survivor_input,
+                )
+                    .run_if(in_state(GameState::Survivor)),
             )
             .add_systems(
                 OnEnter(GameState::GameComplete),

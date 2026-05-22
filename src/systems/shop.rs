@@ -89,7 +89,7 @@ impl UpgradeId {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::HealthBoost => "Health Boost  (+35 max HP)",
             Self::ShieldBoost => "Shielding     (+8% DR)",
@@ -217,7 +217,7 @@ impl Upgrades {
     pub fn owned(&self, id: UpgradeId) -> u32 {
         self.owned[id.idx()]
     }
-    fn inc(&mut self, id: UpgradeId) {
+    pub fn inc(&mut self, id: UpgradeId) {
         self.owned[id.idx()] += 1;
     }
     /// Set an upgrade's owned stacks directly (used by tests / debug).
@@ -371,8 +371,10 @@ pub fn shop_input(
     }
 }
 
-/// Apply a purchased upgrade's effect to the ship.
-fn apply_upgrade(
+/// Apply an acquired upgrade's effect to the ship (shop purchase or survivor
+/// card). Stat upgrades mutate the ship; weapon/passive traits are no-ops here
+/// (their effect is read live in combat).
+pub fn apply_upgrade(
     id: UpgradeId,
     hp: &mut Health,
     shield: &mut Shield,

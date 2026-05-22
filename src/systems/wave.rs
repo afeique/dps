@@ -261,6 +261,9 @@ pub struct Wave {
     pub completed: bool,
     /// Deterministic spread counter for spawn x-positions.
     spawn_seq: u32,
+    /// A (non-final) wave just cleared and is waiting on the survivor-card pick
+    /// before advancing — `flow`/`survivor` drive the `Survivor` state off this.
+    pub awaiting_reward: bool,
 }
 
 impl Default for Wave {
@@ -273,6 +276,7 @@ impl Default for Wave {
             started: false,
             completed: false,
             spawn_seq: 0,
+            awaiting_reward: false,
         }
     }
 }
@@ -281,6 +285,16 @@ impl Wave {
     /// Current wave number, 1-based (for HUD/logging).
     pub fn number(&self) -> usize {
         self.idx + 1
+    }
+
+    /// Advance to the next wave after the survivor-card reward is taken: clear
+    /// the gate, bump the index, and start the between-wave breather.
+    pub fn advance_after_reward(&mut self) {
+        self.awaiting_reward = false;
+        self.idx += 1;
+        self.spawned_pulses = 0;
+        self.started = false;
+        self.start_timer = BETWEEN_WAVE_SECS;
     }
 }
 
@@ -379,10 +393,11 @@ pub fn spawn_waves(
             info!("CAMPAIGN COMPLETE — all 30 waves cleared");
             return;
         }
-        wave.idx += 1;
-        wave.spawned_pulses = 0;
-        wave.started = false;
-        wave.start_timer = BETWEEN_WAVE_SECS;
-        info!("WAVE {} CLEAR — advancing to wave {}", wave.idx, wave.idx + 1);
+        // Gate the advance on the survivor-card pick; `survivor::check_survivor`
+        // sees this flag and opens the pick, which calls `advance_after_reward`.
+        if !wave.awaiting_reward {
+            wave.awaiting_reward = true;
+            info!("WAVE {} CLEAR — survivor card", wave.idx + 1);
+        }
     }
 }
