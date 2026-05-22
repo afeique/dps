@@ -1485,6 +1485,46 @@ fn mine_knocks_back_enemy() {
     );
 }
 
+// ── 41. boss_pair_rage_links_survivors ────────────────────────────────────────
+
+/// When a boss dies, surviving un-raged bosses immediately rage (spec IV.7).
+#[test]
+fn boss_pair_rage_links_survivors() {
+    use crate::components::{Boss, Raged};
+    use crate::messages::Death;
+    use crate::systems::enemy::boss_pair_rage;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let survivor = world
+        .spawn((
+            Enemy { kind: EnemyKind::Titan },
+            Boss { tier: 2 },
+            FireCooldown { cooldown: 2.0, timer: 1.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    // A partner boss died this tick.
+    world.write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Titan),
+        boss_tier: 2,
+        mini_boss: false,
+    });
+
+    let mut step = Schedule::default();
+    step.add_systems(boss_pair_rage);
+    step.run(world);
+
+    assert!(
+        world.get::<Raged>(survivor).is_some(),
+        "surviving boss should rage when its partner dies"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

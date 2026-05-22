@@ -20,7 +20,7 @@ pub mod wasp;
 pub mod weaver;
 
 use crate::components::*;
-use crate::messages::Fire;
+use crate::messages::{Death, Fire};
 use crate::render::shapes;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::Shape;
@@ -72,11 +72,41 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
     }
 }
 
-/// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% of
-/// its max HP it rages — a 1.5 s invulnerability window, a permanent ×0.66 fire
-/// cooldown, and an immediate 16-bullet circular tantrum. (Deferred from the
-/// spec: the 24-frame telegraph, homing bullets, screen flash/shake, the red
-/// aura, and the per-tier pair/formation links.)
+/// Activate boss rage on `e` (spec IV.7): a 1.5 s invulnerability window, a
+/// permanent ×0.66 fire cooldown, and an immediate 16-bullet circular tantrum
+/// from `pos`. Shared by the HP-threshold trigger (`boss_rage`) and the
+/// pair-link trigger (`boss_pair_rage`).
+fn activate_rage(
+    commands: &mut Commands,
+    fire: &mut MessageWriter<Fire>,
+    e: Entity,
+    pos: Vec2,
+    fc: Option<Mut<FireCooldown>>,
+) {
+    commands
+        .entity(e)
+        .insert(Raged)
+        .insert(Invulnerable { seconds: 1.5 });
+    if let Some(mut fc) = fc {
+        fc.cooldown *= 0.66;
+        fc.timer = 0.0; // fire again immediately
+    }
+    for i in 0..16 {
+        let a = i as f32 / 16.0 * std::f32::consts::TAU;
+        let dir = Vec2::new(a.cos(), a.sin());
+        fire.write(Fire {
+            origin: pos + dir * 24.0,
+            dir,
+            damage: 3.0,
+            speed: 280.0,
+            faction: Faction::Enemy,
+        });
+    }
+}
+
+/// HP-threshold boss rage (spec IV.7, one-shot): a boss rages when it drops to
+/// ≤33% of its max HP. (Deferred from the spec: the 24-frame telegraph, homing
+/// bullets, screen flash/shake, the red aura, and tier-3+ formations.)
 pub fn boss_rage(
     mut commands: Commands,
     mut fire: MessageWriter<Fire>,
@@ -89,28 +119,23 @@ pub fn boss_rage(
         if hp.current > hp.max * 0.33 {
             continue;
         }
-        // Activate rage once.
-        commands
-            .entity(e)
-            .insert(Raged)
-            .insert(Invulnerable { seconds: 1.5 });
-        if let Some(mut fc) = fc {
-            fc.cooldown *= 0.66;
-            fc.timer = 0.0; // fire again immediately
-        }
-        // 16-bullet circular tantrum.
-        let pos = tf.translation.truncate();
-        for i in 0..16 {
-            let a = i as f32 / 16.0 * std::f32::consts::TAU;
-            let dir = Vec2::new(a.cos(), a.sin());
-            fire.write(Fire {
-                origin: pos + dir * 24.0,
-                dir,
-                damage: 3.0,
-                speed: 280.0,
-                faction: Faction::Enemy,
-            });
-        }
+        activate_rage(&mut commands, &mut fire, e, tf.translation.truncate(), fc);
+    }
+}
+
+/// Boss-pair rage link (spec IV.7, tier 2): when *any* boss dies, every
+/// surviving un-raged boss immediately rages.
+pub fn boss_pair_rage(
+    mut deaths: MessageReader<Death>,
+    mut commands: Commands,
+    mut fire: MessageWriter<Fire>,
+    mut bosses: Query<(Entity, &Transform, Option<&mut FireCooldown>), (With<Boss>, Without<Raged>)>,
+) {
+    if !deaths.read().any(|d| d.boss_tier > 0) {
+        return;
+    }
+    for (e, tf, fc) in &mut bosses {
+        activate_rage(&mut commands, &mut fire, e, tf.translation.truncate(), fc);
     }
 }
 

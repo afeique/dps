@@ -241,6 +241,8 @@ impl Plugin for GamePlugin {
                     systems::damage::apply_damage,
                     // THORNS: reflect landed player damage to the nearest enemy.
                     systems::damage::apply_thorns,
+                    // Boss-pair link: a boss death rages surviving bosses (IV.7).
+                    systems::enemy::boss_pair_rage,
                     // Drops — runs after apply_damage so `Death` is available.
                     (
                         systems::drops::spawn_drops,
