@@ -148,7 +148,7 @@ pub fn fire_power_weapon(
         const SPEED: f32 = 420.0;
 
         commands.spawn((
-            Bullet { kind: BulletKind::Player, damage: 22.0 },
+            Bullet { kind: BulletKind::Player, damage: 22.0, pierce: 0 },
             Velocity(dir * SPEED),
             Collider { radius: 5.0 },
             Faction::Player,

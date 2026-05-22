@@ -137,6 +137,7 @@ fn player_bullet_kills_enemy_increments_score_and_emits_death() {
             Bullet {
                 kind: BulletKind::Player,
                 damage: 10.0,
+                pierce: 0,
             },
             Collider { radius: 3.0 },
             Faction::Player,
@@ -189,6 +190,7 @@ fn asteroid_splits_when_shot() {
             Bullet {
                 kind: BulletKind::Player,
                 damage: 10.0,
+                pierce: 0,
             },
             Collider { radius: 3.0 },
             Faction::Player,

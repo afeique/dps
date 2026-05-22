@@ -61,7 +61,9 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
         EnemyKind::Tangerine => tangerine::stats(),
         EnemyKind::Titan => titan::stats(),
         EnemyKind::Drifter => EnemyStats {
-            health: 30.0,
+            // Spec roster: Drifter HP 9, radius 38 (the lyon silhouette is built
+            // at 18 px; collider matches the original visual for now).
+            health: 9.0,
             radius: 18.0,
             speed: 60.0,
             fire_cooldown: Some(1.4),

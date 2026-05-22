@@ -155,6 +155,7 @@ fn player_bullet_kills_enemy_and_scores_one() {
             Bullet {
                 kind: BulletKind::Player,
                 damage: 10.0,
+                pierce: 0,
             },
             Collider { radius: 3.0 },
             Faction::Player,

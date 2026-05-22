@@ -16,10 +16,10 @@ use bevy::prelude::*;
 pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
-    bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
+    mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
 ) {
-    for (bullet_e, btf, bc, bullet) in &bullets {
+    for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
@@ -34,8 +34,16 @@ pub fn bullet_hits_enemy(
                     target: enemy_e,
                     amount: bullet.damage,
                 });
-                commands.entity(bullet_e).despawn();
-                break; // one bullet, one hit
+                // Piercing bullets pass through; others die on the first hit.
+                // (One hit per frame — a fast bullet clears an enemy's radius
+                // before the next tick, so re-hits are rare. Tracking a hit-set
+                // for slow piercers is a later refinement.)
+                if bullet.pierce == 0 {
+                    commands.entity(bullet_e).despawn();
+                } else {
+                    bullet.pierce -= 1;
+                }
+                break;
             }
         }
     }
