@@ -34,6 +34,7 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::resources::KillStreak>()
             .init_resource::<crate::resources::GameRng>()
             .init_resource::<crate::resources::EnergyMeter>()
+            .init_resource::<crate::resources::DamageClock>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
@@ -252,14 +253,20 @@ impl Plugin for GamePlugin {
                         systems::powerups::collect_powerups,
                     )
                         .chain(),
-                    systems::damage::tick_invulnerability,
-                    systems::damage::tick_streak,
-                    systems::status::tick_stun,
-                    systems::skills::tick_bulwark,
-                    systems::skills::tick_repair,
-                    systems::skills::tick_tractor,
-                    // Convert any overheal (from orbs/vampirism/repair) → tanks.
-                    systems::damage::overheal_to_tanks,
+                    // Per-tick status/health upkeep, nested as one chained
+                    // sub-group so the outer tuple stays under Bevy's 20 limit.
+                    (
+                        systems::damage::tick_invulnerability,
+                        systems::damage::tick_streak,
+                        systems::status::tick_stun,
+                        systems::skills::tick_bulwark,
+                        systems::skills::tick_repair,
+                        systems::skills::tick_tractor,
+                        // Passive regen (after 4 s no-damage) then overheal → tanks.
+                        systems::damage::passive_regen,
+                        systems::damage::overheal_to_tanks,
+                    )
+                        .chain(),
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,

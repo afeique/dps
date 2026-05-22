@@ -1560,6 +1560,47 @@ fn overheal_converts_to_tanks() {
     assert!((world.get::<Lives>(p).unwrap().progress - 0.1).abs() < 1e-4, "leftover progress");
 }
 
+// ── 43. passive_regen_after_delay ─────────────────────────────────────────────
+
+/// Passive regen kicks in only after REGEN_DELAY (4 s) without damage, at the
+/// Regen-stacked rate (spec II.2).
+#[test]
+fn passive_regen_after_delay() {
+    use crate::resources::DamageClock;
+    use crate::systems::damage::passive_regen;
+    use crate::systems::shop::{regen_rate, UpgradeId, Upgrades};
+
+    assert_eq!(regen_rate(0), 0.0);
+    assert!((regen_rate(2) - 1.0).abs() < 1e-5);
+    assert_eq!(regen_rate(100), 3.0, "rate caps at 3 HP/s");
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::Regen, 2); // 1 HP/s
+    let world = app.world_mut();
+    world.insert_resource(DamageClock(0.0));
+    let p = world
+        .spawn((Ship::default(), Health { current: 10.0, max: 40.0 }, Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(passive_regen);
+
+    // Step to 3 s (< delay): no regen.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(3.0));
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert!((world.get::<Health>(p).unwrap().current - 10.0).abs() < 1e-4, "no regen before 4 s");
+
+    // Another 2 s → clock 5 s ≥ delay → regen 1 HP/s × 2 s = 2.
+    time.advance_by(Duration::from_secs_f32(2.0));
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<Health>(p).unwrap().current > 10.0, "regen after 4 s no-damage");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

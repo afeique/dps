@@ -17,9 +17,9 @@ use crate::components::{
     MAX_TANKS, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
-use crate::resources::{GameRng, KillStreak, Score};
+use crate::resources::{DamageClock, GameRng, KillStreak, Score};
 use crate::states::GameState;
-use crate::systems::shop::{dodge_chance, thorns_frac, UpgradeId, Upgrades};
+use crate::systems::shop::{dodge_chance, regen_rate, thorns_frac, UpgradeId, Upgrades, REGEN_DELAY};
 use bevy::prelude::*;
 
 pub fn apply_damage(
@@ -154,6 +154,30 @@ pub fn tick_invulnerability(
 pub fn tick_streak(time: Res<Time>, mut streak: ResMut<KillStreak>) {
     if streak.timer > 0.0 {
         streak.timer = (streak.timer - time.delta_secs()).max(0.0);
+    }
+}
+
+/// Passive HP regen (spec II.2): track time since the player last took damage
+/// (`PlayerHurt` resets it) and, once `REGEN_DELAY` has elapsed, regenerate at
+/// the `Regen`-stacked rate (capped at max HP — overheal isn't generated here).
+pub fn passive_regen(
+    time: Res<Time>,
+    mut clock: ResMut<DamageClock>,
+    mut hurt: MessageReader<PlayerHurt>,
+    upgrades: Res<Upgrades>,
+    mut player: Query<&mut Health, With<Ship>>,
+) {
+    let dt = time.delta_secs();
+    if hurt.read().count() > 0 {
+        clock.0 = 0.0;
+    } else {
+        clock.0 += dt;
+    }
+    let rate = regen_rate(upgrades.owned(UpgradeId::Regen));
+    if clock.0 >= REGEN_DELAY && rate > 0.0 {
+        if let Ok(mut hp) = player.single_mut() {
+            hp.current = (hp.current + rate * dt).min(hp.max);
+        }
     }
 }
 

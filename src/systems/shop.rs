@@ -39,12 +39,13 @@ pub enum UpgradeId {
     CritChance,
     CritDamage,
     Thorns,
+    Regen,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 17] = [
+    pub const ALL: [UpgradeId; 18] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -62,6 +63,7 @@ impl UpgradeId {
         Self::CritChance,
         Self::CritDamage,
         Self::Thorns,
+        Self::Regen,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -86,6 +88,7 @@ impl UpgradeId {
             Self::CritChance => 14,
             Self::CritDamage => 15,
             Self::Thorns => 16,
+            Self::Regen => 17,
         }
     }
 
@@ -108,6 +111,7 @@ impl UpgradeId {
             Self::CritChance => "Crit Chance   (+7%)",
             Self::CritDamage => "Crit Damage   (+15%)",
             Self::Thorns => "Thorns        (reflect 25%)",
+            Self::Regen => "Repair Field  (+0.5 HP/s)",
         }
     }
 
@@ -131,6 +135,7 @@ impl UpgradeId {
             Self::CritChance => 2000,
             Self::CritDamage => 2000,
             Self::Thorns => 2200,
+            Self::Regen => 2400,
         }
     }
 
@@ -153,6 +158,7 @@ impl UpgradeId {
             Self::CritChance => 6,
             Self::CritDamage => 6,
             Self::Thorns => 4,
+            Self::Regen => 6,
         }
     }
 }
@@ -206,6 +212,14 @@ pub fn dodge_chance(stacks: u32) -> f32 {
 pub fn thorns_frac(stacks: u32) -> f32 {
     0.25 * stacks as f32
 }
+
+/// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
+pub fn regen_rate(stacks: u32) -> f32 {
+    (0.5 * stacks as f32).min(3.0)
+}
+
+/// Seconds without damage before passive regen begins (spec II.2: 4000 ms).
+pub const REGEN_DELAY: f32 = 4.0;
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
@@ -412,6 +426,7 @@ pub fn apply_upgrade(
         | UpgradeId::Dodge
         | UpgradeId::CritChance
         | UpgradeId::CritDamage
-        | UpgradeId::Thorns => {}
+        | UpgradeId::Thorns
+        | UpgradeId::Regen => {}
     }
 }
