@@ -6,7 +6,7 @@
 
 use crate::components::*;
 use crate::messages::Death;
-use crate::resources::{KillStreak, Score};
+use crate::resources::{GameRng, KillStreak, Score};
 use crate::systems::enemy;
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
@@ -14,11 +14,39 @@ use bevy_prototype_lyon::prelude::*;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-/// Marks an orb pickup. Carries the economy payload applied on collection.
+/// Marks an orb pickup. Carries the payload applied on collection — gold +
+/// points (economy) and `heal` HP (health orbs, spec VI.5).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Orb {
     pub gold: u64,
     pub points: u64,
+    pub heal: f32,
+}
+
+/// Health-orb drop cooldown (spec VI.5) — run-scoped, ticked in `spawn_drops`.
+#[derive(Resource, Default)]
+pub struct HealthDropTimer {
+    pub timer: f32,
+}
+
+/// Base health-orb cooldown (seconds; spec VI.5 `max(12000, 25000−…)`, halved
+/// at ≤25% HP).
+const HEALTH_DROP_CD: f32 = 18.0;
+
+/// Health-orb drop chance given the wave and the player's HP fraction
+/// (spec VI.5, simplified): a base rate that climbs with the wave and ramps hard
+/// when the player is hurt (`desperationMult`).
+pub fn health_drop_rate(wave: u64, hp_pct: f32) -> f32 {
+    let base = 0.70 + (wave.max(1) - 1) as f32 * 0.015 + 0.15; // +enemy term
+    let desperation = 1.0 + 1.5 * (1.0 - hp_pct).powi(2);
+    (base * desperation).min(1.0)
+}
+
+/// Heal amount for a wave's health orb (spec VI.5): a roll in
+/// `[4+(w−1)*0.6, 8+(w−1)*0.6]`.
+pub fn health_orb_heal(wave: u64, roll01: f32) -> f32 {
+    let min_heal = 4.0 + (wave.max(1) - 1) as f32 * 0.6;
+    (min_heal + roll01 * 4.0).round()
 }
 
 // ─── Gold drop tiers (spec VI.4) ─────────────────────────────────────────────
@@ -147,11 +175,23 @@ fn drift_from_index(index: u32) -> Vec2 {
 pub fn spawn_drops(
     mut commands: Commands,
     mut deaths: MessageReader<Death>,
+    time: Res<Time>,
     wave: Res<Wave>,
     streak: Res<KillStreak>,
+    mut hdt: ResMut<HealthDropTimer>,
+    mut rng: ResMut<GameRng>,
+    player_hp: Query<&Health, With<Ship>>,
 ) {
     let wave_n = wave.number() as u64;
     let streak_gold = streak.gold_multiplier();
+    let hp_pct = player_hp
+        .single()
+        .ok()
+        .map(|h| (h.current / h.max).clamp(0.0, 1.0))
+        .unwrap_or(1.0);
+
+    // Health-orb cooldown ticks every frame (drops are only enabled at ≤0).
+    hdt.timer = (hdt.timer - time.delta_secs()).max(0.0);
 
     for death in deaths.read() {
         let Some(kind) = death.kind else {
@@ -167,7 +207,7 @@ pub fn spawn_drops(
         let value = gold_value(wave_n, profile, streak_gold);
         let tier = gold_tier(value);
         commands.spawn((
-            Orb { gold: value, points: 0 },
+            Orb { gold: value, points: 0, heal: 0.0 },
             orb_shape_colored(tier.color()),
             Transform::from_xyz(death.position.x, death.position.y, base_z)
                 .with_scale(Vec3::splat(tier.scale())),
@@ -179,13 +219,28 @@ pub fn spawn_drops(
         // Point orb — the enemy's roster point value (offset so it doesn't stack
         // on the gold orb).
         commands.spawn((
-            Orb { gold: 0, points: enemy::points(kind) },
+            Orb { gold: 0, points: enemy::points(kind), heal: 0.0 },
             shape_orb(false),
             Transform::from_xyz(death.position.x + 6.0, death.position.y, base_z),
             Velocity(-drift * 0.8), // opposite drift so they spread apart
             Collider { radius: 8.0 },
             Lifetime { seconds: 12.0 },
         ));
+
+        // Health orb — cooldown-gated + desperation-boosted (spec VI.5). One per
+        // cooldown window; the cooldown halves when the player is critically hurt.
+        if hdt.timer <= 0.0 && rng.next_f32() < health_drop_rate(wave_n, hp_pct) {
+            let heal = health_orb_heal(wave_n, rng.next_f32());
+            commands.spawn((
+                Orb { gold: 0, points: 0, heal },
+                orb_shape_colored(Color::linear_rgb(1.0, 9.0, 3.0)), // HDR green
+                Transform::from_xyz(death.position.x - 6.0, death.position.y, base_z),
+                Velocity(drift * 0.5),
+                Collider { radius: 9.0 },
+                Lifetime { seconds: 14.0 },
+            ));
+            hdt.timer = if hp_pct <= 0.25 { HEALTH_DROP_CD * 0.5 } else { HEALTH_DROP_CD };
+        }
     }
 }
 
@@ -234,14 +289,15 @@ pub fn attract_orbs(
 // ─── Collect orbs ────────────────────────────────────────────────────────────
 
 /// Circle-overlap test: player vs every orb. On hit, add the orb's payload to
-/// `Score` and despawn it immediately.
+/// `Score`, apply any heal to the player's `Health` (capped at max), and despawn
+/// the orb immediately.
 pub fn collect_orbs(
     mut commands: Commands,
     mut score: ResMut<Score>,
-    player: Query<(&Transform, &Collider), With<Ship>>,
+    mut player: Query<(&Transform, &Collider, &mut Health), With<Ship>>,
     orbs: Query<(Entity, &Transform, &Collider, &Orb)>,
 ) {
-    let Ok((ptf, pc)) = player.single() else {
+    let Ok((ptf, pc, mut hp)) = player.single_mut() else {
         return; // no player — nothing to collect
     };
     let player_pos = ptf.translation.truncate();
@@ -252,6 +308,9 @@ pub fn collect_orbs(
         if d2 <= reach * reach {
             score.gold = score.gold.saturating_add(orb.gold);
             score.points = score.points.saturating_add(orb.points);
+            if orb.heal > 0.0 {
+                hp.current = (hp.current + orb.heal).min(hp.max);
+            }
             commands.entity(orb_e).despawn();
         }
     }

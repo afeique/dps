@@ -614,3 +614,22 @@ fn spawn_pos_edges() {
         );
     }
 }
+
+// ── 15. health_orb_rate_and_heal ──────────────────────────────────────────────
+
+/// The health-orb drop rate stays in [0,1] and ramps up when the player is hurt
+/// (desperation), and the heal amount scales with the wave (spec VI.5).
+#[test]
+fn health_orb_rate_and_heal() {
+    use crate::systems::drops::{health_drop_rate, health_orb_heal};
+
+    let full = health_drop_rate(1, 1.0);
+    let hurt = health_drop_rate(1, 0.1);
+    assert!((0.0..=1.0).contains(&full));
+    assert!(hurt >= full && hurt <= 1.0, "low HP raises the rate (cap 1.0)");
+
+    // Wave 1 heal rolls in [4, 8]; higher waves heal more.
+    assert_eq!(health_orb_heal(1, 0.0), 4.0);
+    assert_eq!(health_orb_heal(1, 1.0), 8.0);
+    assert!(health_orb_heal(10, 0.5) > health_orb_heal(1, 0.5));
+}

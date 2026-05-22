@@ -41,6 +41,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::skills::Skills>()
             .init_resource::<systems::shop::Upgrades>()
             .init_resource::<systems::shop::ShopSel>()
+            .init_resource::<systems::drops::HealthDropTimer>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()

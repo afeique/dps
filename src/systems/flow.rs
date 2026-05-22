@@ -106,10 +106,12 @@ pub fn reset_run(
     mut score: ResMut<Score>,
     mut streak: ResMut<KillStreak>,
     mut upgrades: ResMut<crate::systems::shop::Upgrades>,
+    mut health_cd: ResMut<crate::systems::drops::HealthDropTimer>,
 ) {
     *score = Score::default();
     streak.break_streak();
     upgrades.reset();
+    health_cd.timer = 0.0;
 }
 
 // ── Game over ────────────────────────────────────────────────────────────────
