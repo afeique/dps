@@ -18,6 +18,8 @@ pub struct Skills {
     pub shield_cd: f32,
     /// Remaining cooldown for Bomb (X). Ready at 0.
     pub bomb_cd: f32,
+    /// Remaining cooldown for EMP Pulse (V). Ready at 0.
+    pub emp_cd: f32,
 }
 
 impl Default for Skills {
@@ -26,6 +28,7 @@ impl Default for Skills {
             dash_cd: 0.0,
             shield_cd: 0.0,
             bomb_cd: 0.0,
+            emp_cd: 0.0,
         }
     }
 }
@@ -111,4 +114,39 @@ pub fn use_skills(
         }
         skills.bomb_cd = 15.0;
     }
+}
+
+/// EMP Pulse radius (spec III.4: `200 + 60*WIDE_BAND`; base = 200).
+pub const EMP_RADIUS: f32 = 200.0;
+/// EMP stun duration (spec III.4: 2000 ms).
+const EMP_STUN_SECS: f32 = 2.0;
+
+/// **EMP Pulse** (`V` / gamepad East, 22 s CD, spec III.4): stun every enemy
+/// within `EMP_RADIUS` of the ship for `EMP_STUN_SECS` (no damage). Distinct
+/// from Bomb (which clears the field) — EMP disables, it doesn't destroy.
+pub fn emp_pulse(
+    keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut skills: ResMut<Skills>,
+    player: Query<&Transform, With<Ship>>,
+    enemies: Query<(Entity, &Transform), With<Enemy>>,
+) {
+    skills.emp_cd = (skills.emp_cd - time.delta_secs()).max(0.0);
+
+    let pad = gamepads.iter().any(|gp| gp.just_pressed(GamepadButton::East));
+    if !(keys.just_pressed(KeyCode::KeyV) || pad) || skills.emp_cd > 0.0 {
+        return;
+    }
+    let Ok(ptf) = player.single() else {
+        return;
+    };
+    let center = ptf.translation.truncate();
+    for (e, etf) in &enemies {
+        if etf.translation.truncate().distance(center) <= EMP_RADIUS {
+            commands.entity(e).insert(Stunned { secs: EMP_STUN_SECS });
+        }
+    }
+    skills.emp_cd = 22.0;
 }

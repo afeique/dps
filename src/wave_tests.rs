@@ -992,6 +992,42 @@ fn survivor_cards_and_wave_gate() {
     assert_eq!(w.number(), 2, "advanced to wave 2 after the reward");
 }
 
+// ── 26. emp_pulse_stuns_in_radius ─────────────────────────────────────────────
+
+/// EMP Pulse (V) stuns enemies within EMP_RADIUS of the ship but not those
+/// outside it (spec III.4).
+#[test]
+fn emp_pulse_stuns_in_radius() {
+    use crate::components::Stunned;
+    use crate::systems::skills::{emp_pulse, Skills};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let mut keys = ButtonInput::<KeyCode>::default();
+    keys.press(KeyCode::KeyV);
+    world.insert_resource(keys);
+    world.insert_resource(Skills::default());
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(16));
+    world.insert_resource(time);
+
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let near = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(150.0, 0.0, 0.0)))
+        .id();
+    let far = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(400.0, 0.0, 0.0)))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(emp_pulse);
+    step.run(world);
+
+    assert!(world.get::<Stunned>(near).is_some(), "enemy within EMP radius is stunned");
+    assert!(world.get::<Stunned>(far).is_none(), "enemy outside the radius is not");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

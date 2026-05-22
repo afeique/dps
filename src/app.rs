@@ -118,6 +118,7 @@ impl Plugin for GamePlugin {
                     systems::power_weapon::cycle_power_weapon,
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,
+                    systems::skills::emp_pulse,
                     systems::shop::open_shop,
                     systems::flow::open_pause,
                 )
