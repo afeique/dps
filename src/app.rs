@@ -35,7 +35,6 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::resources::GameRng>()
             .init_resource::<crate::resources::EnergyMeter>()
             .init_resource::<systems::wave::Wave>()
-            .init_resource::<systems::asteroids::AsteroidSpawner>()
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
@@ -207,12 +206,8 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::homing_steer,
                     )
                         .chain(),
-                    // Spawners (enemies + asteroids).
-                    (
-                        systems::wave::spawn_waves,
-                        systems::asteroids::spawn_asteroids,
-                    )
-                        .chain(),
+                    // Spawner (enemies + the wave's asteroid budget).
+                    systems::wave::spawn_waves,
                     // Fire intent → bullets.
                     (
                         systems::enemy::firing::enemy_firing,

@@ -58,27 +58,6 @@ pub struct Asteroid {
     pub tier: u8,
 }
 
-// ─── Resource ───────────────────────────────────────────────────────────────
-
-/// Ticks down and fires a spawn every `interval` seconds.
-#[derive(Resource, Debug)]
-pub struct AsteroidSpawner {
-    timer: f32,
-    /// Monotonically-increasing seed so each spawn is distinct.
-    counter: u32,
-}
-
-impl Default for AsteroidSpawner {
-    fn default() -> Self {
-        Self {
-            timer: 0.0,
-            counter: 0,
-        }
-    }
-}
-
-const SPAWN_INTERVAL: f32 = 3.0;
-
 // ─── Shape builder ──────────────────────────────────────────────────────────
 
 /// Build an irregular rocky polygon for the given tier.
@@ -112,34 +91,19 @@ pub fn shape(tier: u8) -> Shape {
         .build()
 }
 
-// ─── Spawn system ────────────────────────────────────────────────────────────
+// ─── Spawn ───────────────────────────────────────────────────────────────────
 
-/// Periodically spawns a tier-2 asteroid from a random screen edge with an
-/// inward-drifting velocity. Position and velocity are derived from a
-/// deterministic counter so the sequence is reproducible.
-pub fn spawn_asteroids(
-    time: Res<Time>,
-    mut spawner: ResMut<AsteroidSpawner>,
-    mut commands: Commands,
-    bounds: Res<PlayBounds>,
-) {
-    spawner.timer += time.delta_secs();
-    if spawner.timer < SPAWN_INTERVAL {
-        return;
-    }
-    spawner.timer -= SPAWN_INTERVAL;
-
-    let seed = spawner.counter;
-    spawner.counter = spawner.counter.wrapping_add(1);
-
+/// Spawn one tier-2 asteroid from a `seed`-chosen screen edge with an
+/// inward-drifting velocity. Deterministic in `seed` so the sequence is
+/// reproducible. Called per-wave by `wave::spawn_pulse` (the wave's
+/// `WaveDef.asteroids` count, spec V) — there is no longer a standalone
+/// periodic spawner.
+pub fn spawn_one_asteroid(commands: &mut Commands, bounds: &PlayBounds, seed: u32) {
     // Pick which edge: 0=top, 1=bottom, 2=left, 3=right.
     let edge = wang(seed) % 4;
-
     let hx = bounds.half.x;
     let hy = bounds.half.y;
-
-    // Spawn slightly outside the play area.
-    let margin = 60.0;
+    let margin = 60.0; // spawn slightly outside the play area
 
     let (sx, sy) = match edge {
         0 => (hash_range(wang(seed ^ 0xA1), -hx, hx), hy + margin),  // top
@@ -149,9 +113,7 @@ pub fn spawn_asteroids(
     };
 
     // Aim roughly toward the centre with a lateral spread.
-    let to_center = Vec2::new(-sx, -sy).normalize();
-
-    // Base speed 40–90 u/s, plus a lateral wobble of ±25 u/s.
+    let to_center = Vec2::new(-sx, -sy).normalize_or_zero();
     let speed = hash_range(wang(seed ^ 0xE5), 40.0, 90.0);
     let lateral = hash_range(wang(seed ^ 0xF6), -25.0, 25.0);
     let perp = Vec2::new(-to_center.y, to_center.x);

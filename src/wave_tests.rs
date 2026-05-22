@@ -1263,6 +1263,30 @@ fn minimap_maps_world_to_panel() {
     assert!((0.0..=150.0).contains(&c.x) && (0.0..=150.0).contains(&c.y), "clamps in-bounds");
 }
 
+// ── 33. wave_start_spawns_asteroids ───────────────────────────────────────────
+
+/// A wave's opening pulse spawns its `WaveDef.asteroids` budget (spec V); wave 1
+/// = 5 asteroids.
+#[test]
+fn wave_start_spawns_asteroids() {
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Wave::default());
+    world.insert_resource(PlayBounds::default());
+
+    // Clear the 1 s intro so pulse 0 fires.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.5));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(wave::spawn_waves);
+    step.run(world);
+
+    let asteroids = world.query::<&Asteroid>().iter(world).count();
+    assert_eq!(asteroids, 5, "wave 1 spawns its 5-asteroid budget on pulse 0");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

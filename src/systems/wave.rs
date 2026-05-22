@@ -325,6 +325,14 @@ pub fn spawn_pos(seq: u32, bounds: &PlayBounds) -> Vec2 {
 
 /// Spawn every group in pulse `pulse_idx` of wave `wave_idx`.
 fn spawn_pulse(commands: &mut Commands, bounds: &PlayBounds, wave: &mut Wave, wave_idx: usize, pulse_idx: usize) {
+    // The wave's asteroid budget spawns with its opening pulse (spec V).
+    if pulse_idx == 0 {
+        for _ in 0..WAVES[wave_idx].asteroids {
+            wave.spawn_seq += 1;
+            crate::systems::asteroids::spawn_one_asteroid(commands, bounds, wave.spawn_seq);
+        }
+    }
+
     let pulse = &WAVES[wave_idx].pulses[pulse_idx];
     for group in pulse.0 {
         for _ in 0..group.count {
