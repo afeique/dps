@@ -1601,6 +1601,20 @@ fn passive_regen_after_delay() {
     assert!(world.get::<Health>(p).unwrap().current > 10.0, "regen after 4 s no-damage");
 }
 
+// ── 44. stage_label_mapping ───────────────────────────────────────────────────
+
+/// Wave → "stage-substage" label (3 waves/stage, spec V): W1→1-1, W3→1-3,
+/// W4→2-1, W30→10-3.
+#[test]
+fn stage_label_mapping() {
+    use crate::render::wave_title::stage_label;
+    assert_eq!(stage_label(1), "1-1");
+    assert_eq!(stage_label(2), "1-2");
+    assert_eq!(stage_label(3), "1-3");
+    assert_eq!(stage_label(4), "2-1");
+    assert_eq!(stage_label(30), "10-3");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

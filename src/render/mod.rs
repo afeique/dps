@@ -15,6 +15,7 @@ pub mod nebula;
 pub mod screenshot;
 pub mod shapes;
 pub mod starfield;
+pub mod wave_title;
 
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
 use bevy::post_process::bloom::{Bloom, BloomPrefilter};

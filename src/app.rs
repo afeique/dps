@@ -79,6 +79,7 @@ impl Plugin for GamePlugin {
                     render::damage_numbers::spawn_damage_numbers,
                     render::damage_numbers::float_damage_numbers,
                     render::minimap::update_minimap,
+                    render::wave_title::tick_wave_title,
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,
@@ -155,6 +156,7 @@ impl Plugin for GamePlugin {
                 (
                     systems::flow::check_campaign_complete,
                     systems::survivor::check_survivor,
+                    render::wave_title::show_wave_title,
                 )
                     .run_if(in_state(GameState::Playing)),
             )
