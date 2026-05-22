@@ -40,6 +40,15 @@ pub struct Death {
     pub boss_tier: u8,
 }
 
+/// The player actually took `amount` HP of damage this tick (post-shield,
+/// non-dodged). Drives reactive effects that need the *landed* amount —
+/// currently THORNS (`collision`/`damage::apply_thorns`); a clean hook for
+/// RETALIATION / screen-shake later. Decouples those from the `Damage` reader.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct PlayerHurt {
+    pub amount: f32,
+}
+
 /// Shove `target` by `impulse` world-units (the `_KNOCK` bullet trait, spec
 /// III.2/III.6 — a flat 16 px positional shove). Applied by
 /// `collision::apply_knockback` so the producer needn't hold a mutable handle.

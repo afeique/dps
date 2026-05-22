@@ -38,12 +38,13 @@ pub enum UpgradeId {
     Dodge,
     CritChance,
     CritDamage,
+    Thorns,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 16] = [
+    pub const ALL: [UpgradeId; 17] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -60,6 +61,7 @@ impl UpgradeId {
         Self::Dodge,
         Self::CritChance,
         Self::CritDamage,
+        Self::Thorns,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -83,6 +85,7 @@ impl UpgradeId {
             Self::Dodge => 13,
             Self::CritChance => 14,
             Self::CritDamage => 15,
+            Self::Thorns => 16,
         }
     }
 
@@ -104,6 +107,7 @@ impl UpgradeId {
             Self::Dodge => "Dodge         (+5% evade)",
             Self::CritChance => "Crit Chance   (+7%)",
             Self::CritDamage => "Crit Damage   (+15%)",
+            Self::Thorns => "Thorns        (reflect 25%)",
         }
     }
 
@@ -126,6 +130,7 @@ impl UpgradeId {
             Self::Dodge => 1800,
             Self::CritChance => 2000,
             Self::CritDamage => 2000,
+            Self::Thorns => 2200,
         }
     }
 
@@ -147,6 +152,7 @@ impl UpgradeId {
             Self::Dodge => 10,
             Self::CritChance => 6,
             Self::CritDamage => 6,
+            Self::Thorns => 4,
         }
     }
 }
@@ -193,6 +199,12 @@ pub fn vampirism_frac(stacks: u32) -> f32 {
 /// DODGE passive: chance to ignore a hit, `min(0.5, 0.05 × stacks)` (spec III.5/II.2).
 pub fn dodge_chance(stacks: u32) -> f32 {
     (0.05 * stacks as f32).min(0.5)
+}
+
+/// THORNS passive: fraction of taken damage reflected to the attacker,
+/// `0.25 × stacks` (spec III.5, ×4).
+pub fn thorns_frac(stacks: u32) -> f32 {
+    0.25 * stacks as f32
 }
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
@@ -397,6 +409,7 @@ fn apply_upgrade(
         | UpgradeId::Vampirism
         | UpgradeId::Dodge
         | UpgradeId::CritChance
-        | UpgradeId::CritDamage => {}
+        | UpgradeId::CritDamage
+        | UpgradeId::Thorns => {}
     }
 }

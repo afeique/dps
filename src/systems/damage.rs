@@ -13,16 +13,17 @@
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
 use crate::components::{Boss, Enemy, Health, Invulnerable, Lives, Shield, Ship};
-use crate::messages::{Damage, Death};
+use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{GameRng, KillStreak, Score};
 use crate::states::GameState;
-use crate::systems::shop::{dodge_chance, UpgradeId, Upgrades};
+use crate::systems::shop::{dodge_chance, thorns_frac, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
 pub fn apply_damage(
     mut commands: Commands,
     mut dmg: MessageReader<Damage>,
     mut deaths: MessageWriter<Death>,
+    mut hurt: MessageWriter<PlayerHurt>,
     mut score: ResMut<Score>,
     mut streak: ResMut<KillStreak>,
     mut rng: ResMut<GameRng>,
@@ -71,6 +72,11 @@ pub fn apply_damage(
             amount = amount.round();
         }
         hp.current -= amount;
+
+        // Announce the landed player damage (drives THORNS in `apply_thorns`).
+        if is_player && amount > 0.0 {
+            hurt.write(PlayerHurt { amount });
+        }
 
         if hp.current <= 0.0 {
             let position = tf.translation.truncate();
@@ -127,5 +133,37 @@ pub fn tick_invulnerability(
 pub fn tick_streak(time: Res<Time>, mut streak: ResMut<KillStreak>) {
     if streak.timer > 0.0 {
         streak.timer = (streak.timer - time.delta_secs()).max(0.0);
+    }
+}
+
+/// THORNS passive (spec III.5): reflect `0.25 × stacks` of each landed player
+/// hit (`PlayerHurt`) to the enemy nearest the ship. Reads `PlayerHurt` and
+/// writes `Damage` (distinct types, so no reader/writer conflict with
+/// `apply_damage`); the reflected `Damage` is applied the next tick.
+pub fn apply_thorns(
+    mut hurt: MessageReader<PlayerHurt>,
+    mut dmg: MessageWriter<Damage>,
+    upgrades: Res<Upgrades>,
+    player: Query<&Transform, With<Ship>>,
+    enemies: Query<(Entity, &Transform), With<Enemy>>,
+) {
+    let thorns = thorns_frac(upgrades.owned(UpgradeId::Thorns));
+    let ppos = player.single().ok().map(|t| t.translation.truncate());
+    for h in hurt.read() {
+        if thorns <= 0.0 {
+            continue;
+        }
+        let Some(ppos) = ppos else { continue };
+        let nearest = enemies.iter().min_by(|(_, a), (_, b)| {
+            let da = a.translation.truncate().distance_squared(ppos);
+            let db = b.translation.truncate().distance_squared(ppos);
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if let Some((e, _)) = nearest {
+            dmg.write(Damage {
+                target: e,
+                amount: h.amount * thorns,
+            });
+        }
     }
 }

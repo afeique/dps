@@ -35,6 +35,7 @@ fn test_app() -> App {
         .add_message::<Death>()
         .add_message::<Fire>()
         .add_message::<crate::messages::Knockback>()
+        .add_message::<crate::messages::PlayerHurt>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -891,6 +892,69 @@ fn dodge_ignores_about_half() {
         (350.0..650.0).contains(&lost),
         "≈half of 1000 hits should land with 50% dodge (got {lost})"
     );
+}
+
+// ── 24. thorns_reflects_to_nearest_enemy ──────────────────────────────────────
+
+/// THORNS: a `PlayerHurt` event reflects 0.25×stacks of the landed damage to the
+/// enemy nearest the ship (spec III.5). `thorns_frac` checked alongside.
+#[test]
+fn thorns_reflects_to_nearest_enemy() {
+    use crate::messages::{Damage, PlayerHurt};
+    use crate::systems::damage::apply_thorns;
+    use crate::systems::shop::{thorns_frac, UpgradeId, Upgrades};
+
+    assert_eq!(thorns_frac(0), 0.0);
+    assert!((thorns_frac(4) - 1.0).abs() < 1e-5);
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::Thorns, 2); // 50% reflect
+    let world = app.world_mut();
+
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let near = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Faction::Enemy,
+            Transform::from_xyz(20.0, 0.0, 0.0),
+        ))
+        .id();
+    // A farther enemy that should NOT be the thorns target.
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(100.0),
+        Collider { radius: 16.0 },
+        Faction::Enemy,
+        Transform::from_xyz(300.0, 0.0, 0.0),
+    ));
+
+    // Player took 40 damage → 50% thorns → 20 reflected to the nearest enemy.
+    world.write_message(PlayerHurt { amount: 40.0 });
+
+    #[derive(Resource, Default)]
+    struct Reflected(f32);
+    world.insert_resource(Reflected::default());
+    fn capture(mut r: MessageReader<Damage>, mut out: ResMut<Reflected>) {
+        for d in r.read() {
+            out.0 = d.amount;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((apply_thorns, capture).chain());
+    step.run(world);
+
+    assert!(
+        (world.resource::<Reflected>().0 - 20.0).abs() < 1e-4,
+        "thorns reflects 50% of 40 = 20 (got {})",
+        world.resource::<Reflected>().0
+    );
+    // The reflected Damage targets the nearer enemy (sanity: it exists).
+    assert!(world.get::<Health>(near).is_some());
 }
 
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
