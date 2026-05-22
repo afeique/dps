@@ -38,6 +38,7 @@ fn spawn_player(world: &mut World, hp: f32) -> Entity {
         .spawn((
             Ship::default(),
             Health::new(hp),
+            Velocity::default(),
             Collider { radius: 16.0 },
             Faction::Player,
             Transform::from_xyz(0.0, 0.0, 0.0),
@@ -53,6 +54,7 @@ fn spawn_enemy_at(world: &mut World, pos: Vec2) -> Entity {
                 kind: EnemyKind::Drifter,
             },
             Health::new(30.0),
+            Velocity::default(),
             Collider { radius: 18.0 },
             Faction::Enemy,
             Transform::from_xyz(pos.x, pos.y, 0.0),
@@ -61,29 +63,31 @@ fn spawn_enemy_at(world: &mut World, pos: Vec2) -> Entity {
 }
 
 #[test]
-fn enemy_contact_damages_player_then_iframes_block_the_next_hit() {
+fn enemy_contact_damages_player_then_separation_blocks_the_next_hit() {
     let mut app = test_app();
     let world = app.world_mut();
-    let player = spawn_player(world, 100.0);
+    let player = spawn_player(world, 100.0); // no Shield in this fixture → full dmg
     spawn_enemy_at(world, Vec2::ZERO); // overlapping the player
 
     let mut step = Schedule::default();
     step.add_systems((enemy_contact_player, apply_damage).chain());
 
-    // Tick 1: one contact lands (20 dmg) and grants i-frames.
+    // Tick 1: one contact lands 25 dmg and pushes the two bodies apart — and,
+    // per spec II.2 (i-frames removed), grants NO post-hit invulnerability.
     step.run(world);
-    assert_eq!(world.get::<Health>(player).unwrap().current, 80.0);
+    assert_eq!(world.get::<Health>(player).unwrap().current, 75.0);
     assert!(
-        world.get::<Invulnerable>(player).is_some(),
-        "a survived hit should grant i-frames"
+        world.get::<Invulnerable>(player).is_none(),
+        "no post-hit i-frames are granted (spec 5.88.0)"
     );
 
-    // Tick 2: still overlapping, but the i-frames must absorb the hit.
+    // Tick 2: the separation (not i-frames) has ended the overlap, so no second
+    // contact lands this tick. (No `integrate` runs here, so the push persists.)
     step.run(world);
     assert_eq!(
         world.get::<Health>(player).unwrap().current,
-        80.0,
-        "i-frames should block the second contact"
+        75.0,
+        "physical separation, not i-frames, prevents the immediate re-hit"
     );
 }
 
@@ -115,7 +119,7 @@ fn iframes_expire_after_their_window() {
 fn player_death_flips_to_gameover_without_scoring_a_kill() {
     let mut app = test_app();
     let world = app.world_mut();
-    let player = spawn_player(world, 10.0); // dies to one 20-dmg contact
+    let player = spawn_player(world, 10.0); // dies to one 25-dmg contact (no tank)
     spawn_enemy_at(world, Vec2::ZERO);
 
     let mut step = Schedule::default();

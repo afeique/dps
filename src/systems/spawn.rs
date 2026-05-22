@@ -15,11 +15,12 @@ pub fn spawn_player(mut commands: Commands) {
             Weapon::default(),
             Velocity::default(),
             Collider { radius: 20.0 },
-            Health::new(100.0),
-            Lives { count: 2 },
+            // Spec II.2 player model: base max HP 40, one spare health tank
+            // (total effective lives 2), shield = 15% flat damage reduction.
+            Health::new(40.0),
+            Lives { count: 1 },
             Shield {
-                current: 50.0,
-                max: 50.0,
+                reduction: BASE_SHIELD_REDUCTION,
             },
             Faction::Player,
             shapes::ship_hull(),

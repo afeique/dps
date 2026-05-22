@@ -14,9 +14,10 @@ use std::f32::consts::TAU;
 /// The three powerup categories that can drop from enemies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PowerupKind {
-    /// Instantly refills shield to max.
-    ShieldRestore,
-    /// Grants one extra life.
+    /// Instantly heals HP to full. (Was `ShieldRestore`; the shield is now a
+    /// passive damage-reduction %, so there is no pool to restore — spec II.2.)
+    Repair,
+    /// Grants one extra spare health tank.
     ExtraLife,
     /// Clears all enemies and enemy bullets on screen.
     Bomb,
@@ -35,7 +36,7 @@ pub struct Powerup {
 ///
 /// | Kind           | Color (linear RGB)         |
 /// |----------------|----------------------------|
-/// | ShieldRestore  | cyan   `(1.0, 7.0, 9.0)`  |
+/// | Repair         | cyan   `(1.0, 7.0, 9.0)`  |
 /// | ExtraLife      | green  `(1.0, 9.0, 2.0)`  |
 /// | Bomb           | orange `(9.0, 2.0, 0.5)`  |
 pub fn shape(kind: PowerupKind) -> Shape {
@@ -51,9 +52,9 @@ pub fn shape(kind: PowerupKind) -> Shape {
     let path = path.close();
 
     let color = match kind {
-        PowerupKind::ShieldRestore => Color::linear_rgb(1.0, 7.0, 9.0), // HDR cyan
-        PowerupKind::ExtraLife     => Color::linear_rgb(1.0, 9.0, 2.0), // HDR green
-        PowerupKind::Bomb          => Color::linear_rgb(9.0, 2.0, 0.5), // HDR red-orange
+        PowerupKind::Repair    => Color::linear_rgb(1.0, 7.0, 9.0), // HDR cyan
+        PowerupKind::ExtraLife => Color::linear_rgb(1.0, 9.0, 2.0), // HDR green
+        PowerupKind::Bomb      => Color::linear_rgb(9.0, 2.0, 0.5), // HDR red-orange
     };
 
     ShapeBuilder::with(&path)
@@ -78,7 +79,7 @@ pub fn spawn_powerups(mut commands: Commands, mut deaths: MessageReader<Death>) 
         }
 
         let kind = match (bits / 7) % 3 {
-            0 => PowerupKind::ShieldRestore,
+            0 => PowerupKind::Repair,
             1 => PowerupKind::ExtraLife,
             _ => PowerupKind::Bomb,
         };
@@ -107,20 +108,20 @@ pub fn spawn_powerups(mut commands: Commands, mut deaths: MessageReader<Death>) 
 /// and despawn the gem.
 ///
 /// Effects:
-/// - `ShieldRestore` → `shield.current = shield.max`
-/// - `ExtraLife`     → `lives.count += 1`
-/// - `Bomb`          → write `Death` for every live enemy, despawn enemy
+/// - `Repair`    → `hp.current = hp.max`
+/// - `ExtraLife` → `lives.count += 1`
+/// - `Bomb`      → write `Death` for every live enemy, despawn enemy
 ///   bullets of kind `BulletKind::Enemy`, increment `score.kills`
 pub fn collect_powerups(
     mut commands: Commands,
     mut score: ResMut<Score>,
     mut deaths: MessageWriter<Death>,
-    mut player: Query<(&Transform, &Collider, &mut Shield, &mut Lives), With<Ship>>,
+    mut player: Query<(&Transform, &Collider, &mut Health, &mut Lives), With<Ship>>,
     powerups: Query<(Entity, &Transform, &Collider, &Powerup)>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
-    let Ok((ptf, pc, mut shield, mut lives)) = player.single_mut() else {
+    let Ok((ptf, pc, mut hp, mut lives)) = player.single_mut() else {
         return; // no player (GameOver or not yet spawned) — skip cleanly
     };
     let player_pos = ptf.translation.truncate();
@@ -133,8 +134,8 @@ pub fn collect_powerups(
         }
 
         match powerup.kind {
-            PowerupKind::ShieldRestore => {
-                shield.current = shield.max;
+            PowerupKind::Repair => {
+                hp.current = hp.max;
             }
             PowerupKind::ExtraLife => {
                 lives.count += 1;

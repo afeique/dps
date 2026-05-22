@@ -87,27 +87,63 @@ pub fn enemy_bullet_hits_player(
     }
 }
 
-const CONTACT_DAMAGE: f32 = 20.0;
+/// Enemy→player contact damage (`getLevelScaledDamage(25) = 25` at level 1,
+/// spec III.6 — in-run leveling is retired so it never scales).
+const CONTACT_DAMAGE: f32 = 25.0;
+/// Player→enemy contact damage (`PLAYER_ENEMY_COLLISION_DAMAGE`, spec III.6).
+const PLAYER_ENEMY_CONTACT_DMG: f32 = 5.0;
+/// Each body is pushed out by this fraction of the overlap on contact
+/// (`OVERLAP_SEPARATION_RATIO`, spec III.6). Applied to *both* bodies, total
+/// push = `1.2 × overlap` → they always separate the same tick. This (not
+/// post-hit i-frames, which were removed) is what gates contact damage to one
+/// hit per collision.
+const OVERLAP_SEPARATION_RATIO: f32 = 0.6;
+/// Velocity kick driving the two bodies apart on contact (juice; the JS uses a
+/// full momentum impulse — `BOUNCE_RESTITUTION 0.9`). It persists because
+/// `ship_control` accumulates velocity rather than overwriting it.
+const CONTACT_BOUNCE: f32 = 220.0;
 
+/// Player ↔ enemy contact (spec III.6): the player takes 25, the enemy takes 5,
+/// and both are physically separated + bounced apart. There is **no** post-hit
+/// invulnerability (spec II.2) — the separation is what stops a single overlap
+/// from melting the player over consecutive ticks.
 pub fn enemy_contact_player(
     mut dmg: MessageWriter<Damage>,
-    player: Query<(Entity, &Transform, &Collider), With<Ship>>,
-    enemies: Query<(&Transform, &Collider), With<Enemy>>,
+    mut player: Query<(Entity, &mut Transform, &mut Velocity, &Collider), With<Ship>>,
+    mut enemies: Query<(Entity, &mut Transform, &mut Velocity, &Collider), (With<Enemy>, Without<Ship>)>,
 ) {
-    let Ok((player_e, ptf, pc)) = player.single() else {
+    let Ok((player_e, mut ptf, mut pvel, pc)) = player.single_mut() else {
         return;
     };
-    for (etf, ec) in &enemies {
-        let reach = ec.radius + pc.radius;
-        let d2 = etf
-            .translation
-            .truncate()
-            .distance_squared(ptf.translation.truncate());
-        if d2 <= reach * reach {
-            dmg.write(Damage {
-                target: player_e,
-                amount: CONTACT_DAMAGE,
-            });
+    for (enemy_e, mut etf, mut evel, ec) in &mut enemies {
+        // Re-read the player position each enemy: a prior separation may have
+        // already nudged it this tick.
+        let ppos = ptf.translation.truncate();
+        let epos = etf.translation.truncate();
+        let reach = pc.radius + ec.radius;
+        let delta = ppos - epos;
+        let dist = delta.length();
+        if dist >= reach {
+            continue; // not overlapping
         }
+
+        // Damage both ways (the pipeline applies the player's shield + rounding;
+        // a weak enemy may die to the 5-dmg ram).
+        dmg.write(Damage { target: player_e, amount: CONTACT_DAMAGE });
+        dmg.write(Damage { target: enemy_e, amount: PLAYER_ENEMY_CONTACT_DMG });
+
+        // Normal from enemy → player (fall back to +Y when exactly coincident).
+        let n = if dist > 1e-4 { delta / dist } else { Vec2::Y };
+
+        // Positional separation — push both out of the overlap this tick.
+        let push = n * ((reach - dist) * OVERLAP_SEPARATION_RATIO);
+        ptf.translation.x += push.x;
+        ptf.translation.y += push.y;
+        etf.translation.x -= push.x;
+        etf.translation.y -= push.y;
+
+        // Velocity bounce apart (juice).
+        pvel.0 += n * CONTACT_BOUNCE;
+        evel.0 -= n * CONTACT_BOUNCE;
     }
 }

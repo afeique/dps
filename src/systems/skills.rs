@@ -34,7 +34,9 @@ impl Default for Skills {
 ///
 /// Ability summary:
 /// * **Dash** (`ShiftLeft`, 2 s CD) — forward impulse + 0.3 s i-frames.
-/// * **Shield Burst** (`C`, 8 s CD) — full shield refill + 0.8 s i-frames.
+/// * **Shield Burst** (`C`, 8 s CD) — a brief 0.8 s invulnerability bubble.
+///   (The shield is now a passive damage-reduction %, so there is no pool to
+///   "refill" — this is a deliberate-invuln defensive pop.)
 /// * **Bomb** (`X`, 15 s CD) — despawn every enemy and enemy bullet;
 ///   each enemy triggers a `Death` message so explosion FX fire normally.
 pub fn use_skills(
@@ -45,7 +47,7 @@ pub fn use_skills(
     mut skills: ResMut<Skills>,
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
-    mut player: Query<(Entity, &mut Velocity, &mut Shield, &Transform), With<Ship>>,
+    mut player: Query<(Entity, &mut Velocity, &Transform), With<Ship>>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
@@ -63,7 +65,7 @@ pub fn use_skills(
     let bomb_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::North));
 
     // Bail if the player ship is absent (GameOver, not yet spawned, etc.).
-    let Ok((player_entity, mut vel, mut shield, tf)) = player.single_mut() else {
+    let Ok((player_entity, mut vel, tf)) = player.single_mut() else {
         return;
     };
 
@@ -79,9 +81,9 @@ pub fn use_skills(
     }
 
     // --- SHIELD BURST (C) ------------------------------------------------
-    // Instantly refills the shield to maximum and grants extended i-frames.
+    // A brief invulnerability bubble (no pool to refill — the shield is now a
+    // passive damage-reduction %).
     if (keys.just_pressed(KeyCode::KeyC) || shield_btn) && skills.shield_cd <= 0.0 {
-        shield.current = shield.max;
         commands
             .entity(player_entity)
             .insert(Invulnerable { seconds: 0.8 });

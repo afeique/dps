@@ -23,7 +23,12 @@
 //!   • Arc-lightning (Drifter) is a 5-shot spread — no fractal bolt rendering.
 //!   • No burst state machine (3-shot sub-bursts) — the `FireCooldown` already
 //!     provides the inter-volley cadence; each cooldown expiry emits a full volley.
-//!   • No level scaling, no aim jitter scaling, no campaign speed multiplier.
+//!   • No aim jitter scaling, no campaign speed multiplier.
+//!
+//! Per-bullet damage is the spec IV.3 `LS(n)` base value at level 1 (in-run
+//! leveling is retired, so `LS(n) = n`): Wasp 1; Hunter/Guardian/Drifter/Weaver/
+//! Sentinel 2; Stalker/Prowler/Titan 3; Tangerine 4. These are small by design —
+//! the player has only 40 HP (spec II.2), so a few hits matter.
 
 use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Ship};
 use crate::messages::Fire;
@@ -83,7 +88,7 @@ pub fn enemy_firing(
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
-                    damage: 10.0,
+                    damage: 2.0, // shootBurst3 → default bullet dmg (spec IV.5)
                     speed: 340.0,
                     faction: Faction::Enemy,
                 });
@@ -98,7 +103,7 @@ pub fn enemy_firing(
                     fire.write(Fire {
                         origin: enemy_pos + dir * 22.0,
                         dir,
-                        damage: 10.0,
+                        damage: 2.0, // guardian_spread → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
                     });
@@ -115,7 +120,7 @@ pub fn enemy_firing(
                 fire.write(Fire {
                     origin: enemy_pos + dir * 22.0,
                     dir,
-                    damage: 8.0,
+                    damage: 1.0, // machinegun → LS(1) (spec IV.3)
                     speed: 360.0,
                     faction: Faction::Enemy,
                 });
@@ -128,7 +133,7 @@ pub fn enemy_firing(
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
-                    damage: 16.0,
+                    damage: 3.0, // chargedLaser → LS(3) (spec IV.3)
                     speed: 420.0,
                     faction: Faction::Enemy,
                 });
@@ -148,7 +153,7 @@ pub fn enemy_firing(
                     fire.write(Fire {
                         origin: enemy_pos + dir * 22.0,
                         dir,
-                        damage: 9.0,
+                        damage: 2.0, // arcLightning → LS(2) (spec IV.3)
                         speed: 280.0,
                         faction: Faction::Enemy,
                     });
@@ -163,7 +168,7 @@ pub fn enemy_firing(
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
-                    damage: 14.0,
+                    damage: 3.0, // shootMissile → LS(3) (spec IV.3)
                     speed: 250.0,
                     faction: Faction::Enemy,
                 });
@@ -185,7 +190,7 @@ pub fn enemy_firing(
                     fire.write(Fire {
                         origin: enemy_pos + dir * 22.0,
                         dir,
-                        damage: 9.0,
+                        damage: 2.0, // spiral_laser → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
                     });
@@ -203,7 +208,7 @@ pub fn enemy_firing(
                     fire.write(Fire {
                         origin: enemy_pos + dir * 22.0,
                         dir,
-                        damage: 10.0,
+                        damage: 2.0, // sentinel_sweep → LS(2) (spec IV.3)
                         speed: 290.0,
                         faction: Faction::Enemy,
                     });
@@ -217,7 +222,7 @@ pub fn enemy_firing(
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
-                    damage: 12.0,
+                    damage: 4.0, // layMine → LS(4) (spec IV.3)
                     speed: 120.0,
                     faction: Faction::Enemy,
                 });
@@ -238,7 +243,7 @@ pub fn enemy_firing(
                     fire.write(Fire {
                         origin: enemy_pos + dir * 22.0,
                         dir,
-                        damage: 14.0,
+                        damage: 3.0, // sweep_laser → LS(3) (spec IV.3)
                         speed: 310.0,
                         faction: Faction::Enemy,
                     });

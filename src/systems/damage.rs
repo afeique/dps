@@ -3,8 +3,12 @@
 //!   • Enemy death  — increments `Score::kills` and despawns.
 //!   • Player death — emits `Death`, flips state to `GameOver`, and despawns
 //!                    the ship (kills are NOT incremented for the player).
-//! `Invulnerable` i-frames gate repeated hits: any entity carrying the
-//! component absorbs no damage until `tick_invulnerability` removes it.
+//! `Invulnerable` i-frames still gate damage while present (any entity carrying
+//! the component absorbs no damage until `tick_invulnerability` removes it), but
+//! per spec II.2 they are **no longer auto-granted on a hit** — only deliberate
+//! skills (dash tail, shield-burst) grant them. The player's shield is a flat
+//! damage-reduction %, and a lethal hit consumes a spare health tank (refill in
+//! place, no invuln) before ending the run.
 //!
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
@@ -24,19 +28,19 @@ pub fn apply_damage(
     mut q: Query<(
         &mut Health,
         &Transform,
-        Option<&mut Shield>,
+        Option<&Shield>,
         Option<&mut Lives>,
         Has<Ship>,
         Has<Invulnerable>,
     )>,
 ) {
     for ev in dmg.read() {
-        let Ok((mut hp, tf, mut shield, mut lives, is_player, invulnerable)) = q.get_mut(ev.target)
+        let Ok((mut hp, tf, shield, mut lives, is_player, invulnerable)) = q.get_mut(ev.target)
         else {
             continue; // target already gone this tick
         };
         if invulnerable {
-            continue; // i-frames active — eat the hit silently
+            continue; // deliberate i-frames (dash / shield-burst) — eat the hit
         }
 
         // Any landed hit on the player breaks the kill streak (spec III.6).
@@ -44,29 +48,26 @@ pub fn apply_damage(
             streak.break_streak();
         }
 
-        // Shield absorbs first; the remainder hits Health.
-        let mut remaining = ev.amount;
-        if let Some(s) = shield.as_mut() {
-            let absorbed = remaining.min(s.current);
-            s.current -= absorbed;
-            remaining -= absorbed;
+        // Shield = flat % damage reduction (player only); the JS pipeline rounds
+        // the final player damage. Enemy damage stays fractional so DoT sources
+        // (beams) accumulate exactly across ticks.
+        let mut amount = ev.amount;
+        if let Some(s) = shield {
+            amount *= 1.0 - s.reduction;
         }
-        hp.current -= remaining;
+        if is_player {
+            amount = amount.round();
+        }
+        hp.current -= amount;
 
         if hp.current <= 0.0 {
             let position = tf.translation.truncate();
             if is_player {
-                // Spare ship? Respawn in place (refill HP + shield, longer
-                // i-frames) instead of ending the run.
+                // Spare health tank? Refill HP *in place* — no respawn delay and
+                // NO invulnerability (spec II.2) — instead of ending the run.
                 if let Some(l) = lives.as_mut().filter(|l| l.count > 0) {
                     l.count -= 1;
                     hp.current = hp.max;
-                    if let Some(s) = shield.as_mut() {
-                        s.current = s.max;
-                    }
-                    commands
-                        .entity(ev.target)
-                        .insert(Invulnerable { seconds: 1.5 });
                     continue;
                 }
                 deaths.write(Death {
@@ -84,14 +85,10 @@ pub fn apply_damage(
                 streak.on_kill();
                 commands.entity(ev.target).despawn();
             }
-        } else if is_player {
-            // Grant i-frames so the next hit doesn't land immediately. The
-            // deferred `insert` means several same-tick hits can still land —
-            // acceptable.
-            commands
-                .entity(ev.target)
-                .insert(Invulnerable { seconds: 0.6 });
         }
+        // No post-hit invulnerability grace (spec II.2: removed in JS 5.88.0).
+        // Sustained contact is gated by the physical separation/bounce in
+        // `collision::enemy_contact_player`, not by i-frames.
     }
 }
 

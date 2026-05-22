@@ -3,19 +3,29 @@
 
 use bevy::prelude::*;
 
-/// Spare ships. On player death, if `count > 0` the ship respawns in place
-/// (full health + shield, brief i-frames) instead of triggering `GameOver` —
-/// the spare-ship death parity from the JS game.
+/// Spare **health tanks** (`healthTanks`, spec II.2). On a lethal hit, if
+/// `count > 0` one tank is consumed and HP refills *in place* — no respawn
+/// delay, no invulnerability (spec II.2) — instead of triggering `GameOver`.
+/// Start = 1 (total effective lives = `count + 1`, the active bar being the
+/// "+1"); JS `MAX_HEALTH_TANKS = 3`.
 #[derive(Component, Debug)]
 pub struct Lives {
     pub count: u32,
 }
 
-/// Energy shield that absorbs incoming damage before `Health` is touched.
-#[derive(Component, Debug)]
+/// Base shield damage-reduction (spec II.2: 15%).
+pub const BASE_SHIELD_REDUCTION: f32 = 0.15;
+/// Shield damage-reduction cap (spec II.2: 75%).
+pub const SHIELD_REDUCTION_CAP: f32 = 0.75;
+
+/// Energy shield as a flat **damage-reduction fraction** (spec II.2) — *not* an
+/// absorbing HP pool. Incoming damage to the player is scaled by
+/// `(1 − reduction)` before it reaches `Health`. Base 15%, cap 75% with
+/// upgrades.
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Shield {
-    pub current: f32,
-    pub max: f32,
+    /// Damage-reduction fraction, in `[0, SHIELD_REDUCTION_CAP]`.
+    pub reduction: f32,
 }
 
 /// The player ship: movement tuning + marker. One per run (for now).
