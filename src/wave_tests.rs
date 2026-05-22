@@ -1439,6 +1439,52 @@ fn difficulty_speed_curve_and_speedmul() {
     assert!((sm - 1.75 / 0.55).abs() < 0.01, "W30 tier-1 boss SpeedMul (got {sm})");
 }
 
+// ── 40. mine_knocks_back_enemy ────────────────────────────────────────────────
+
+/// A mine detonation shoves nearby enemies via the Knockback message (spec III.6).
+#[test]
+fn mine_knocks_back_enemy() {
+    use crate::messages::Knockback;
+    use crate::systems::power_weapon::{lay_mine, update_mines};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Enemy 40 px from the mine (inside the 90 px blast).
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(5.0),
+        Collider { radius: 16.0 },
+        Faction::Enemy,
+        Transform::from_xyz(40.0, 0.0, 0.0),
+    ));
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| lay_mine(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0)); // arm + trigger
+    world.insert_resource(time);
+
+    #[derive(Resource, Default)]
+    struct KbCount(u32);
+    world.insert_resource(KbCount::default());
+    fn count(mut r: MessageReader<Knockback>, mut c: ResMut<KbCount>) {
+        for _ in r.read() {
+            c.0 += 1;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((update_mines, count).chain());
+    step.run(world);
+
+    assert!(
+        world.resource::<KbCount>().0 >= 1,
+        "mine detonation should knock back nearby enemies"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

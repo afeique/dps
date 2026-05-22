@@ -25,7 +25,7 @@
 //! `update_mines`, `update_beams`, `reset_energy`.
 
 use crate::components::*;
-use crate::messages::Damage;
+use crate::messages::{Damage, Knockback};
 use crate::resources::{EnergyMeter, KillStreak};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -496,6 +496,10 @@ pub fn fire_power_weapon(
     }
 }
 
+/// Knockback shove distances for the AoE power weapons (spec III.3/III.6).
+const NOVA_KNOCKBACK: f32 = 16.0;
+const MINE_KNOCKBACK: f32 = 12.0;
+
 /// Tick mines: arm them, detonate (AoE) on an enemy entering the trigger
 /// radius or on lifetime end, and despawn. Runs in the FixedUpdate collision
 /// group so detonation `Damage` reaches `apply_damage`.
@@ -503,6 +507,7 @@ pub fn update_mines(
     time: Res<Time>,
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
+    mut knock: MessageWriter<Knockback>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
     mut mines: Query<(Entity, &mut Mine, &Transform)>,
 ) {
@@ -521,10 +526,13 @@ pub fn update_mines(
             .any(|(_, etf, ec)| etf.translation.truncate().distance(pos) <= mine.trigger_radius + ec.radius);
 
         if triggered || mine.life <= 0.0 {
-            // Detonate: damage everything in the blast radius.
+            // Detonate: damage + shove everything in the blast radius (spec III.6).
             for (e, etf, ec) in &enemies {
-                if etf.translation.truncate().distance(pos) <= mine.blast_radius + ec.radius {
+                let epos = etf.translation.truncate();
+                if epos.distance(pos) <= mine.blast_radius + ec.radius {
                     dmg.write(Damage { target: e, amount: mine.damage });
+                    let dir = (epos - pos).normalize_or_zero();
+                    knock.write(Knockback { target: e, impulse: dir * MINE_KNOCKBACK });
                 }
             }
             commands.entity(mine_e).despawn();
@@ -546,6 +554,7 @@ pub fn update_nova(
     time: Res<Time>,
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
+    mut knock: MessageWriter<Knockback>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
     // `Without<Enemy>` makes the mut-Transform ring query disjoint from the
     // immut-Transform enemy query above (a ring is never an enemy) — else B0001.
@@ -559,9 +568,13 @@ pub fn update_nova(
             if ring.hit.contains(&e) {
                 continue;
             }
+            let epos = etf.translation.truncate();
             // The enemy's disc overlaps the damaging front band.
-            if nova_band_hits(ring.center, ring.radius, ring.band, etf.translation.truncate(), ec.radius) {
+            if nova_band_hits(ring.center, ring.radius, ring.band, epos, ec.radius) {
                 dmg.write(Damage { target: e, amount: ring.damage });
+                // Shove outward from the ring center (spec III.6).
+                let dir = (epos - ring.center).normalize_or_zero();
+                knock.write(Knockback { target: e, impulse: dir * NOVA_KNOCKBACK });
                 ring.hit.push(e);
             }
         }

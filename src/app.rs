@@ -222,7 +222,6 @@ impl Plugin for GamePlugin {
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,
-                        systems::collision::apply_knockback,
                         // Orbs + tractor absorb enemy bullets before they reach
                         // the player.
                         systems::skills::deflector_blocks,
@@ -234,6 +233,9 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::update_mines,
                         systems::power_weapon::update_beams,
                         systems::status::tick_burning,
+                        // Apply all queued shoves last (bullet _KNOCK + Nova/Mine
+                        // knockback) so they land the same tick.
+                        systems::collision::apply_knockback,
                     )
                         .chain(),
                     systems::damage::apply_damage,
