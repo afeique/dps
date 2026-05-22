@@ -372,3 +372,25 @@ fn energy_meter_gain_and_spend() {
     assert!((e.current - 45.0).abs() < 0.01, "45 energy left after a 55 spend");
     assert!(!e.try_spend(60.0), "Lance Beam (60) not affordable with 45");
 }
+
+// ── 8. nova_ring_band_hit ─────────────────────────────────────────────────────
+
+/// A Nova ring damages an enemy only while its expanding front (a 30 px band
+/// around the current radius) overlaps the enemy's disc (spec III.3).
+#[test]
+fn nova_ring_band_hit() {
+    use crate::systems::power_weapon::nova_band_hits;
+
+    let center = Vec2::ZERO;
+    let enemy = Vec2::new(100.0, 0.0);
+    let er = 16.0;
+    let band = 30.0;
+
+    // Front far inside the enemy — not yet reached.
+    assert!(!nova_band_hits(center, 40.0, band, enemy, er), "front at r=40 hasn't reached d=100");
+    // Front sweeping across the enemy.
+    assert!(nova_band_hits(center, 100.0, band, enemy, er), "front at r=100 overlaps d=100");
+    assert!(nova_band_hits(center, 90.0, band, enemy, er), "band reaches the near edge");
+    // Front well past the enemy.
+    assert!(!nova_band_hits(center, 200.0, band, enemy, er), "front at r=200 has passed d=100");
+}

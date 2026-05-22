@@ -143,6 +143,7 @@ impl Plugin for GamePlugin {
                         systems::collision::enemy_bullet_hits_player,
                         systems::collision::enemy_contact_player,
                         systems::asteroids::asteroid_hits,
+                        systems::power_weapon::update_nova,
                     )
                         .chain(),
                     systems::damage::apply_damage,

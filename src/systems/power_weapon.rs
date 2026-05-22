@@ -17,6 +17,7 @@
 //! `fire_power_weapon`, `cycle_power_weapon`, `homing_steer`, `reset_energy`.
 
 use crate::components::*;
+use crate::messages::Damage;
 use crate::resources::EnergyMeter;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -89,6 +90,22 @@ pub struct Homing {
     pub turn_rate: f32,
 }
 
+/// An expanding Nova Blast shockwave ring. Damages each enemy once as the ring
+/// front sweeps over it, then despawns at `max_radius` (spec III.3).
+#[derive(Component)]
+pub struct NovaRing {
+    center: Vec2,
+    radius: f32,
+    max_radius: f32,
+    /// Expansion rate, world-units/sec.
+    speed: f32,
+    damage: f32,
+    /// Half-width of the damaging front (`RING_WIDTH`).
+    band: f32,
+    /// Enemies already hit by this ring (no double-damage).
+    hit: Vec<Entity>,
+}
+
 // ─── Shapes ───────────────────────────────────────────────────────────────────
 
 /// A sharp dart silhouette for missiles (nose-up, +Y forward). HDR-emissive hot
@@ -127,6 +144,27 @@ pub fn charge_shape() -> Shape {
     ShapeBuilder::with(&path.close())
         .fill(Color::linear_rgb(0.6, 4.0, 5.0))
         .stroke((Color::linear_rgb(2.0, 9.0, 9.0), 2.0))
+        .build()
+}
+
+/// A unit-radius ring (no fill) for the Nova shockwave; scaled by the ring's
+/// live radius each frame. Stroke is thin at unit scale so the scaled-up ring
+/// stays a few px wide. HDR-emissive amber → bloom halo.
+pub fn nova_ring_shape() -> Shape {
+    let r = 1.0_f32;
+    let mut path = ShapePath::new();
+    let segs = 48;
+    for i in 0..segs {
+        let a = i as f32 / segs as f32 * std::f32::consts::TAU;
+        let p = Vec2::new(a.cos() * r, a.sin() * r);
+        if i == 0 {
+            path = path.move_to(p);
+        } else {
+            path = path.line_to(p);
+        }
+    }
+    ShapeBuilder::with(&path.close())
+        .stroke((Color::linear_rgb(9.0, 5.0, 1.0), 0.02))
         .build()
 }
 
@@ -221,9 +259,25 @@ pub fn fire_power_weapon(
                 ));
             }
         }
-        // ChargeShot (and, for now, the not-yet-specialized kinds) fire one big
-        // fast piercing bolt so every power weapon does *something* while its
-        // bespoke mechanic is pending.
+        PowerWeaponKind::NovaBlast => {
+            let center = tf.translation.truncate();
+            commands.spawn((
+                NovaRing {
+                    center,
+                    radius: 0.0,
+                    max_radius: 320.0,
+                    speed: 533.0, // 320 px over the ~0.6 s ring duration
+                    damage: 8.0,
+                    band: 30.0,
+                    hit: Vec::new(),
+                },
+                nova_ring_shape(),
+                Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
+            ));
+        }
+        // ChargeShot (and, for now, Mine/Lance/Arc) fire one big fast piercing
+        // bolt so every power weapon does *something* while its bespoke
+        // mechanic is pending.
         _ => {
             commands.spawn((
                 Bullet { kind: BulletKind::Player, damage: 60.0, pierce: 3 },
@@ -234,6 +288,47 @@ pub fn fire_power_weapon(
                 charge_shape(),
                 Transform::from_translation(nose.extend(1.0)),
             ));
+        }
+    }
+}
+
+/// Does an enemy disc (`enemy_pos`, `enemy_r`) overlap a Nova ring's damaging
+/// front — the annulus `[radius−band, radius+band]` around `center`?
+pub fn nova_band_hits(center: Vec2, radius: f32, band: f32, enemy_pos: Vec2, enemy_r: f32) -> bool {
+    let d = enemy_pos.distance(center);
+    d + enemy_r >= radius - band && d - enemy_r <= radius + band
+}
+
+/// Expand each Nova ring, damage enemies its front sweeps over (once each), and
+/// despawn it at full radius. Runs in the FixedUpdate collision group so its
+/// `Damage` messages reach `apply_damage`.
+pub fn update_nova(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    mut rings: Query<(Entity, &mut NovaRing, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+    for (ring_e, mut ring, mut tf) in &mut rings {
+        ring.radius += ring.speed * dt;
+
+        for (e, etf, ec) in &enemies {
+            if ring.hit.contains(&e) {
+                continue;
+            }
+            // The enemy's disc overlaps the damaging front band.
+            if nova_band_hits(ring.center, ring.radius, ring.band, etf.translation.truncate(), ec.radius) {
+                dmg.write(Damage { target: e, amount: ring.damage });
+                ring.hit.push(e);
+            }
+        }
+
+        tf.translation = ring.center.extend(0.5);
+        tf.scale = Vec3::splat(ring.radius.max(0.001));
+
+        if ring.radius >= ring.max_radius {
+            commands.entity(ring_e).despawn();
         }
     }
 }
