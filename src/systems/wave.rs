@@ -288,23 +288,35 @@ impl Wave {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Deterministic spawn x using a `sin`/`cos` hash of the sequence counter
-/// (placeholder for the spec's on-screen edge spawning, V.5).
-fn spawn_x(seq: u32, half_x: f32) -> f32 {
+/// Distance enemies spawn just *outside* the nearest edge (spec V.5 source
+/// margin, simplified — short enough to stay inside the offscreen-cull margin so
+/// the player-seeking AI flies them in instead of a warp-in animation).
+const EDGE_MARGIN: f32 = 120.0;
+
+/// Spawn position just outside one of the four edges (spec V.5 — "source just
+/// outside the nearest edge"). The edge cycles with `seq` so a pulse enters from
+/// all sides; the along-edge coordinate is a deterministic `sin`/`cos` spread.
+pub fn spawn_pos(seq: u32, bounds: &PlayBounds) -> Vec2 {
+    let half = bounds.half;
     let a = (seq as f32 * 97.13_f32).sin();
     let b = (seq as f32 * 43.71_f32).cos();
-    (a * 0.6 + b * 0.4) * half_x * 0.85
+    let t = (a * 0.6 + b * 0.4) * 0.85; // along-edge spread in [-0.85, 0.85]
+    match seq % 4 {
+        0 => Vec2::new(t * half.x, half.y + EDGE_MARGIN),  // top
+        1 => Vec2::new(half.x + EDGE_MARGIN, t * half.y),  // right
+        2 => Vec2::new(t * half.x, -half.y - EDGE_MARGIN), // bottom
+        _ => Vec2::new(-half.x - EDGE_MARGIN, t * half.y), // left
+    }
 }
 
 /// Spawn every group in pulse `pulse_idx` of wave `wave_idx`.
 fn spawn_pulse(commands: &mut Commands, bounds: &PlayBounds, wave: &mut Wave, wave_idx: usize, pulse_idx: usize) {
     let pulse = &WAVES[wave_idx].pulses[pulse_idx];
-    let y = bounds.half.y - 30.0;
     for group in pulse.0 {
         for _ in 0..group.count {
             wave.spawn_seq += 1;
-            let x = spawn_x(wave.spawn_seq, bounds.half.x);
-            enemy::spawn_tiered(commands, group.kind, Vec2::new(x, y), group.tier);
+            let pos = spawn_pos(wave.spawn_seq, bounds);
+            enemy::spawn_tiered(commands, group.kind, pos, group.tier);
         }
     }
 }

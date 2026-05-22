@@ -590,3 +590,27 @@ fn upgrade_cost_formula() {
     // strictly increasing per owned stack.
     assert!(upgrade_cost(1500, 2) > upgrade_cost(1500, 1));
 }
+
+// ── 14. spawn_pos_edges ────────────────────────────────────────────────────────
+
+/// Wave spawns land just outside exactly one edge (spec V.5) and stay within the
+/// 250 px offscreen-cull margin so they aren't immediately reaped.
+#[test]
+fn spawn_pos_edges() {
+    use crate::systems::wave::spawn_pos;
+
+    let bounds = PlayBounds::default(); // half = (640, 360)
+    for seq in 1..=8u32 {
+        let p = spawn_pos(seq, &bounds);
+        let outside_x = p.x.abs() > bounds.half.x;
+        let outside_y = p.y.abs() > bounds.half.y;
+        assert!(
+            outside_x ^ outside_y,
+            "seq {seq}: should be outside exactly one edge (got {p:?})"
+        );
+        assert!(
+            p.x.abs() <= bounds.half.x + 250.0 && p.y.abs() <= bounds.half.y + 250.0,
+            "seq {seq}: should stay within the cull margin (got {p:?})"
+        );
+    }
+}
