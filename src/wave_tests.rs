@@ -1196,6 +1196,55 @@ fn tractor_shield_absorbs_forward_bullets() {
     assert_eq!(world.resource::<Score>().gold, 5, "absorb minted coins");
 }
 
+// ── 31. damage_numbers_spawn_and_float ────────────────────────────────────────
+
+/// A Damage event spawns a floating number at the target, which rises and then
+/// despawns at end of life (spec VIII.1).
+#[test]
+fn damage_numbers_spawn_and_float() {
+    use crate::messages::Damage;
+    use crate::render::damage_numbers::{
+        float_damage_numbers, spawn_damage_numbers, DamageNumber,
+    };
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let enemy = world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(0.0, 0.0, 0.0))).id();
+    world.write_message(Damage { target: enemy, amount: 5.0 });
+
+    let mut spawn = Schedule::default();
+    spawn.add_systems(spawn_damage_numbers);
+    spawn.run(world);
+
+    let count = world.query::<&DamageNumber>().iter(world).count();
+    assert_eq!(count, 1, "a Damage event spawns one floating number");
+
+    // Float: rises on a small step, despawns once its 0.8 s life lapses.
+    let mut step = Schedule::default();
+    step.add_systems(float_damage_numbers);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time.clone());
+    step.run(world);
+    let y_after = world
+        .query_filtered::<&Transform, With<DamageNumber>>()
+        .iter(world)
+        .next()
+        .map(|t| t.translation.y);
+    assert!(y_after.is_some_and(|y| y > 14.0), "number drifts upward");
+
+    time.advance_by(Duration::from_secs_f32(1.0));
+    world.insert_resource(time);
+    step.run(world);
+    assert_eq!(
+        world.query::<&DamageNumber>().iter(world).count(),
+        0,
+        "number despawns at end of life"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

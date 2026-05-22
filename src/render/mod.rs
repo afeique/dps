@@ -7,6 +7,7 @@
 
 pub mod bullets;
 pub mod cursor;
+pub mod damage_numbers;
 pub mod explosion;
 pub mod hud;
 pub mod nebula;

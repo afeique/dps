@@ -75,6 +75,8 @@ impl Plugin for GamePlugin {
                     render::nebula::parallax_nebula,
                     render::hud::update_hud,
                     render::cursor::update_crosshair,
+                    render::damage_numbers::spawn_damage_numbers,
+                    render::damage_numbers::float_damage_numbers,
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,
