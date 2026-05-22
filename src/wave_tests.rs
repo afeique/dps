@@ -1305,6 +1305,40 @@ fn update_nova_no_query_conflict() {
     sched.run(app.world_mut()); // would panic (B0001) if the queries conflicted
 }
 
+// ── 35. survivor_stage_clear_gating ───────────────────────────────────────────
+
+/// Survivor cards are drawn only on stage clears (every 3rd wave); mid-stage
+/// waves auto-advance with the smaller coin bonus and no pick (spec V.6).
+#[test]
+fn survivor_stage_clear_gating() {
+    use crate::systems::survivor::{check_survivor, is_stage_clear, midstage_bonus, stage_bonus};
+
+    assert!(!is_stage_clear(1) && !is_stage_clear(2) && is_stage_clear(3));
+    assert!(is_stage_clear(6) && !is_stage_clear(7));
+    // Wave 3: mid = round((50+75)*0.6) = 75; stage = (50+75)*2 = 250.
+    assert_eq!(midstage_bonus(3), 75);
+    assert_eq!(stage_bonus(3), 250);
+
+    // A mid-stage clear (wave 1) auto-advances with the small bonus, no pick.
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut w = Wave::default();
+    w.awaiting_reward = true;
+    world.insert_resource(w);
+
+    let mut step = Schedule::default();
+    step.add_systems(check_survivor);
+    step.run(world);
+
+    assert_eq!(world.resource::<Wave>().number(), 2, "mid-stage wave auto-advances");
+    assert!(!world.resource::<Wave>().awaiting_reward, "reward gate cleared");
+    assert_eq!(world.resource::<Score>().gold, midstage_bonus(1), "mid-stage bonus awarded");
+    assert!(
+        matches!(world.resource::<NextState<GameState>>(), NextState::Unchanged),
+        "no Survivor pick on a mid-stage clear"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

@@ -58,10 +58,39 @@ pub fn choose_cards(rng: &mut GameRng) -> [Option<UpgradeId>; 3] {
     out
 }
 
-/// While `Playing`, open the survivor pick once the wave driver flags a clear.
-pub fn check_survivor(wave: Res<Wave>, mut next: ResMut<NextState<GameState>>) {
-    if wave.awaiting_reward {
-        next.set(GameState::Survivor);
+/// A stage clear is every 3rd wave (3, 6, 9, … — the boss waves, spec V.6).
+pub fn is_stage_clear(wave_n: u64) -> bool {
+    wave_n % 3 == 0
+}
+
+/// Mid-stage clear bonus coins (spec V.6: `round((50+wave*25)*0.6)`).
+pub fn midstage_bonus(wave_n: u64) -> u64 {
+    ((50 + wave_n * 25) as f32 * 0.6).round() as u64
+}
+
+/// Stage-clear bonus coins (spec V.6: `(50+wave*25)*2`).
+pub fn stage_bonus(wave_n: u64) -> u64 {
+    (50 + wave_n * 25) * 2
+}
+
+/// While `Playing`, react to a wave clear (`awaiting_reward`): on a **stage
+/// clear** open the survivor pick; on a **mid-stage** wave auto-advance with a
+/// smaller coin bonus and no pick (spec V.6).
+pub fn check_survivor(
+    mut wave: ResMut<Wave>,
+    mut score: ResMut<Score>,
+    mut next: ResMut<NextState<GameState>>,
+) {
+    if !wave.awaiting_reward {
+        return;
+    }
+    if is_stage_clear(wave.number() as u64) {
+        next.set(GameState::Survivor); // the pick (+ bonus + advance) happens there
+    } else {
+        score.gold = score
+            .gold
+            .saturating_add(midstage_bonus(wave.number() as u64));
+        wave.advance_after_reward();
     }
 }
 
@@ -149,11 +178,11 @@ pub fn survivor_input(
         apply_upgrade(id, &mut hp, &mut shield, &mut ship, &mut lives);
     }
 
-    // Coin bonus on clear (spec V.6); doubled on a stage clear (every 3rd wave).
-    let wave_n = wave.number() as u64;
-    let stage_clear = wave_n % 3 == 0;
-    let bonus = (50 + wave_n * 25) * if stage_clear { 2 } else { 1 };
-    score.gold = score.gold.saturating_add(bonus);
+    // The survivor pick only fires on stage clears, so the bonus is the doubled
+    // stage-clear amount (spec V.6).
+    score.gold = score
+        .gold
+        .saturating_add(stage_bonus(wave.number() as u64));
 
     wave.advance_after_reward();
     next.set(GameState::Playing);
