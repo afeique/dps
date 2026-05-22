@@ -11,14 +11,18 @@
 
 use crate::components::*;
 use crate::messages::Damage;
+use crate::resources::KillStreak;
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
+    streak: Res<KillStreak>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
 ) {
+    // Kill-streak multiplier scales all player bullet damage (spec III.6).
+    let streak_mult = streak.multiplier();
     for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
@@ -32,7 +36,7 @@ pub fn bullet_hits_enemy(
             if d2 <= reach * reach {
                 dmg.write(Damage {
                     target: enemy_e,
-                    amount: bullet.damage,
+                    amount: bullet.damage * streak_mult,
                 });
                 // Piercing bullets pass through; others die on the first hit.
                 // (One hit per frame — a fast bullet clears an enemy's radius

@@ -31,6 +31,7 @@ impl Plugin for GamePlugin {
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
             .init_resource::<Score>()
+            .init_resource::<crate::resources::KillStreak>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::asteroids::AsteroidSpawner>()
             .init_resource::<systems::weapons::CurrentWeapon>()
@@ -148,6 +149,7 @@ impl Plugin for GamePlugin {
                     )
                         .chain(),
                     systems::damage::tick_invulnerability,
+                    systems::damage::tick_streak,
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,

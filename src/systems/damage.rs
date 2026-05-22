@@ -10,7 +10,7 @@
 
 use crate::components::{Health, Invulnerable, Lives, Shield, Ship};
 use crate::messages::{Damage, Death};
-use crate::resources::Score;
+use crate::resources::{KillStreak, Score};
 use crate::states::GameState;
 use bevy::prelude::*;
 
@@ -19,6 +19,7 @@ pub fn apply_damage(
     mut dmg: MessageReader<Damage>,
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
+    mut streak: ResMut<KillStreak>,
     mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
         &mut Health,
@@ -36,6 +37,11 @@ pub fn apply_damage(
         };
         if invulnerable {
             continue; // i-frames active — eat the hit silently
+        }
+
+        // Any landed hit on the player breaks the kill streak (spec III.6).
+        if is_player {
+            streak.break_streak();
         }
 
         // Shield absorbs first; the remainder hits Health.
@@ -75,6 +81,7 @@ pub fn apply_damage(
                     position,
                 });
                 score.kills += 1;
+                streak.on_kill();
                 commands.entity(ev.target).despawn();
             }
         } else if is_player {
@@ -98,5 +105,14 @@ pub fn tick_invulnerability(
         if inv.seconds <= 0.0 {
             commands.entity(e).remove::<Invulnerable>();
         }
+    }
+}
+
+/// Wind down the kill-streak buff window. The streak *count* persists (it only
+/// resets when the player takes damage); once this timer lapses the multiplier
+/// reverts to 1.0 until the next kill (spec III.6).
+pub fn tick_streak(time: Res<Time>, mut streak: ResMut<KillStreak>) {
+    if streak.timer > 0.0 {
+        streak.timer = (streak.timer - time.delta_secs()).max(0.0);
     }
 }

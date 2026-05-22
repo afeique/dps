@@ -35,6 +35,7 @@ fn test_app() -> App {
         .add_message::<Death>()
         .add_message::<Fire>()
         .init_resource::<Score>()
+        .init_resource::<crate::resources::KillStreak>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }
@@ -284,4 +285,37 @@ fn firing_enemy_emits_fire() {
         fired >= 1,
         "an enemy with a ready FireCooldown should emit at least one Fire message"
     );
+}
+
+// ── 5. kill_streak_multiplier_tiers ──────────────────────────────────────────
+
+/// The streak multiplier (spec III.6) is 1.0 below 10 kills, steps to 1.25 at
+/// 10, 2.00 at 60, caps at 3.00 by 200 — and only applies while the buff window
+/// is open; breaking the streak drops it to 1.0.
+#[test]
+fn kill_streak_multiplier_tiers() {
+    use crate::resources::{streak_mult, KillStreak, STREAK_BUFF_SECS};
+
+    assert_eq!(streak_mult(0), 1.0);
+    assert_eq!(streak_mult(9), 1.0);
+    assert_eq!(streak_mult(10), 1.25);
+    assert_eq!(streak_mult(59), 1.85);
+    assert_eq!(streak_mult(60), 2.00);
+    assert_eq!(streak_mult(250), 3.00, "caps at the 200-kill tier");
+
+    let mut s = KillStreak::default();
+    assert_eq!(s.multiplier(), 1.0, "no kills → no buff");
+    for _ in 0..10 {
+        s.on_kill();
+    }
+    assert_eq!(s.timer, STREAK_BUFF_SECS, "each kill refreshes the window");
+    assert_eq!(s.multiplier(), 1.25, "10 kills inside the window → 1.25×");
+
+    s.timer = 0.0; // window lapsed
+    assert_eq!(s.multiplier(), 1.0, "lapsed window → multiplier off (count kept)");
+    assert_eq!(s.kills, 10, "…but the count persists until damage");
+
+    s.break_streak();
+    assert_eq!(s.kills, 0);
+    assert_eq!(s.multiplier(), 1.0);
 }
