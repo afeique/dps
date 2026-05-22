@@ -8,6 +8,8 @@ use crate::components::*;
 use crate::messages::Death;
 use crate::resources::Score;
 use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
+use std::f32::consts::TAU;
 
 /// Per-ability cooldown state. All fields are seconds remaining; 0 means ready.
 #[derive(Resource, Debug)]
@@ -24,6 +26,8 @@ pub struct Skills {
     pub bulwark_cd: f32,
     /// Remaining cooldown for Repair Nanites (H). Ready at 0.
     pub repair_cd: f32,
+    /// Remaining cooldown for Deflector Orbs (J). Ready at 0.
+    pub deflector_cd: f32,
 }
 
 impl Default for Skills {
@@ -35,6 +39,7 @@ impl Default for Skills {
             emp_cd: 0.0,
             bulwark_cd: 0.0,
             repair_cd: 0.0,
+            deflector_cd: 0.0,
         }
     }
 }
@@ -52,6 +57,8 @@ impl Default for Skills {
 ///   (the `Bulwark` component, read by `apply_damage`).
 /// * **Repair Nanites** (`H`, 25 s CD) — regen 3 HP/s for 5 s (the `Repairing`
 ///   component, applied by `tick_repair`).
+/// * **Deflector Orbs** (`J`, 15 s CD) — 3 orbiting orbs that each absorb 3
+///   enemy bullets (`cast_deflectors`/`orbit_deflectors`/`deflector_blocks`).
 pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
@@ -178,6 +185,110 @@ pub fn tick_bulwark(
         b.seconds -= time.delta_secs();
         if b.seconds <= 0.0 {
             commands.entity(e).remove::<Bulwark>();
+        }
+    }
+}
+
+/// Number of deflector orbs cast (spec III.4: `3 + EXTRA_ORB`; base 3).
+const DEFLECTOR_COUNT: u32 = 3;
+/// Bullets each orb blocks before popping (spec III.4: `3 + 2*HARDENED`; base 3).
+const DEFLECTOR_BLOCKS: u32 = 3;
+/// Orb orbit angular speed (rad/sec).
+const DEFLECTOR_OMEGA: f32 = 2.2;
+
+/// A small filled cyan orb (`#44ddff`, HDR for bloom).
+fn orb_shape() -> Shape {
+    let r = 6.0_f32;
+    let mut path = ShapePath::new();
+    for i in 0..16 {
+        let a = i as f32 / 16.0 * TAU;
+        let p = Vec2::new(a.cos() * r, a.sin() * r);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close())
+        .fill(Color::linear_rgb(1.0, 7.0, 9.0))
+        .build()
+}
+
+/// **Deflector Orbs** (`J` / gamepad DPadRight, 15 s CD, spec III.4):
+/// spawn `DEFLECTOR_COUNT` orbs that orbit the ship for 5 s, each absorbing
+/// `DEFLECTOR_BLOCKS` enemy bullets.
+pub fn cast_deflectors(
+    keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<&Gamepad>,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut skills: ResMut<Skills>,
+    player: Query<&Transform, With<Ship>>,
+) {
+    skills.deflector_cd = (skills.deflector_cd - time.delta_secs()).max(0.0);
+
+    let pad = gamepads.iter().any(|gp| gp.just_pressed(GamepadButton::DPadRight));
+    if !(keys.just_pressed(KeyCode::KeyJ) || pad) || skills.deflector_cd > 0.0 {
+        return;
+    }
+    let Ok(ptf) = player.single() else {
+        return;
+    };
+    let center = ptf.translation.truncate();
+    for i in 0..DEFLECTOR_COUNT {
+        let phase = i as f32 / DEFLECTOR_COUNT as f32 * TAU;
+        let pos = center + Vec2::new(phase.cos(), phase.sin()) * DEFLECTOR_RADIUS;
+        commands.spawn((
+            DeflectorOrb {
+                blocks: DEFLECTOR_BLOCKS,
+                phase,
+            },
+            orb_shape(),
+            Transform::from_translation(pos.extend(0.6)),
+            Collider { radius: 8.0 },
+            Lifetime { seconds: 5.0 },
+        ));
+    }
+    skills.deflector_cd = 15.0;
+}
+
+/// Keep deflector orbs circling the ship each tick.
+pub fn orbit_deflectors(
+    time: Res<Time>,
+    player: Query<&Transform, (With<Ship>, Without<DeflectorOrb>)>,
+    mut orbs: Query<(&DeflectorOrb, &mut Transform)>,
+) {
+    let Ok(ptf) = player.single() else {
+        return;
+    };
+    let center = ptf.translation.truncate();
+    let t = time.elapsed_secs();
+    for (orb, mut tf) in &mut orbs {
+        let a = orb.phase + t * DEFLECTOR_OMEGA;
+        let pos = center + Vec2::new(a.cos(), a.sin()) * DEFLECTOR_RADIUS;
+        tf.translation.x = pos.x;
+        tf.translation.y = pos.y;
+    }
+}
+
+/// Resolve deflector-orb hits: an enemy bullet overlapping an orb is absorbed
+/// (despawned), spending one of the orb's blocks; the orb pops at 0.
+pub fn deflector_blocks(
+    mut commands: Commands,
+    mut orbs: Query<(Entity, &Transform, &Collider, &mut DeflectorOrb)>,
+    bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
+) {
+    for (orb_e, otf, oc, mut orb) in &mut orbs {
+        let opos = otf.translation.truncate();
+        for (be, btf, bc, bullet) in &bullets {
+            if bullet.kind != BulletKind::Enemy {
+                continue;
+            }
+            let reach = oc.radius + bc.radius;
+            if opos.distance_squared(btf.translation.truncate()) <= reach * reach {
+                commands.entity(be).despawn();
+                orb.blocks = orb.blocks.saturating_sub(1);
+                if orb.blocks == 0 {
+                    commands.entity(orb_e).despawn();
+                    break;
+                }
+            }
         }
     }
 }

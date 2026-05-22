@@ -119,6 +119,7 @@ impl Plugin for GamePlugin {
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,
                     systems::skills::emp_pulse,
+                    systems::skills::cast_deflectors,
                     systems::shop::open_shop,
                     systems::flow::open_pause,
                 )
@@ -217,10 +218,14 @@ impl Plugin for GamePlugin {
                         .chain(),
                     systems::movement::integrate,
                     systems::movement::confine_player,
+                    // Keep deflector orbs orbiting before collisions resolve.
+                    systems::skills::orbit_deflectors,
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,
                         systems::collision::apply_knockback,
+                        // Orbs absorb enemy bullets before they reach the player.
+                        systems::skills::deflector_blocks,
                         systems::collision::enemy_bullet_hits_player,
                         systems::collision::enemy_contact_player,
                         systems::asteroids::asteroid_hits,

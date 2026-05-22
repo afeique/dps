@@ -47,6 +47,19 @@ pub struct Repairing {
     pub rate: f32,
 }
 
+/// A **Deflector Orb** (spec III.4): orbits the ship and absorbs `blocks` enemy
+/// bullets before popping. `phase` is its starting angle around the ship;
+/// `skills::orbit_deflectors` positions it, `skills::deflector_blocks` resolves
+/// hits. Despawned via `Lifetime` or when `blocks` hits 0.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DeflectorOrb {
+    pub blocks: u32,
+    pub phase: f32,
+}
+
+/// Deflector-orb orbit radius (spec III.4: r=45).
+pub const DEFLECTOR_RADIUS: f32 = 45.0;
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

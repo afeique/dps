@@ -1100,6 +1100,52 @@ fn repair_nanites_regen_then_expires() {
     assert!(world.get::<Health>(player).unwrap().current <= 40.0, "heal capped at max");
 }
 
+// ── 29. deflector_orb_blocks_enemy_bullets ────────────────────────────────────
+
+/// A Deflector Orb absorbs overlapping enemy bullets, spending one block each,
+/// and pops at 0 blocks (spec III.4).
+#[test]
+fn deflector_orb_blocks_enemy_bullets() {
+    use crate::components::DeflectorOrb;
+    use crate::systems::skills::deflector_blocks;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let orb = world
+        .spawn((
+            DeflectorOrb { blocks: 2, phase: 0.0 },
+            Collider { radius: 8.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    let bullet = world
+        .spawn((
+            Bullet { kind: BulletKind::Enemy, damage: 5.0, pierce: 0 },
+            Collider { radius: 4.0 },
+            Faction::Enemy,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(deflector_blocks);
+    step.run(world);
+
+    assert!(world.get::<Bullet>(bullet).is_none(), "enemy bullet absorbed");
+    assert_eq!(world.get::<DeflectorOrb>(orb).unwrap().blocks, 1, "one block spent");
+
+    // A second bullet spends the last block and pops the orb.
+    world.spawn((
+        Bullet { kind: BulletKind::Enemy, damage: 5.0, pierce: 0 },
+        Collider { radius: 4.0 },
+        Faction::Enemy,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    step.run(world);
+    assert!(world.get::<DeflectorOrb>(orb).is_none(), "orb pops at 0 blocks");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other
