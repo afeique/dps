@@ -394,3 +394,52 @@ fn nova_ring_band_hit() {
     // Front well past the enemy.
     assert!(!nova_band_hits(center, 200.0, band, enemy, er), "front at r=200 has passed d=100");
 }
+
+// ── 9. mine_detonates_on_nearby_enemy ────────────────────────────────────────
+
+/// An armed mine detonates when an enemy is inside its trigger radius, emitting
+/// `Damage` to enemies in the blast radius and despawning itself (spec III.3).
+#[test]
+fn mine_detonates_on_nearby_enemy() {
+    use crate::systems::power_weapon::{lay_mine, update_mines, Mine};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Enemy 40 px from the mine (inside the 60 px trigger).
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(5.0),
+        Collider { radius: 16.0 },
+        Faction::Enemy,
+        Transform::from_xyz(40.0, 0.0, 0.0),
+    ));
+    // Lay a mine at the origin via Commands (deferred), applied by a setup step.
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| lay_mine(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    // dt past the 0.6 s arm delay → armed + triggered this step.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0));
+    world.insert_resource(time);
+
+    // Count emitted Damage via a tally system (same pattern as the firing test).
+    #[derive(Resource, Default)]
+    struct DmgCount(u32);
+    world.insert_resource(DmgCount::default());
+    fn count_dmg(mut reader: MessageReader<Damage>, mut count: ResMut<DmgCount>) {
+        for _ in reader.read() {
+            count.0 += 1;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((update_mines, count_dmg).chain());
+    step.run(world);
+
+    let damages = world.resource::<DmgCount>().0;
+    assert!(damages >= 1, "mine should emit blast Damage (got {damages})");
+    let mines_left = world.query::<&Mine>().iter(world).count();
+    assert_eq!(mines_left, 0, "the mine should despawn after detonating");
+}

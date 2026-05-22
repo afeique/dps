@@ -90,6 +90,22 @@ pub struct Homing {
     pub turn_rate: f32,
 }
 
+/// A seeker mine: arms after a short delay, detonates (AoE) when an enemy
+/// enters its trigger radius or its lifetime lapses (spec III.3, simplified —
+/// no homing/magnetic pull or turret fire yet).
+#[derive(Component)]
+pub struct Mine {
+    /// Counts down to 0; the mine is inert until armed.
+    arm_timer: f32,
+    /// Enemy within this distance triggers detonation.
+    trigger_radius: f32,
+    /// Detonation damages all enemies within this distance.
+    blast_radius: f32,
+    damage: f32,
+    /// Self-detonation lifetime.
+    life: f32,
+}
+
 /// An expanding Nova Blast shockwave ring. Damages each enemy once as the ring
 /// front sweeps over it, then despawns at `max_radius` (spec III.3).
 #[derive(Component)]
@@ -145,6 +161,44 @@ pub fn charge_shape() -> Shape {
         .fill(Color::linear_rgb(0.6, 4.0, 5.0))
         .stroke((Color::linear_rgb(2.0, 9.0, 9.0), 2.0))
         .build()
+}
+
+/// A small spiky mine silhouette (HDR red so bloom gives it a warning glow).
+pub fn mine_shape() -> Shape {
+    let r = 7.0_f32;
+    let spike = 12.0_f32;
+    let mut path = ShapePath::new();
+    for i in 0..8 {
+        let a = i as f32 / 8.0 * std::f32::consts::TAU;
+        let inner = Vec2::new(a.cos() * r, a.sin() * r);
+        let mid = (a + std::f32::consts::TAU / 16.0).rem_euclid(std::f32::consts::TAU);
+        let tip = Vec2::new(mid.cos() * spike, mid.sin() * spike);
+        if i == 0 {
+            path = path.move_to(inner);
+        } else {
+            path = path.line_to(inner);
+        }
+        path = path.line_to(tip);
+    }
+    ShapeBuilder::with(&path.close())
+        .fill(Color::linear_rgb(0.4, 0.02, 0.0))
+        .stroke((Color::linear_rgb(9.0, 1.0, 0.2), 1.5))
+        .build()
+}
+
+/// Spawn a seeker mine at `pos` (used by the fire path + tests).
+pub fn lay_mine(commands: &mut Commands, pos: Vec2) {
+    commands.spawn((
+        Mine {
+            arm_timer: 0.6,
+            trigger_radius: 60.0,
+            blast_radius: 90.0,
+            damage: 30.0,
+            life: 12.0,
+        },
+        mine_shape(),
+        Transform::from_translation(pos.extend(0.4)),
+    ));
 }
 
 /// A unit-radius ring (no fill) for the Nova shockwave; scaled by the ring's
@@ -275,9 +329,12 @@ pub fn fire_power_weapon(
                 Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
             ));
         }
-        // ChargeShot (and, for now, Mine/Lance/Arc) fire one big fast piercing
-        // bolt so every power weapon does *something* while its bespoke
-        // mechanic is pending.
+        PowerWeaponKind::MineLayer => {
+            lay_mine(&mut commands, tf.translation.truncate());
+        }
+        // ChargeShot (and, for now, Lance/Arc) fire one big fast piercing bolt
+        // so every power weapon does *something* while its bespoke mechanic is
+        // pending.
         _ => {
             commands.spawn((
                 Bullet { kind: BulletKind::Player, damage: 60.0, pierce: 3 },
@@ -288,6 +345,42 @@ pub fn fire_power_weapon(
                 charge_shape(),
                 Transform::from_translation(nose.extend(1.0)),
             ));
+        }
+    }
+}
+
+/// Tick mines: arm them, detonate (AoE) on an enemy entering the trigger
+/// radius or on lifetime end, and despawn. Runs in the FixedUpdate collision
+/// group so detonation `Damage` reaches `apply_damage`.
+pub fn update_mines(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    mut mines: Query<(Entity, &mut Mine, &Transform)>,
+) {
+    let dt = time.delta_secs();
+    for (mine_e, mut mine, mtf) in &mut mines {
+        mine.arm_timer = (mine.arm_timer - dt).max(0.0);
+        mine.life -= dt;
+        let pos = mtf.translation.truncate();
+        let armed = mine.arm_timer <= 0.0;
+        if !armed {
+            continue;
+        }
+
+        let triggered = enemies
+            .iter()
+            .any(|(_, etf, ec)| etf.translation.truncate().distance(pos) <= mine.trigger_radius + ec.radius);
+
+        if triggered || mine.life <= 0.0 {
+            // Detonate: damage everything in the blast radius.
+            for (e, etf, ec) in &enemies {
+                if etf.translation.truncate().distance(pos) <= mine.blast_radius + ec.radius {
+                    dmg.write(Damage { target: e, amount: mine.damage });
+                }
+            }
+            commands.entity(mine_e).despawn();
         }
     }
 }
