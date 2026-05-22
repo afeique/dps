@@ -224,13 +224,17 @@ pub fn spawn_drops(
         ));
 
         // Point orb — per-tier boss points (spec IV.7), 2× for a mini-boss
-        // (spec V.6), or the enemy's roster value; offset off the gold orb.
+        // (spec V.6), or the enemy's roster value scaled by the V.4 points curve;
+        // offset off the gold orb.
         let points = if death.boss_tier > 0 {
             enemy::boss_points(death.boss_tier)
-        } else if death.mini_boss {
-            enemy::points(kind) * 2
         } else {
-            enemy::points(kind)
+            let base = if death.mini_boss {
+                enemy::points(kind) * 2
+            } else {
+                enemy::points(kind)
+            };
+            (base as f32 * enemy::difficulty_points_mul(wave_n)).round() as u64
         };
         commands.spawn((
             Orb { gold: 0, points, heal: 0.0 },

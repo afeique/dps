@@ -185,6 +185,25 @@ pub fn mini_boss_chance(wave: u64) -> f32 {
     }
 }
 
+/// Campaign difficulty progress for a wave: `t = (w−1)/29`, clamped to `[0,1]`.
+fn difficulty_t(wave: u64) -> f32 {
+    (((wave.max(1) - 1) as f32) / 29.0).clamp(0.0, 1.0)
+}
+
+/// Campaign-wide enemy HP multiplier by wave (spec V.4): `1 + t*8 + t^2.5*6.5`
+/// (W1 1.0× → W30 15.5×).
+pub fn difficulty_hp_mul(wave: u64) -> f32 {
+    let t = difficulty_t(wave);
+    1.0 + t * 8.0 + t.powf(2.5) * 6.5
+}
+
+/// Campaign-wide enemy point multiplier by wave (spec V.4): `1 + t^1.4*5.5`
+/// (W1 1.0× → W30 6.5×).
+pub fn difficulty_points_mul(wave: u64) -> f32 {
+    let t = difficulty_t(wave);
+    1.0 + t.powf(1.4) * 5.5
+}
+
 /// What promotion (if any) an enemy spawns with.
 #[derive(Clone, Copy)]
 enum Promo {
@@ -217,6 +236,27 @@ pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
         MINI_BOSS_SZ_MUL,
         Promo::Mini,
     );
+}
+
+/// Wave-aware spawn used by the campaign: applies the V.4 HP difficulty curve on
+/// top of the tier / mini-boss HP overlay. `mini` promotes to a mini-boss
+/// (ignoring `tier`); otherwise `tier` selects the boss overlay (0 = normal).
+pub fn spawn_for_wave(
+    commands: &mut Commands,
+    kind: EnemyKind,
+    pos: Vec2,
+    tier: u8,
+    mini: bool,
+    wave: u64,
+) {
+    let diff = difficulty_hp_mul(wave);
+    if mini {
+        spawn_enemy(commands, kind, pos, MINI_BOSS_HP_MUL * diff, MINI_BOSS_SZ_MUL, Promo::Mini);
+    } else {
+        let (hp_mul, sz_mul, _sp) = boss_tier_mul(tier);
+        let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
+        spawn_enemy(commands, kind, pos, hp_mul * diff, sz_mul, promo);
+    }
 }
 
 /// Core spawn used by all variants: build the enemy with HP/size multipliers and

@@ -353,11 +353,9 @@ fn spawn_pulse(
         for i in 0..group.count {
             wave.spawn_seq += 1;
             let pos = spawn_pos(wave.spawn_seq, bounds);
-            if promote && i == 0 {
-                enemy::spawn_mini_boss(commands, group.kind, pos);
-            } else {
-                enemy::spawn_tiered(commands, group.kind, pos, group.tier);
-            }
+            let mini = promote && i == 0;
+            // Wave-aware spawn applies the V.4 HP difficulty curve.
+            enemy::spawn_for_wave(commands, group.kind, pos, group.tier, mini, wave_n);
         }
     }
 }

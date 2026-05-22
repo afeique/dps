@@ -1366,6 +1366,33 @@ fn mini_boss_promotion() {
     assert!((col.radius - 20.0).abs() < 0.01, "radius×1.25 (got {})", col.radius);
 }
 
+// ── 37. difficulty_curve_scales_hp_and_points ─────────────────────────────────
+
+/// The V.4 difficulty curve ramps enemy HP (1× at W1 → 15.5× at W30) and points
+/// (1× → 6.5×); `spawn_for_wave` applies the HP curve at spawn.
+#[test]
+fn difficulty_curve_scales_hp_and_points() {
+    use crate::systems::enemy::{self, difficulty_hp_mul, difficulty_points_mul};
+
+    assert!((difficulty_hp_mul(1) - 1.0).abs() < 1e-4);
+    assert!((difficulty_hp_mul(30) - 15.5).abs() < 1e-3, "W30 HP ×15.5");
+    assert!(difficulty_hp_mul(15) > difficulty_hp_mul(5), "monotonic ramp");
+    assert!((difficulty_points_mul(1) - 1.0).abs() < 1e-4);
+    assert!((difficulty_points_mul(30) - 6.5).abs() < 1e-3, "W30 points ×6.5");
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut step = Schedule::default();
+    step.add_systems(|mut c: Commands| {
+        enemy::spawn_for_wave(&mut c, EnemyKind::Hunter, Vec2::ZERO, 0, false, 30)
+    });
+    step.run(world);
+    let mut q = world.query_filtered::<&Health, With<Enemy>>();
+    let hp = q.iter(world).next().expect("enemy spawned").max;
+    // Hunter base 5 × difficulty_hp_mul(30) 15.5 = 77.5.
+    assert!((hp - 5.0 * 15.5).abs() < 0.1, "W30 Hunter HP = 5×15.5 (got {hp})");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other
