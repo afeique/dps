@@ -12,7 +12,7 @@
 use crate::components::*;
 use crate::messages::Damage;
 use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
-use crate::systems::shop::{stun_chance, UpgradeId, Upgrades};
+use crate::systems::shop::{explosion_radius, stun_chance, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
@@ -29,6 +29,8 @@ pub fn bullet_hits_enemy(
     let streak_mult = streak.multiplier();
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
+    // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
+    let explode_r = explosion_radius(upgrades.owned(UpgradeId::ExplodeShot));
     for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
@@ -51,6 +53,20 @@ pub fn bullet_hits_enemy(
                 // `_STUN` trait proc: briefly stun the enemy (spec III.6).
                 if stun_p > 0.0 && rng.next_f32() < stun_p {
                     commands.entity(enemy_e).insert(Stunned { secs: 1.0 });
+                }
+                // `_EXPLODE` trait: splash the streak-scaled (no-crit) bullet
+                // damage to every other enemy within the blast radius.
+                if explode_r > 0.0 {
+                    let hit_pos = etf.translation.truncate();
+                    let splash = bullet.damage * streak_mult;
+                    for (e2, etf2, ec2) in &enemies {
+                        if e2 == enemy_e {
+                            continue;
+                        }
+                        if etf2.translation.truncate().distance(hit_pos) <= explode_r + ec2.radius {
+                            dmg.write(Damage { target: e2, amount: splash });
+                        }
+                    }
                 }
                 // Piercing bullets pass through; others die on the first hit.
                 // (One hit per frame — a fast bullet clears an enemy's radius

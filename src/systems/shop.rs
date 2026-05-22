@@ -31,11 +31,14 @@ pub enum UpgradeId {
     Piercing,
     BigShot,
     StunShot,
+    HomingShot,
+    ExplodeShot,
 }
 
 impl UpgradeId {
-    /// Display order (also the buy-menu order).
-    pub const ALL: [UpgradeId; 9] = [
+    /// Display order (also the buy-menu order). `COUNT` derives from this, so
+    /// adding a variant only means a new entry here + its match arms.
+    pub const ALL: [UpgradeId; 11] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -45,7 +48,12 @@ impl UpgradeId {
         Self::Piercing,
         Self::BigShot,
         Self::StunShot,
+        Self::HomingShot,
+        Self::ExplodeShot,
     ];
+
+    /// Total number of upgrades (sizes the `Upgrades` stack array).
+    pub const COUNT: usize = Self::ALL.len();
 
     fn idx(self) -> usize {
         match self {
@@ -58,6 +66,8 @@ impl UpgradeId {
             Self::Piercing => 6,
             Self::BigShot => 7,
             Self::StunShot => 8,
+            Self::HomingShot => 9,
+            Self::ExplodeShot => 10,
         }
     }
 
@@ -72,6 +82,8 @@ impl UpgradeId {
             Self::Piercing => "Piercing      (+1 pierce)",
             Self::BigShot => "Big Shot      (+2.2 radius)",
             Self::StunShot => "Stun Rounds   (+12% stun)",
+            Self::HomingShot => "Homing Rounds (seek enemies)",
+            Self::ExplodeShot => "Explosive     (+AoE on hit)",
         }
     }
 
@@ -87,6 +99,8 @@ impl UpgradeId {
             Self::Piercing => 1500,
             Self::BigShot => 1200,
             Self::StunShot => 1500,
+            Self::HomingShot => 1600,
+            Self::ExplodeShot => 1800,
         }
     }
 
@@ -101,6 +115,8 @@ impl UpgradeId {
             Self::Piercing => 3,
             Self::BigShot => 3,
             Self::StunShot => 3,
+            Self::HomingShot => 3,
+            Self::ExplodeShot => 3,
         }
     }
 }
@@ -111,10 +127,29 @@ pub fn stun_chance(stacks: u32) -> f32 {
     0.12 * stacks as f32
 }
 
+/// `_HOMING` trait turn rate (rad/sec): `min(0.4, 0.09×stacks)` rad/*frame* at
+/// the JS 60 Hz tick → ×60 for our seconds-based steering (spec III.2). 0 = off.
+pub fn homing_turn_rate(stacks: u32) -> f32 {
+    if stacks == 0 {
+        0.0
+    } else {
+        (0.09 * stacks as f32).min(0.4) * 60.0
+    }
+}
+
+/// `_EXPLODE` trait blast radius: `30 + 10×stacks` px (spec III.2). 0 = off.
+pub fn explosion_radius(stacks: u32) -> f32 {
+    if stacks == 0 {
+        0.0
+    } else {
+        30.0 + 10.0 * stacks as f32
+    }
+}
+
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
 pub struct Upgrades {
-    owned: [u32; 9],
+    owned: [u32; UpgradeId::COUNT],
 }
 
 impl Upgrades {
@@ -124,9 +159,13 @@ impl Upgrades {
     fn inc(&mut self, id: UpgradeId) {
         self.owned[id.idx()] += 1;
     }
+    /// Set an upgrade's owned stacks directly (used by tests / debug).
+    pub fn set(&mut self, id: UpgradeId, count: u32) {
+        self.owned[id.idx()] = count;
+    }
     /// Reset all stacks (called at the start of a fresh run).
     pub fn reset(&mut self) {
-        self.owned = [0; 9];
+        self.owned = [0; UpgradeId::COUNT];
     }
 }
 
@@ -302,6 +341,8 @@ fn apply_upgrade(
         | UpgradeId::RapidFire
         | UpgradeId::Piercing
         | UpgradeId::BigShot
-        | UpgradeId::StunShot => {}
+        | UpgradeId::StunShot
+        | UpgradeId::HomingShot
+        | UpgradeId::ExplodeShot => {}
     }
 }

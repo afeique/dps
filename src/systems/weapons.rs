@@ -25,7 +25,8 @@
 use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
-use crate::systems::shop::{UpgradeId, Upgrades};
+use crate::systems::power_weapon::Homing;
+use crate::systems::shop::{homing_turn_rate, UpgradeId, Upgrades};
 use bevy::prelude::*;
 use bevy_hanabi::prelude::ParticleEffect;
 
@@ -241,9 +242,11 @@ pub fn spawn_bullets(
     mut fire: MessageReader<Fire>,
 ) {
     let pst = stats(cur.0);
-    // Live primary-weapon traits (spec III.2): +1 pierce / +2.2 px radius per stack.
+    // Live primary-weapon traits (spec III.2): +1 pierce / +2.2 px radius per stack
+    // / homing (steered by power_weapon::homing_steer toward the nearest enemy).
     let player_pierce = pst.pierce + upgrades.owned(UpgradeId::Piercing);
     let player_radius = pst.radius + 2.2 * upgrades.owned(UpgradeId::BigShot) as f32;
+    let player_homing = homing_turn_rate(upgrades.owned(UpgradeId::HomingShot));
     for shot in fire.read() {
         let (kind, radius, pierce, body, life) = match shot.faction {
             Faction::Player => (BulletKind::Player, player_radius, player_pierce, assets.player_body.clone(), 1.5),
@@ -272,6 +275,10 @@ pub fn spawn_bullets(
                 ));
                 b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
+            // `_HOMING` trait: tag the bullet so homing_steer curves it.
+            if player_homing > 0.0 {
+                bullet.insert(Homing { turn_rate: player_homing });
+            }
         }
     }
 }

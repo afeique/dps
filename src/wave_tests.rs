@@ -738,3 +738,71 @@ fn burning_dots_then_expires() {
     step.run(world);
     assert!(world.get::<Burning>(e).is_none(), "burn expires");
 }
+
+// ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
+
+/// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,
+/// 0.09×stacks)×60, off at 0; explode radius = 30 + 10×stacks, off at 0.
+#[test]
+fn weapon_trait_homing_explode_helpers() {
+    use crate::systems::shop::{explosion_radius, homing_turn_rate};
+
+    assert_eq!(homing_turn_rate(0), 0.0);
+    assert!((homing_turn_rate(1) - 0.09 * 60.0).abs() < 1e-4);
+    assert!((homing_turn_rate(10) - 0.4 * 60.0).abs() < 1e-4, "capped at 0.4 rad/frame");
+
+    assert_eq!(explosion_radius(0), 0.0);
+    assert_eq!(explosion_radius(1), 40.0);
+    assert_eq!(explosion_radius(3), 60.0);
+}
+
+// ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
+
+/// An explosive player bullet damages the enemy it hits *and* splashes other
+/// enemies within the blast radius, but not those outside it (spec III.2).
+#[test]
+fn explosive_bullet_splashes_nearby() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    let mut app = test_app();
+    // One explode stack → blast radius 40.
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::ExplodeShot, 1);
+    let world = app.world_mut();
+
+    let spawn_enemy = |world: &mut World, x: f32| -> Entity {
+        world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(100.0),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(x, 0.0, 0.0),
+            ))
+            .id()
+    };
+    let primary = spawn_enemy(world, 0.0);
+    let near = spawn_enemy(world, 30.0); // within 40 + radius
+    let far = spawn_enemy(world, 200.0); // well outside
+
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 5.0, pierce: 0 },
+        Collider { radius: 3.0 },
+        Faction::Player,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((bullet_hits_enemy, apply_damage).chain());
+    step.run(world);
+
+    assert!(world.get::<Health>(primary).unwrap().current < 100.0, "primary hit");
+    assert!(world.get::<Health>(near).unwrap().current < 100.0, "nearby enemy splashed");
+    assert_eq!(
+        world.get::<Health>(far).unwrap().current,
+        100.0,
+        "distant enemy is outside the blast"
+    );
+}
