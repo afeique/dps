@@ -18,7 +18,7 @@ pub fn spawn_player(mut commands: Commands) {
             // Spec II.2 player model: base max HP 40, one spare health tank
             // (total effective lives 2), shield = 15% flat damage reduction.
             Health::new(40.0),
-            Lives { count: 1 },
+            Lives { count: 1, progress: 0.0 },
             Shield {
                 reduction: BASE_SHIELD_REDUCTION,
             },

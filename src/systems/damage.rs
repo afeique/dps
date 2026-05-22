@@ -14,6 +14,7 @@
 
 use crate::components::{
     Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, BULWARK_RESIST,
+    MAX_TANKS, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{GameRng, KillStreak, Score};
@@ -153,6 +154,30 @@ pub fn tick_invulnerability(
 pub fn tick_streak(time: Res<Time>, mut streak: ResMut<KillStreak>) {
     if streak.timer > 0.0 {
         streak.timer = (streak.timer - time.delta_secs()).max(0.0);
+    }
+}
+
+/// Convert player overheal (HP above max) into spare-tank progress (spec II.2):
+/// `TANK_OVERFLOW_HP` (40) of overheal = 1 tank, up to `MAX_TANKS`; then clamp
+/// HP back to max. Heal sites over-fill freely and this is the single converter.
+pub fn overheal_to_tanks(mut player: Query<(&mut Health, &mut Lives), With<Ship>>) {
+    let Ok((mut hp, mut lives)) = player.single_mut() else {
+        return;
+    };
+    if hp.current <= hp.max {
+        return;
+    }
+    let excess = hp.current - hp.max;
+    hp.current = hp.max;
+    if lives.count < MAX_TANKS {
+        lives.progress += excess / TANK_OVERFLOW_HP;
+        while lives.progress >= 1.0 && lives.count < MAX_TANKS {
+            lives.count += 1;
+            lives.progress -= 1.0;
+        }
+        if lives.count >= MAX_TANKS {
+            lives.progress = 0.0; // at cap — no unbounded accumulation
+        }
     }
 }
 

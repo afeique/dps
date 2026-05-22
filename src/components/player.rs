@@ -11,7 +11,15 @@ use bevy::prelude::*;
 #[derive(Component, Debug)]
 pub struct Lives {
     pub count: u32,
+    /// Overheal credit toward the next tank (spec II.2): each full `1.0`
+    /// (`TANK_OVERFLOW_HP = 40` overheal) grants +1 tank up to the cap.
+    pub progress: f32,
 }
+
+/// Spare-tank cap (spec II.2 `MAX_HEALTH_TANKS`).
+pub const MAX_TANKS: u32 = 3;
+/// Overheal HP that equals one tank of progress (spec II.2 `TANK_OVERFLOW_HP`).
+pub const TANK_OVERFLOW_HP: f32 = 40.0;
 
 /// Base shield damage-reduction (spec II.2: 15%).
 pub const BASE_SHIELD_REDUCTION: f32 = 0.15;

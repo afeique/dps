@@ -60,9 +60,10 @@ pub fn bullet_hits_enemy(
                     amount,
                 });
                 // VAMPIRISM: heal the player for a fraction of the damage dealt.
+                // (Over-fill allowed; overheal_to_tanks converts the overflow.)
                 if vamp > 0.0 {
                     if let Ok(mut hp) = player_hp.single_mut() {
-                        hp.current = (hp.current + amount * vamp).min(hp.max);
+                        hp.current += amount * vamp;
                     }
                 }
                 // Landing a hit charges the power-weapon energy meter (spec III.3).

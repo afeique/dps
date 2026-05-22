@@ -236,7 +236,8 @@ pub fn tick_repair(
 ) {
     let dt = time.delta_secs();
     for (e, mut hp, mut rep) in &mut q {
-        hp.current = (hp.current + rep.rate * dt).min(hp.max);
+        // Over-fill allowed; overheal_to_tanks converts the overflow (spec II.2).
+        hp.current += rep.rate * dt;
         rep.seconds -= dt;
         if rep.seconds <= 0.0 {
             commands.entity(e).remove::<Repairing>();

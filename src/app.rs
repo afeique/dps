@@ -258,6 +258,8 @@ impl Plugin for GamePlugin {
                     systems::skills::tick_bulwark,
                     systems::skills::tick_repair,
                     systems::skills::tick_tractor,
+                    // Convert any overheal (from orbs/vampirism/repair) → tanks.
+                    systems::damage::overheal_to_tanks,
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,

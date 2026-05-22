@@ -327,7 +327,9 @@ pub fn collect_orbs(
             score.gold = score.gold.saturating_add(orb.gold);
             score.points = score.points.saturating_add(orb.points);
             if orb.heal > 0.0 {
-                hp.current = (hp.current + orb.heal).min(hp.max);
+                // Over-fill allowed; `damage::overheal_to_tanks` converts the
+                // overflow into tank progress + clamps (spec II.2).
+                hp.current += orb.heal;
             }
             commands.entity(orb_e).despawn();
         }

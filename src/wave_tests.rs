@@ -1525,6 +1525,41 @@ fn boss_pair_rage_links_survivors() {
     );
 }
 
+// ── 42. overheal_converts_to_tanks ────────────────────────────────────────────
+
+/// Overheal above max HP accumulates toward a spare tank — 40 overheal = 1 tank
+/// (spec II.2) — then HP clamps to max.
+#[test]
+fn overheal_converts_to_tanks() {
+    use crate::components::Lives;
+    use crate::systems::damage::overheal_to_tanks;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let p = world
+        .spawn((
+            Ship::default(),
+            Health { current: 44.0, max: 40.0 }, // 4 overheal
+            Lives { count: 1, progress: 0.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    let mut step = Schedule::default();
+    step.add_systems(overheal_to_tanks);
+    step.run(world);
+
+    assert!((world.get::<Health>(p).unwrap().current - 40.0).abs() < 1e-4, "HP clamped");
+    assert_eq!(world.get::<Lives>(p).unwrap().count, 1, "no new tank from 4 overheal");
+    assert!((world.get::<Lives>(p).unwrap().progress - 0.1).abs() < 1e-4, "progress 4/40");
+
+    // 40 more overheal → +1 tank (progress 0.1 + 1.0 − 1.0 = 0.1).
+    world.get_mut::<Health>(p).unwrap().current = 80.0;
+    step.run(world);
+    assert_eq!(world.get::<Lives>(p).unwrap().count, 2, "40 overheal grants a tank");
+    assert!((world.get::<Lives>(p).unwrap().progress - 0.1).abs() < 1e-4, "leftover progress");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other
