@@ -14,8 +14,9 @@
 
 use crate::components::{Boss, Enemy, Health, Invulnerable, Lives, Shield, Ship};
 use crate::messages::{Damage, Death};
-use crate::resources::{KillStreak, Score};
+use crate::resources::{GameRng, KillStreak, Score};
 use crate::states::GameState;
+use crate::systems::shop::{dodge_chance, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
 pub fn apply_damage(
@@ -24,6 +25,8 @@ pub fn apply_damage(
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
     mut streak: ResMut<KillStreak>,
+    mut rng: ResMut<GameRng>,
+    upgrades: Res<Upgrades>,
     mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
         &mut Health,
@@ -46,8 +49,14 @@ pub fn apply_damage(
             continue; // deliberate i-frames (dash / shield-burst) — eat the hit
         }
 
-        // Any landed hit on the player breaks the kill streak (spec III.6).
         if is_player {
+            // DODGE: chance to ignore the hit entirely — no damage, no streak
+            // break (spec II.2 step 3 / III.5).
+            let dodge = dodge_chance(upgrades.owned(UpgradeId::Dodge));
+            if dodge > 0.0 && rng.next_f32() < dodge {
+                continue;
+            }
+            // Any landed hit on the player breaks the kill streak (spec III.6).
             streak.break_streak();
         }
 

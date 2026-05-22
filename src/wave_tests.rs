@@ -787,6 +787,97 @@ fn knockback_shoves_target() {
     assert!((x - 26.0).abs() < 1e-4, "target shoved +16 px on x (got {x})");
 }
 
+// ── 22. vampirism_heals_on_hit ────────────────────────────────────────────────
+
+/// VAMPIRISM: a player bullet hit heals the ship for a fraction of the damage
+/// dealt (spec III.5). Pure helpers checked alongside.
+#[test]
+fn vampirism_heals_on_hit() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{dodge_chance, vampirism_frac, UpgradeId, Upgrades};
+
+    assert_eq!(vampirism_frac(0), 0.0);
+    assert!((vampirism_frac(5) - 0.25).abs() < 1e-5);
+    assert_eq!(dodge_chance(0), 0.0);
+    assert!((dodge_chance(20) - 0.5).abs() < 1e-5, "dodge caps at 0.5");
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::Vampirism, 5); // 25% lifesteal
+    let world = app.world_mut();
+
+    // Hurt player (well below max) so the heal is observable.
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 10.0, max: 40.0 },
+            Collider { radius: 16.0 },
+            Faction::Player,
+            Transform::from_xyz(500.0, 0.0, 0.0), // far from the enemy
+        ))
+        .id();
+    // Enemy + overlapping player bullet at the origin.
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(100.0),
+        Collider { radius: 16.0 },
+        Faction::Enemy,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+        Collider { radius: 3.0 },
+        Faction::Player,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((bullet_hits_enemy, apply_damage).chain());
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!(hp > 10.0, "vampirism should heal the player on a hit (hp now {hp})");
+}
+
+// ── 23. dodge_ignores_about_half ──────────────────────────────────────────────
+
+/// DODGE: with 10 stacks (50% chance), roughly half of many incoming hits are
+/// ignored entirely (spec III.5). Seeded RNG → deterministic count.
+#[test]
+fn dodge_ignores_about_half() {
+    use crate::systems::damage::apply_damage;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::Dodge, 10); // 50% dodge
+    let world = app.world_mut();
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 10000.0, max: 10000.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    // 1000 one-damage hits; ~half should be dodged.
+    for _ in 0..1000 {
+        world.write_message(Damage { target: player, amount: 1.0 });
+    }
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    let lost = 10000.0 - world.get::<Health>(player).unwrap().current;
+    assert!(
+        (350.0..650.0).contains(&lost),
+        "≈half of 1000 hits should land with 50% dodge (got {lost})"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

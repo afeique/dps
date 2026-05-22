@@ -12,7 +12,9 @@
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
-use crate::systems::shop::{explosion_radius, knock_chance, stun_chance, UpgradeId, Upgrades, KNOCK_PX};
+use crate::systems::shop::{
+    explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId, Upgrades, KNOCK_PX,
+};
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
@@ -25,9 +27,12 @@ pub fn bullet_hits_enemy(
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    mut player_hp: Query<&mut Health, With<Ship>>,
 ) {
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
     let streak_mult = streak.multiplier();
+    // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5).
+    let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism));
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
@@ -51,6 +56,12 @@ pub fn bullet_hits_enemy(
                     target: enemy_e,
                     amount,
                 });
+                // VAMPIRISM: heal the player for a fraction of the damage dealt.
+                if vamp > 0.0 {
+                    if let Ok(mut hp) = player_hp.single_mut() {
+                        hp.current = (hp.current + amount * vamp).min(hp.max);
+                    }
+                }
                 // Landing a hit charges the power-weapon energy meter (spec III.3).
                 energy.gain(ENERGY_PER_HIT);
                 // `_STUN` trait proc: briefly stun the enemy (spec III.6).

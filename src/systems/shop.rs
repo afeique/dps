@@ -34,12 +34,14 @@ pub enum UpgradeId {
     HomingShot,
     ExplodeShot,
     KnockShot,
+    Vampirism,
+    Dodge,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 12] = [
+    pub const ALL: [UpgradeId; 14] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -52,6 +54,8 @@ impl UpgradeId {
         Self::HomingShot,
         Self::ExplodeShot,
         Self::KnockShot,
+        Self::Vampirism,
+        Self::Dodge,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -71,6 +75,8 @@ impl UpgradeId {
             Self::HomingShot => 9,
             Self::ExplodeShot => 10,
             Self::KnockShot => 11,
+            Self::Vampirism => 12,
+            Self::Dodge => 13,
         }
     }
 
@@ -88,6 +94,8 @@ impl UpgradeId {
             Self::HomingShot => "Homing Rounds (seek enemies)",
             Self::ExplodeShot => "Explosive     (+AoE on hit)",
             Self::KnockShot => "Knockback     (+15% shove)",
+            Self::Vampirism => "Vampirism     (heal 5% dealt)",
+            Self::Dodge => "Dodge         (+5% evade)",
         }
     }
 
@@ -106,6 +114,8 @@ impl UpgradeId {
             Self::HomingShot => 1600,
             Self::ExplodeShot => 1800,
             Self::KnockShot => 1300,
+            Self::Vampirism => 2500,
+            Self::Dodge => 1800,
         }
     }
 
@@ -123,6 +133,8 @@ impl UpgradeId {
             Self::HomingShot => 3,
             Self::ExplodeShot => 3,
             Self::KnockShot => 3,
+            Self::Vampirism => 5,
+            Self::Dodge => 10,
         }
     }
 }
@@ -160,6 +172,16 @@ pub fn knock_chance(stacks: u32) -> f32 {
 
 /// Flat positional shove distance for a `_KNOCK` proc (spec III.6).
 pub const KNOCK_PX: f32 = 16.0;
+
+/// VAMPIRISM passive: heal `0.05 × stacks` of damage dealt (spec III.5, ×5).
+pub fn vampirism_frac(stacks: u32) -> f32 {
+    0.05 * stacks as f32
+}
+
+/// DODGE passive: chance to ignore a hit, `min(0.5, 0.05 × stacks)` (spec III.5/II.2).
+pub fn dodge_chance(stacks: u32) -> f32 {
+    (0.05 * stacks as f32).min(0.5)
+}
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
@@ -359,6 +381,8 @@ fn apply_upgrade(
         | UpgradeId::StunShot
         | UpgradeId::HomingShot
         | UpgradeId::ExplodeShot
-        | UpgradeId::KnockShot => {}
+        | UpgradeId::KnockShot
+        | UpgradeId::Vampirism
+        | UpgradeId::Dodge => {}
     }
 }
