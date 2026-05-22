@@ -22,6 +22,8 @@ pub struct TitleScreen;
 pub struct GameOverScreen;
 #[derive(Component)]
 pub struct GameCompleteScreen;
+#[derive(Component)]
+pub struct PausedScreen;
 
 // ── Overlay builder ──────────────────────────────────────────────────────────
 
@@ -185,5 +187,31 @@ pub fn game_complete_input(
 ) {
     if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space) {
         next.set(GameState::Title);
+    }
+}
+
+// ── Pause ──────────────────────────────────────────────────────────────────
+
+/// **P** / Esc while playing pauses (the sim is gated to `Playing`, so it halts).
+pub fn open_pause(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.just_pressed(KeyCode::KeyP) || keys.just_pressed(KeyCode::Escape) {
+        next.set(GameState::Paused);
+    }
+}
+
+pub fn enter_paused(mut commands: Commands) {
+    spawn_overlay(
+        &mut commands,
+        PausedScreen,
+        "PAUSED",
+        "Press P to resume",
+        Color::srgb(0.7, 0.85, 1.0),
+    );
+}
+
+/// **P** / Esc resumes from the pause overlay.
+pub fn pause_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
+    if keys.just_pressed(KeyCode::KeyP) || keys.just_pressed(KeyCode::Escape) {
+        next.set(GameState::Playing);
     }
 }

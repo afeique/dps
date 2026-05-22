@@ -6,6 +6,7 @@
 //! `js/modules/render/shapes.js`, and adds the particle/bullet pipelines.
 
 pub mod bullets;
+pub mod cursor;
 pub mod explosion;
 pub mod hud;
 pub mod nebula;

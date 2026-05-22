@@ -58,6 +58,7 @@ impl Plugin for GamePlugin {
                     render::starfield::spawn_starfield,
                     render::nebula::spawn_nebula,
                     render::hud::setup_hud,
+                    render::cursor::spawn_crosshair,
                     audio::setup_sfx,
                 ),
             )
@@ -70,6 +71,7 @@ impl Plugin for GamePlugin {
                     render::starfield::parallax_stars,
                     render::nebula::parallax_nebula,
                     render::hud::update_hud,
+                    render::cursor::update_crosshair,
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,
@@ -114,8 +116,19 @@ impl Plugin for GamePlugin {
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,
                     systems::shop::open_shop,
+                    systems::flow::open_pause,
                 )
                     .run_if(in_state(GameState::Playing)),
+            )
+            // ── pause overlay ───────────────────────────────────────────
+            .add_systems(OnEnter(GameState::Paused), systems::flow::enter_paused)
+            .add_systems(
+                OnExit(GameState::Paused),
+                systems::flow::despawn_screen::<systems::flow::PausedScreen>,
+            )
+            .add_systems(
+                Update,
+                systems::flow::pause_input.run_if(in_state(GameState::Paused)),
             )
             // ── death → GameOver → title flow ───────────────────────────
             .add_systems(OnEnter(GameState::GameOver), systems::flow::enter_game_over)
