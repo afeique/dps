@@ -202,8 +202,15 @@ pub fn spawn_drops(
         let base_z = 0.5_f32;
 
         // Gold orb — value scales with wave × Gold Find × streak × drop profile;
-        // the resulting tier sets its tint + scale.
-        let profile = enemy::drop_budget_mul(kind, death.boss_tier > 0);
+        // the resulting tier sets its tint + scale. Bosses use the 2.4× budget,
+        // mini-bosses the 1.8× miniboss budget (spec VI.5).
+        let profile = if death.boss_tier > 0 {
+            enemy::drop_budget_mul(kind, true)
+        } else if death.mini_boss {
+            1.8
+        } else {
+            enemy::drop_budget_mul(kind, false)
+        };
         let value = gold_value(wave_n, profile, streak_gold);
         let tier = gold_tier(value);
         commands.spawn((
@@ -216,10 +223,12 @@ pub fn spawn_drops(
             Lifetime { seconds: 12.0 },
         ));
 
-        // Point orb — per-tier boss points (spec IV.7) or the enemy's roster
-        // value, offset so it doesn't stack on the gold orb.
+        // Point orb — per-tier boss points (spec IV.7), 2× for a mini-boss
+        // (spec V.6), or the enemy's roster value; offset off the gold orb.
         let points = if death.boss_tier > 0 {
             enemy::boss_points(death.boss_tier)
+        } else if death.mini_boss {
+            enemy::points(kind) * 2
         } else {
             enemy::points(kind)
         };

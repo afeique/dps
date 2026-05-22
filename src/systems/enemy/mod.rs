@@ -171,6 +171,28 @@ pub fn boss_tier_mul(tier: u8) -> (f32, f32, f32) {
     }
 }
 
+/// Mini-boss HP / size overlay (spec V.6: HP×1.7, radius×1.25).
+const MINI_BOSS_HP_MUL: f32 = 1.7;
+const MINI_BOSS_SZ_MUL: f32 = 1.25;
+
+/// Mid-wave mini-boss promotion chance for a group at `wave`
+/// (spec V.6: `min(0.45, 0.06 + (wave−4)*0.025)`, 0 below wave 4).
+pub fn mini_boss_chance(wave: u64) -> f32 {
+    if wave < 4 {
+        0.0
+    } else {
+        (0.06 + (wave - 4) as f32 * 0.025).min(0.45)
+    }
+}
+
+/// What promotion (if any) an enemy spawns with.
+#[derive(Clone, Copy)]
+enum Promo {
+    None,
+    Boss(u8),
+    Mini,
+}
+
 /// Spawn one enemy of `kind` at world position `pos` (non-boss).
 pub fn spawn(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
     spawn_tiered(commands, kind, pos, 0);
@@ -180,8 +202,34 @@ pub fn spawn(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
 /// (Speed-scaling is a follow-up — AI reads a fixed per-kind `stats().speed`,
 /// so it needs an entity-stored multiplier, tracked separately.)
 pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u8) {
-    let st = stats_for(kind);
     let (hp_mul, sz_mul, _sp_mul) = boss_tier_mul(tier);
+    let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
+    spawn_enemy(commands, kind, pos, hp_mul, sz_mul, promo);
+}
+
+/// Spawn a mid-wave **mini-boss** promotion of `kind` (spec V.6).
+pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
+    spawn_enemy(
+        commands,
+        kind,
+        pos,
+        MINI_BOSS_HP_MUL,
+        MINI_BOSS_SZ_MUL,
+        Promo::Mini,
+    );
+}
+
+/// Core spawn used by all variants: build the enemy with HP/size multipliers and
+/// the given promotion marker.
+fn spawn_enemy(
+    commands: &mut Commands,
+    kind: EnemyKind,
+    pos: Vec2,
+    hp_mul: f32,
+    sz_mul: f32,
+    promo: Promo,
+) {
+    let st = stats_for(kind);
 
     let mut e = commands.spawn((
         Enemy { kind },
@@ -194,8 +242,14 @@ pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u
         Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul)),
     ));
 
-    if tier > 0 {
-        e.insert(Boss { tier });
+    match promo {
+        Promo::Boss(tier) => {
+            e.insert(Boss { tier });
+        }
+        Promo::Mini => {
+            e.insert(MiniBoss);
+        }
+        Promo::None => {}
     }
 
     if let Some(cd) = st.fire_cooldown {

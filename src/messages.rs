@@ -38,6 +38,9 @@ pub struct Death {
     pub kind: Option<EnemyKind>,
     /// Boss tier (0 = not a boss); bumps the gold drop-profile budget.
     pub boss_tier: u8,
+    /// Was this a mid-wave mini-boss promotion (spec V.6)? → 2× points + the
+    /// miniboss gold profile.
+    pub mini_boss: bool,
 }
 
 /// The player actually took `amount` HP of damage this tick (post-shield,

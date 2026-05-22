@@ -118,7 +118,7 @@ pub fn collect_powerups(
     mut deaths: MessageWriter<Death>,
     mut player: Query<(&Transform, &Collider, &mut Health, &mut Lives), With<Ship>>,
     powerups: Query<(Entity, &Transform, &Collider, &Powerup)>,
-    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
     let Ok((ptf, pc, mut hp, mut lives)) = player.single_mut() else {
@@ -142,12 +142,13 @@ pub fn collect_powerups(
             }
             PowerupKind::Bomb => {
                 // Broadcast Death for every enemy so explosions + drops fire normally.
-                for (enemy_e, enemy_tf, enemy, boss) in &enemies {
+                for (enemy_e, enemy_tf, enemy, boss, mini_boss) in &enemies {
                     deaths.write(Death {
                         entity: enemy_e,
                         position: enemy_tf.translation.truncate(),
                         kind: Some(enemy.kind),
                         boss_tier: boss.map_or(0, |b| b.tier),
+                        mini_boss,
                     });
                     score.kills = score.kills.saturating_add(1);
                     commands.entity(enemy_e).despawn();

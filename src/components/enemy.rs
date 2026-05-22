@@ -38,6 +38,11 @@ pub struct Boss {
 #[derive(Component, Debug)]
 pub struct Raged;
 
+/// Marks a mid-wave **mini-boss** promotion (spec V.6) — a regular enemy buffed
+/// to HP×1.7 / radius×1.25, awarding 2× points on death.
+#[derive(Component, Debug)]
+pub struct MiniBoss;
+
 /// A damage-over-time burn (Lance Beam, Nova Inferno — spec III.3/III.7).
 /// `tick_burning` applies `dps × dt` each tick and removes it at `secs ≤ 0`.
 #[derive(Component, Debug, Clone, Copy)]

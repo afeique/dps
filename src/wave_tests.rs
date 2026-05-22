@@ -1339,6 +1339,33 @@ fn survivor_stage_clear_gating() {
     );
 }
 
+// ── 36. mini_boss_promotion ───────────────────────────────────────────────────
+
+/// Mini-boss promotion chance ramps from wave 4 (0 before) and caps at 0.45;
+/// a promoted spawn carries the HP×1.7 / radius×1.25 overlay + marker (spec V.6).
+#[test]
+fn mini_boss_promotion() {
+    use crate::components::MiniBoss;
+    use crate::systems::enemy::{self, mini_boss_chance};
+
+    assert_eq!(mini_boss_chance(3), 0.0, "no promotion below wave 4");
+    assert!((mini_boss_chance(4) - 0.06).abs() < 1e-5);
+    assert!((mini_boss_chance(10) - 0.21).abs() < 1e-5);
+    assert_eq!(mini_boss_chance(100), 0.45, "caps at 0.45");
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut step = Schedule::default();
+    step.add_systems(|mut c: Commands| enemy::spawn_mini_boss(&mut c, EnemyKind::Hunter, Vec2::ZERO));
+    step.run(world);
+
+    let mut q = world.query_filtered::<(&Health, &Collider, &MiniBoss), With<Enemy>>();
+    let (hp, col, _) = q.iter(world).next().expect("a mini-boss should exist");
+    // Hunter base HP 5 → ×1.7 = 8.5; radius 16 → ×1.25 = 20.
+    assert!((hp.max - 8.5).abs() < 0.01, "HP×1.7 (got {})", hp.max);
+    assert!((col.radius - 20.0).abs() < 0.01, "radius×1.25 (got {})", col.radius);
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

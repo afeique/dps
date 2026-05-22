@@ -73,7 +73,7 @@ pub fn use_skills(
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
     mut player: Query<(Entity, &mut Velocity, &Transform), With<Ship>>,
-    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
     let dt = time.delta_secs();
@@ -125,12 +125,13 @@ pub fn use_skills(
     // Clear the field: emit Death for every enemy (triggers FX + drops), then
     // despawn it. Also hard-despawn all enemy-faction bullets immediately.
     if (keys.just_pressed(KeyCode::KeyX) || bomb_btn) && skills.bomb_cd <= 0.0 {
-        for (enemy_entity, enemy_tf, enemy, boss) in &enemies {
+        for (enemy_entity, enemy_tf, enemy, boss, mini_boss) in &enemies {
             deaths.write(Death {
                 entity: enemy_entity,
                 position: enemy_tf.translation.truncate(),
                 kind: Some(enemy.kind),
                 boss_tier: boss.map_or(0, |b| b.tier),
+                mini_boss,
             });
             score.kills += 1;
             commands.entity(enemy_entity).despawn();

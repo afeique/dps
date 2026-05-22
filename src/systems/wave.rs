@@ -22,7 +22,7 @@
 //! boss speed-scaling.
 
 use crate::components::{Enemy, EnemyKind};
-use crate::resources::PlayBounds;
+use crate::resources::{GameRng, PlayBounds};
 use crate::systems::enemy;
 use bevy::prelude::*;
 
@@ -324,7 +324,14 @@ pub fn spawn_pos(seq: u32, bounds: &PlayBounds) -> Vec2 {
 }
 
 /// Spawn every group in pulse `pulse_idx` of wave `wave_idx`.
-fn spawn_pulse(commands: &mut Commands, bounds: &PlayBounds, wave: &mut Wave, wave_idx: usize, pulse_idx: usize) {
+fn spawn_pulse(
+    commands: &mut Commands,
+    bounds: &PlayBounds,
+    rng: &mut GameRng,
+    wave: &mut Wave,
+    wave_idx: usize,
+    pulse_idx: usize,
+) {
     // The wave's asteroid budget spawns with its opening pulse (spec V).
     if pulse_idx == 0 {
         for _ in 0..WAVES[wave_idx].asteroids {
@@ -333,12 +340,24 @@ fn spawn_pulse(commands: &mut Commands, bounds: &PlayBounds, wave: &mut Wave, wa
         }
     }
 
+    let wave_n = (wave_idx + 1) as u64;
     let pulse = &WAVES[wave_idx].pulses[pulse_idx];
     for group in pulse.0 {
-        for _ in 0..group.count {
+        // Mid-wave mini-boss promotion (spec V.6): a non-boss, non-Titan group
+        // rolls once; on a hit, its first member spawns as a mini-boss.
+        let chance = enemy::mini_boss_chance(wave_n);
+        let promote = group.tier == 0
+            && group.kind != EnemyKind::Titan
+            && chance > 0.0
+            && rng.next_f32() < chance;
+        for i in 0..group.count {
             wave.spawn_seq += 1;
             let pos = spawn_pos(wave.spawn_seq, bounds);
-            enemy::spawn_tiered(commands, group.kind, pos, group.tier);
+            if promote && i == 0 {
+                enemy::spawn_mini_boss(commands, group.kind, pos);
+            } else {
+                enemy::spawn_tiered(commands, group.kind, pos, group.tier);
+            }
         }
     }
 }
@@ -356,6 +375,7 @@ pub fn reset(mut wave: ResMut<Wave>) {
 pub fn spawn_waves(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
+    mut rng: ResMut<GameRng>,
     enemies: Query<(), With<Enemy>>,
     mut wave: ResMut<Wave>,
     mut commands: Commands,
@@ -373,7 +393,7 @@ pub fn spawn_waves(
             return;
         }
         let idx = wave.idx;
-        spawn_pulse(&mut commands, &bounds, &mut wave, idx, 0);
+        spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, idx, 0);
         wave.spawned_pulses = 1;
         wave.pulse_timer = 0.0;
         wave.started = true;
@@ -387,7 +407,7 @@ pub fn spawn_waves(
         wave.pulse_timer += dt;
         if enemy_count <= PULSE_ADVANCE_ENEMY_THRESHOLD || wave.pulse_timer >= PULSE_STALE_SECS {
             let (idx, next) = (wave.idx, wave.spawned_pulses);
-            spawn_pulse(&mut commands, &bounds, &mut wave, idx, next);
+            spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, idx, next);
             wave.spawned_pulses += 1;
             wave.pulse_timer = 0.0;
         }

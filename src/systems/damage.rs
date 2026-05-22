@@ -13,7 +13,7 @@
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
 use crate::components::{
-    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, Shield, Ship, BULWARK_RESIST,
+    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, BULWARK_RESIST,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{GameRng, KillStreak, Score};
@@ -41,11 +41,22 @@ pub fn apply_damage(
         Option<&Enemy>,
         Option<&Boss>,
         Option<&Bulwark>,
+        Has<MiniBoss>,
     )>,
 ) {
     for ev in dmg.read() {
-        let Ok((mut hp, tf, shield, mut lives, is_player, invulnerable, enemy, boss, bulwark)) =
-            q.get_mut(ev.target)
+        let Ok((
+            mut hp,
+            tf,
+            shield,
+            mut lives,
+            is_player,
+            invulnerable,
+            enemy,
+            boss,
+            bulwark,
+            mini_boss,
+        )) = q.get_mut(ev.target)
         else {
             continue; // target already gone this tick
         };
@@ -100,6 +111,7 @@ pub fn apply_damage(
                     position,
                     kind: None,
                     boss_tier: 0,
+                    mini_boss: false,
                 });
                 next_state.set(GameState::GameOver);
                 commands.entity(ev.target).despawn();
@@ -109,6 +121,7 @@ pub fn apply_damage(
                     position,
                     kind: enemy.map(|e| e.kind),
                     boss_tier: boss.map_or(0, |b| b.tier),
+                    mini_boss,
                 });
                 score.kills += 1;
                 streak.on_kill();
