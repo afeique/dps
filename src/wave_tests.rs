@@ -41,6 +41,7 @@ fn test_app() -> App {
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
+        .init_resource::<crate::resources::LastStandUsed>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }
@@ -1613,6 +1614,40 @@ fn stage_label_mapping() {
     assert_eq!(stage_label(3), "1-3");
     assert_eq!(stage_label(4), "2-1");
     assert_eq!(stage_label(30), "10-3");
+}
+
+// ── 45. last_stand_survives_one_lethal_hit ────────────────────────────────────
+
+/// Last Stand lets the player survive one lethal hit per run at 1 HP + invuln
+/// (spec III.5).
+#[test]
+fn last_stand_survives_one_lethal_hit() {
+    use crate::components::Invulnerable;
+    use crate::messages::Damage;
+    use crate::resources::LastStandUsed;
+    use crate::systems::damage::apply_damage;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::LastStand, 1);
+    let world = app.world_mut();
+
+    // No Lives → without Last Stand, a lethal hit would end the run.
+    let p = world
+        .spawn((Ship::default(), Health { current: 5.0, max: 40.0 }, Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+    world.write_message(Damage { target: p, amount: 100.0 });
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    assert!(world.get::<Health>(p).is_some(), "Last Stand: player survives");
+    assert!((world.get::<Health>(p).unwrap().current - 1.0).abs() < 1e-4, "clamped to 1 HP");
+    assert!(world.get::<Invulnerable>(p).is_some(), "grants invuln");
+    assert!(world.resource::<LastStandUsed>().0, "Last Stand consumed");
 }
 
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────

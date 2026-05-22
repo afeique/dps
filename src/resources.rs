@@ -79,6 +79,10 @@ impl KillStreak {
 #[derive(Resource, Default)]
 pub struct DamageClock(pub f32);
 
+/// Whether the once-per-run Last Stand has been spent this run (spec III.5).
+#[derive(Resource, Default)]
+pub struct LastStandUsed(pub bool);
+
 /// Power-weapon energy (spec III.3, 6.29.0): built by landing hits (+4 each,
 /// `ENERGY_PER_HIT`), capped at `ENERGY_MAX`, spent to fire power weapons,
 /// reset to 0 each run.

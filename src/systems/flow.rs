@@ -110,12 +110,14 @@ pub fn reset_run(
     mut upgrades: ResMut<crate::systems::shop::Upgrades>,
     mut health_cd: ResMut<crate::systems::drops::HealthDropTimer>,
     mut dmg_clock: ResMut<crate::resources::DamageClock>,
+    mut last_stand: ResMut<crate::resources::LastStandUsed>,
 ) {
     *score = Score::default();
     streak.break_streak();
     upgrades.reset();
     health_cd.timer = 0.0;
     dmg_clock.0 = 0.0;
+    last_stand.0 = false;
 }
 
 // ── Game over ────────────────────────────────────────────────────────────────

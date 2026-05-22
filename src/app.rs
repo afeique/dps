@@ -35,6 +35,7 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::resources::GameRng>()
             .init_resource::<crate::resources::EnergyMeter>()
             .init_resource::<crate::resources::DamageClock>()
+            .init_resource::<crate::resources::LastStandUsed>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::power_weapon::PowerWeapon>()

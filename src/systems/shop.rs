@@ -40,12 +40,13 @@ pub enum UpgradeId {
     CritDamage,
     Thorns,
     Regen,
+    LastStand,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 18] = [
+    pub const ALL: [UpgradeId; 19] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -64,6 +65,7 @@ impl UpgradeId {
         Self::CritDamage,
         Self::Thorns,
         Self::Regen,
+        Self::LastStand,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -89,6 +91,7 @@ impl UpgradeId {
             Self::CritDamage => 15,
             Self::Thorns => 16,
             Self::Regen => 17,
+            Self::LastStand => 18,
         }
     }
 
@@ -112,6 +115,7 @@ impl UpgradeId {
             Self::CritDamage => "Crit Damage   (+15%)",
             Self::Thorns => "Thorns        (reflect 25%)",
             Self::Regen => "Repair Field  (+0.5 HP/s)",
+            Self::LastStand => "Last Stand    (cheat death 1x)",
         }
     }
 
@@ -136,6 +140,7 @@ impl UpgradeId {
             Self::CritDamage => 2000,
             Self::Thorns => 2200,
             Self::Regen => 2400,
+            Self::LastStand => 8000,
         }
     }
 
@@ -159,6 +164,7 @@ impl UpgradeId {
             Self::CritDamage => 6,
             Self::Thorns => 4,
             Self::Regen => 6,
+            Self::LastStand => 1,
         }
     }
 }
@@ -427,6 +433,7 @@ pub fn apply_upgrade(
         | UpgradeId::CritChance
         | UpgradeId::CritDamage
         | UpgradeId::Thorns
-        | UpgradeId::Regen => {}
+        | UpgradeId::Regen
+        | UpgradeId::LastStand => {}
     }
 }

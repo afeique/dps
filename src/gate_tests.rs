@@ -32,6 +32,7 @@ fn test_app() -> App {
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
+        .init_resource::<crate::resources::LastStandUsed>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }

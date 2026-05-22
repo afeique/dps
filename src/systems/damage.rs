@@ -17,7 +17,7 @@ use crate::components::{
     MAX_TANKS, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
-use crate::resources::{DamageClock, GameRng, KillStreak, Score};
+use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
 use crate::states::GameState;
 use crate::systems::shop::{dodge_chance, regen_rate, thorns_frac, UpgradeId, Upgrades, REGEN_DELAY};
 use bevy::prelude::*;
@@ -31,6 +31,7 @@ pub fn apply_damage(
     mut streak: ResMut<KillStreak>,
     mut rng: ResMut<GameRng>,
     upgrades: Res<Upgrades>,
+    mut last_stand: ResMut<LastStandUsed>,
     mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
         &mut Health,
@@ -100,6 +101,16 @@ pub fn apply_damage(
         if hp.current <= 0.0 {
             let position = tf.translation.truncate();
             if is_player {
+                // Last Stand: cheat death once per run — clamp to 1 HP + a 2.5 s
+                // invuln window (spec III.5, before tank/death).
+                if upgrades.owned(UpgradeId::LastStand) > 0 && !last_stand.0 {
+                    last_stand.0 = true;
+                    hp.current = 1.0;
+                    commands
+                        .entity(ev.target)
+                        .insert(Invulnerable { seconds: 2.5 });
+                    continue;
+                }
                 // Spare health tank? Refill HP *in place* — no respawn delay and
                 // NO invulnerability (spec II.2) — instead of ending the run.
                 if let Some(l) = lives.as_mut().filter(|l| l.count > 0) {
