@@ -176,6 +176,7 @@ impl Plugin for GamePlugin {
                         systems::enemy::sentinel::ai,
                         systems::enemy::tangerine::ai,
                         systems::enemy::titan::ai,
+                        systems::enemy::boss_rage,
                         systems::power_weapon::homing_steer,
                     )
                         .chain(),

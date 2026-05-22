@@ -633,3 +633,51 @@ fn health_orb_rate_and_heal() {
     assert_eq!(health_orb_heal(1, 1.0), 8.0);
     assert!(health_orb_heal(10, 0.5) > health_orb_heal(1, 0.5));
 }
+
+// ── 16. boss_rages_at_one_third_hp ────────────────────────────────────────────
+
+/// A boss at ≤33% HP rages once (spec IV.7): gains the `Raged` marker + an
+/// invuln window, has its fire cooldown cut ×0.66, and fires a 16-bullet tantrum.
+#[test]
+fn boss_rages_at_one_third_hp() {
+    use crate::components::{Boss, Raged};
+    use crate::systems::enemy::boss_rage;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let boss = world
+        .spawn((
+            Enemy { kind: EnemyKind::Titan },
+            Boss { tier: 1 },
+            Health { current: 24.0, max: 80.0 }, // 30% < 33% → rage
+            FireCooldown { cooldown: 2.0, timer: 1.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    #[derive(Resource, Default)]
+    struct FireCount(u32);
+    world.insert_resource(FireCount::default());
+    fn count(mut r: MessageReader<Fire>, mut c: ResMut<FireCount>) {
+        for _ in r.read() {
+            c.0 += 1;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((boss_rage, count).chain());
+    step.run(world);
+
+    assert!(world.get::<Raged>(boss).is_some(), "boss should rage at ≤33% HP");
+    assert!(
+        world.get::<Invulnerable>(boss).is_some(),
+        "rage grants an invuln window"
+    );
+    assert!(
+        world.resource::<FireCount>().0 >= 16,
+        "rage fires a 16-bullet tantrum"
+    );
+    let cd = world.get::<FireCooldown>(boss).unwrap().cooldown;
+    assert!((cd - 2.0 * 0.66).abs() < 0.01, "fire cooldown cut ×0.66 (got {cd})");
+}

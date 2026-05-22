@@ -20,6 +20,7 @@ pub mod wasp;
 pub mod weaver;
 
 use crate::components::*;
+use crate::messages::Fire;
 use crate::render::shapes;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::Shape;
@@ -68,6 +69,48 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
             speed: 60.0,
             fire_cooldown: Some(1.4),
         },
+    }
+}
+
+/// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% of
+/// its max HP it rages — a 1.5 s invulnerability window, a permanent ×0.66 fire
+/// cooldown, and an immediate 16-bullet circular tantrum. (Deferred from the
+/// spec: the 24-frame telegraph, homing bullets, screen flash/shake, the red
+/// aura, and the per-tier pair/formation links.)
+pub fn boss_rage(
+    mut commands: Commands,
+    mut fire: MessageWriter<Fire>,
+    mut bosses: Query<
+        (Entity, &Transform, &Health, Option<&mut FireCooldown>),
+        (With<Boss>, Without<Raged>),
+    >,
+) {
+    for (e, tf, hp, fc) in &mut bosses {
+        if hp.current > hp.max * 0.33 {
+            continue;
+        }
+        // Activate rage once.
+        commands
+            .entity(e)
+            .insert(Raged)
+            .insert(Invulnerable { seconds: 1.5 });
+        if let Some(mut fc) = fc {
+            fc.cooldown *= 0.66;
+            fc.timer = 0.0; // fire again immediately
+        }
+        // 16-bullet circular tantrum.
+        let pos = tf.translation.truncate();
+        for i in 0..16 {
+            let a = i as f32 / 16.0 * std::f32::consts::TAU;
+            let dir = Vec2::new(a.cos(), a.sin());
+            fire.write(Fire {
+                origin: pos + dir * 24.0,
+                dir,
+                damage: 3.0,
+                speed: 280.0,
+                faction: Faction::Enemy,
+            });
+        }
     }
 }
 

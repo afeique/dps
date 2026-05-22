@@ -33,6 +33,11 @@ pub struct Boss {
     pub tier: u8,
 }
 
+/// Marks a boss that has crossed its HP-threshold rage (spec IV.7) — a one-shot
+/// gate so `boss_rage` activates rage exactly once.
+#[derive(Component, Debug)]
+pub struct Raged;
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]
