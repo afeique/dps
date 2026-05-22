@@ -1060,6 +1060,46 @@ fn bulwark_halves_player_damage() {
     assert!((hp - 950.0).abs() < 1e-3, "Bulwark halves 100 → 50 (hp now {hp})");
 }
 
+// ── 28. repair_nanites_regen_then_expires ─────────────────────────────────────
+
+/// Repair Nanites regenerates HP over its window (capped at max) and then
+/// removes itself (spec III.4).
+#[test]
+fn repair_nanites_regen_then_expires() {
+    use crate::components::Repairing;
+    use crate::systems::skills::tick_repair;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 10.0, max: 40.0 },
+            Repairing { seconds: 5.0, rate: 3.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_repair);
+
+    // Step 1 (dt 1 s): +3 HP, window persists.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0));
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert!((world.get::<Health>(player).unwrap().current - 13.0).abs() < 1e-3, "regen 3/s");
+    assert!(world.get::<Repairing>(player).is_some(), "window persists");
+
+    // Step 2 (dt 5 s): past the remaining 4 s → expires (and heal capped at max).
+    time.advance_by(Duration::from_secs_f32(5.0));
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<Repairing>(player).is_none(), "window expires");
+    assert!(world.get::<Health>(player).unwrap().current <= 40.0, "heal capped at max");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

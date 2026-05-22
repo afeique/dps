@@ -39,6 +39,14 @@ pub struct Bulwark {
 /// Bulwark damage-resist fraction (spec III.4: 50%, 65% with IRON_WILL).
 pub const BULWARK_RESIST: f32 = 0.5;
 
+/// Active **Repair Nanites** skill window (spec III.4): regenerate `rate` HP/s
+/// for `seconds`. Counted down + applied by `skills::tick_repair`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Repairing {
+    pub seconds: f32,
+    pub rate: f32,
+}
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

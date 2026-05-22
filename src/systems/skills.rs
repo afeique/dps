@@ -22,6 +22,8 @@ pub struct Skills {
     pub emp_cd: f32,
     /// Remaining cooldown for Bulwark (G). Ready at 0.
     pub bulwark_cd: f32,
+    /// Remaining cooldown for Repair Nanites (H). Ready at 0.
+    pub repair_cd: f32,
 }
 
 impl Default for Skills {
@@ -32,6 +34,7 @@ impl Default for Skills {
             bomb_cd: 0.0,
             emp_cd: 0.0,
             bulwark_cd: 0.0,
+            repair_cd: 0.0,
         }
     }
 }
@@ -47,6 +50,8 @@ impl Default for Skills {
 ///   each enemy triggers a `Death` message so explosion FX fire normally.
 /// * **Bulwark** (`G`, 20 s CD) — a 4 s window of 50% incoming-damage resist
 ///   (the `Bulwark` component, read by `apply_damage`).
+/// * **Repair Nanites** (`H`, 25 s CD) — regen 3 HP/s for 5 s (the `Repairing`
+///   component, applied by `tick_repair`).
 pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
@@ -66,14 +71,16 @@ pub fn use_skills(
     skills.shield_cd = (skills.shield_cd - dt).max(0.0);
     skills.bomb_cd = (skills.bomb_cd - dt).max(0.0);
     skills.bulwark_cd = (skills.bulwark_cd - dt).max(0.0);
+    skills.repair_cd = (skills.repair_cd - dt).max(0.0);
 
     // Gamepad triggers (first connected pad): LT = dash, LB = shield, North = bomb,
-    // DPadDown = bulwark (East is EMP).
+    // DPadDown = bulwark, DPadUp = repair (East is EMP).
     let pad = gamepads.iter().next();
     let dash_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger2));
     let shield_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger));
     let bomb_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::North));
     let bulwark_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::DPadDown));
+    let repair_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::DPadUp));
 
     // Bail if the player ship is absent (GameOver, not yet spawned, etc.).
     let Ok((player_entity, mut vel, tf)) = player.single_mut() else {
@@ -131,6 +138,32 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(Bulwark { seconds: 4.0 });
         skills.bulwark_cd = 20.0;
+    }
+
+    // --- REPAIR NANITES (H) ----------------------------------------------
+    // Regenerate 3 HP/s for 5 s (spec III.4). `tick_repair` applies + expires.
+    if (keys.just_pressed(KeyCode::KeyH) || repair_btn) && skills.repair_cd <= 0.0 {
+        commands.entity(player_entity).insert(Repairing {
+            seconds: 5.0,
+            rate: 3.0,
+        });
+        skills.repair_cd = 25.0;
+    }
+}
+
+/// Apply each active `Repairing` window's regen and expire it.
+pub fn tick_repair(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut Health, &mut Repairing)>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut hp, mut rep) in &mut q {
+        hp.current = (hp.current + rep.rate * dt).min(hp.max);
+        rep.seconds -= dt;
+        if rep.seconds <= 0.0 {
+            commands.entity(e).remove::<Repairing>();
+        }
     }
 }
 

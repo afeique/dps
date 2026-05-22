@@ -246,6 +246,7 @@ impl Plugin for GamePlugin {
                     systems::damage::tick_streak,
                     systems::status::tick_stun,
                     systems::skills::tick_bulwark,
+                    systems::skills::tick_repair,
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,
