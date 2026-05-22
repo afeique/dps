@@ -27,6 +27,7 @@ fn test_app() -> App {
         .add_message::<Death>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
+        .init_resource::<crate::resources::GameRng>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }

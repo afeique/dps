@@ -65,6 +65,46 @@ impl KillStreak {
     }
 }
 
+/// Shared gameplay PRNG (xorshift32). The JS uses unseeded `Math.random`
+/// (spec I.3); we use a seeded resource so runs are reproducible — assert on
+/// ranges/invariants, not exact sequences. Used by crit rolls, drop rolls, and
+/// aim jitter.
+#[derive(Resource)]
+pub struct GameRng(u32);
+
+impl Default for GameRng {
+    fn default() -> Self {
+        Self(0x9E37_79B9)
+    }
+}
+
+impl GameRng {
+    /// Next value in `[0, 1)`.
+    pub fn next_f32(&mut self) -> f32 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.0 = x;
+        (x >> 8) as f32 / (1u32 << 24) as f32
+    }
+}
+
+/// Base crit chance (spec III.6: 8%, cap 60% with upgrades — caps are a later
+/// increment).
+pub const BASE_CRIT_CHANCE: f32 = 0.08;
+
+/// Roll a crit: returns the damage multiplier — `1.0` on a normal hit, or a
+/// uniform `2.0..3.0×` on a crit (spec III.6: base crit damage is a random
+/// 2.0×–3.0×).
+pub fn roll_crit(rng: &mut GameRng) -> f32 {
+    if rng.next_f32() < BASE_CRIT_CHANCE {
+        2.0 + rng.next_f32() // 2.0 ..= ~3.0
+    } else {
+        1.0
+    }
+}
+
 /// `STREAK_TIERS` damage multiplier for a given kill count (spec III.6): a step
 /// up every 10 kills, from 1.25× at 10 kills to the 3.00× cap at 200.
 pub fn streak_mult(kills: u32) -> f32 {

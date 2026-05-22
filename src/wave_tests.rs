@@ -36,6 +36,7 @@ fn test_app() -> App {
         .add_message::<Fire>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
+        .init_resource::<crate::resources::GameRng>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }
@@ -318,4 +319,32 @@ fn kill_streak_multiplier_tiers() {
     s.break_streak();
     assert_eq!(s.kills, 0);
     assert_eq!(s.multiplier(), 1.0);
+}
+
+// ── 6. crit_roll_bounds ──────────────────────────────────────────────────────
+
+/// `roll_crit` returns exactly 1.0 (normal) or a 2.0–3.0× crit, at roughly the
+/// 8% base rate over many rolls (spec III.6). Seeded RNG → deterministic.
+#[test]
+fn crit_roll_bounds() {
+    use crate::resources::{roll_crit, GameRng};
+
+    let mut rng = GameRng::default();
+    let mut crits = 0;
+    let n = 20_000;
+    for _ in 0..n {
+        let m = roll_crit(&mut rng);
+        assert!(
+            m == 1.0 || (2.0..=3.0).contains(&m),
+            "crit multiplier must be 1.0 or in [2,3], got {m}"
+        );
+        if m > 1.0 {
+            crits += 1;
+        }
+    }
+    let rate = crits as f32 / n as f32;
+    assert!(
+        (0.05..0.11).contains(&rate),
+        "crit rate should sit near the 8% base (got {rate})"
+    );
 }

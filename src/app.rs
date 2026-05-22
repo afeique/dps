@@ -32,6 +32,7 @@ impl Plugin for GamePlugin {
             .init_resource::<PlayBounds>()
             .init_resource::<Score>()
             .init_resource::<crate::resources::KillStreak>()
+            .init_resource::<crate::resources::GameRng>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::asteroids::AsteroidSpawner>()
             .init_resource::<systems::weapons::CurrentWeapon>()
