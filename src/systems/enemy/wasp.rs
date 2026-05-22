@@ -17,7 +17,7 @@
 //!   - No bullet firing: fire_cooldown is declared in stats; actual firing is
 //!     wired by the parent integrator's enemy_fire system.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -166,7 +166,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let speed = stats().speed;
@@ -177,7 +177,8 @@ pub fn ai(
         Err(_) => return,
     };
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let speed = speed * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Wasp {
             continue;
         }

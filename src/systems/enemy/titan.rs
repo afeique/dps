@@ -25,7 +25,7 @@
 //!   • `wander.x` encodes the locked charge angle; `wander.y` encodes the
 //!     sticky orbit sign (+1.0 / −1.0).  `phase` drives the idle countdown.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -153,7 +153,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let spd = stats().speed;
@@ -198,7 +198,8 @@ pub fn ai(
     // JS: `if (currentSpeed < 0.18)` (px/frame @60 fps → 10.8 u/s).
     const BRAKE_STOP_THRESHOLD: f32 = 10.8;
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let spd = spd * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Titan {
             continue;
         }

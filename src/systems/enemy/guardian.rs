@@ -6,7 +6,7 @@
 //!   • `js/modules/enemy/movement.js`    — `squareMovement` / `squareBurstState`
 //!   • `js/modules/render/shapes.js`     — `drawEnemyGuardianShape`
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -178,7 +178,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     _player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let spd = stats().speed;
@@ -190,7 +190,8 @@ pub fn ai(
     // Wait between bursts (seconds).
     const WAIT_DUR: f32 = 2.0;
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let spd = spd * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Guardian {
             continue;
         }

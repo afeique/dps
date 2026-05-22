@@ -1412,6 +1412,33 @@ fn difficulty_bullet_speed_curve() {
     );
 }
 
+// ── 39. difficulty_speed_curve_and_speedmul ───────────────────────────────────
+
+/// Enemy movement-speed multiplier is normalized to 1.0 at W1 and ramps
+/// (W30 ≈ 1.75/0.55 ≈ 3.18×); spawn_for_wave stores it (× boss-tier speed) as a
+/// SpeedMul that the AIs read (spec V.4 / IV.7).
+#[test]
+fn difficulty_speed_curve_and_speedmul() {
+    use crate::components::SpeedMul;
+    use crate::systems::enemy::{self, difficulty_speed_mul};
+
+    assert!((difficulty_speed_mul(1) - 1.0).abs() < 1e-4, "W1 normalized to 1.0");
+    assert!((difficulty_speed_mul(30) - (1.75 / 0.55)).abs() < 1e-3, "W30 ≈ 3.18×");
+    assert!(difficulty_speed_mul(20) > difficulty_speed_mul(10), "monotonic");
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut step = Schedule::default();
+    step.add_systems(|mut c: Commands| {
+        enemy::spawn_for_wave(&mut c, EnemyKind::Titan, Vec2::ZERO, 1, false, 30)
+    });
+    step.run(world);
+    let mut q = world.query::<&SpeedMul>();
+    let sm = q.iter(world).next().expect("enemy spawned").0;
+    // tier-1 boss speed mul 1.0 × difficulty_speed_mul(30) ≈ 3.18.
+    assert!((sm - 1.75 / 0.55).abs() < 0.01, "W30 tier-1 boss SpeedMul (got {sm})");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

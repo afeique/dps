@@ -43,6 +43,12 @@ pub struct Raged;
 #[derive(Component, Debug)]
 pub struct MiniBoss;
 
+/// Per-entity movement-speed multiplier applied on top of an enemy's base
+/// `stats().speed` (spec V.4 campaign curve × IV.7 boss-tier speed). Each AI
+/// reads it; 1.0 = unscaled.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SpeedMul(pub f32);
+
 /// A damage-over-time burn (Lance Beam, Nova Inferno — spec III.3/III.7).
 /// `tick_burning` applies `dps × dt` each tick and removes it at `secs ≤ 0`.
 #[derive(Component, Debug, Clone, Copy)]

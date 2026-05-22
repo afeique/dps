@@ -23,7 +23,7 @@
 //!     sign (y, +1 or −1).
 //!   • No separate laser-charge animation; the parent systems handle firing.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -149,7 +149,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let spd = stats().speed;
@@ -174,7 +174,8 @@ pub fn ai(
     const DIR_CW:  f32 =  0.25_f32;
     const DIR_CCW: f32 = -0.25_f32;
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let spd = spd * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Stalker {
             continue;
         }

@@ -23,7 +23,7 @@
 //!   • Wall repulsion is a simple linear ramp (no trigonometric blend), which
 //!     matches the JS intent faithfully enough for a 2-D arena.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -125,7 +125,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let spd = stats().speed;
@@ -150,7 +150,8 @@ pub fn ai(
     // to u/s² so the feel at 60 fps is identical):  0.042 × 60 = 2.52 u/s².
     const ACC: f32 = 2.52;
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let spd = spd * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Tangerine {
             continue;
         }

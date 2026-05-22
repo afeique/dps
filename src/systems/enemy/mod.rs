@@ -204,6 +204,14 @@ pub fn difficulty_points_mul(wave: u64) -> f32 {
     1.0 + t.powf(1.4) * 5.5
 }
 
+/// Campaign-wide enemy *movement*-speed multiplier by wave (spec V.4
+/// `0.55 + t^1.5*1.2`), **normalized to W1 = 1.0** (the port's per-kind speeds
+/// are the W1-effective values) → W30 ≈ 3.18×.
+pub fn difficulty_speed_mul(wave: u64) -> f32 {
+    let t = difficulty_t(wave);
+    (0.55 + t.powf(1.5) * 1.2) / 0.55
+}
+
 /// Campaign-wide enemy *bullet*-speed multiplier by wave (spec V.4 campaignMul
 /// `1.15 + t^1.4*1.9`), **normalized to W1 = 1.0** — the port's per-kind bullet
 /// speeds are already the W1-effective values, so only the relative ramp
@@ -230,12 +238,12 @@ pub fn spawn(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
 /// (Speed-scaling is a follow-up — AI reads a fixed per-kind `stats().speed`,
 /// so it needs an entity-stored multiplier, tracked separately.)
 pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u8) {
-    let (hp_mul, sz_mul, _sp_mul) = boss_tier_mul(tier);
+    let (hp_mul, sz_mul, sp_mul) = boss_tier_mul(tier);
     let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
-    spawn_enemy(commands, kind, pos, hp_mul, sz_mul, promo);
+    spawn_enemy(commands, kind, pos, hp_mul, sz_mul, sp_mul, promo);
 }
 
-/// Spawn a mid-wave **mini-boss** promotion of `kind` (spec V.6).
+/// Spawn a mid-wave **mini-boss** promotion of `kind` (spec V.6 — no speed buff).
 pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
     spawn_enemy(
         commands,
@@ -243,6 +251,7 @@ pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
         pos,
         MINI_BOSS_HP_MUL,
         MINI_BOSS_SZ_MUL,
+        1.0,
         Promo::Mini,
     );
 }
@@ -258,13 +267,22 @@ pub fn spawn_for_wave(
     mini: bool,
     wave: u64,
 ) {
-    let diff = difficulty_hp_mul(wave);
+    let diff_hp = difficulty_hp_mul(wave);
+    let diff_sp = difficulty_speed_mul(wave);
     if mini {
-        spawn_enemy(commands, kind, pos, MINI_BOSS_HP_MUL * diff, MINI_BOSS_SZ_MUL, Promo::Mini);
+        spawn_enemy(
+            commands,
+            kind,
+            pos,
+            MINI_BOSS_HP_MUL * diff_hp,
+            MINI_BOSS_SZ_MUL,
+            diff_sp,
+            Promo::Mini,
+        );
     } else {
-        let (hp_mul, sz_mul, _sp) = boss_tier_mul(tier);
+        let (hp_mul, sz_mul, sp_mul) = boss_tier_mul(tier);
         let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
-        spawn_enemy(commands, kind, pos, hp_mul * diff, sz_mul, promo);
+        spawn_enemy(commands, kind, pos, hp_mul * diff_hp, sz_mul, sp_mul * diff_sp, promo);
     }
 }
 
@@ -276,6 +294,7 @@ fn spawn_enemy(
     pos: Vec2,
     hp_mul: f32,
     sz_mul: f32,
+    speed_mul: f32,
     promo: Promo,
 ) {
     let st = stats_for(kind);
@@ -286,6 +305,7 @@ fn spawn_enemy(
         Velocity::default(),
         Collider { radius: st.radius * sz_mul },
         Health::new(st.health * hp_mul),
+        SpeedMul(speed_mul),
         Faction::Enemy,
         shape_for(kind),
         Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul)),

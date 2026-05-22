@@ -35,7 +35,7 @@
 //!               with the running sinusoidal `arcPhase` while the sign is
 //!               preserved via a separate constant per spawn.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, Velocity};
+use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -160,7 +160,7 @@ pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
     player: Query<&Transform, With<Ship>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform)>,
+    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();
     let spd = stats().speed;
@@ -184,7 +184,8 @@ pub fn ai(
     // JS arc speed multiplier: config.speed × 2.8
     const ARC_SPEED_MUL: f32 = 2.8;
 
-    for (enemy, mut ai, mut vel, tf) in &mut q {
+    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
+        let spd = spd * sm.map_or(1.0, |s| s.0);
         if enemy.kind != EnemyKind::Sentinel {
             continue;
         }
