@@ -16,6 +16,7 @@ pub mod input;
 pub mod movement;
 pub mod power_weapon;
 pub mod powerups;
+pub mod shop;
 pub mod skills;
 pub mod spawn;
 pub mod wave;

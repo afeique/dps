@@ -39,6 +39,8 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
+            .init_resource::<systems::shop::Upgrades>()
+            .init_resource::<systems::shop::ShopSel>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -75,22 +77,31 @@ impl Plugin for GamePlugin {
             // ── title screen ────────────────────────────────────────────
             .add_systems(OnEnter(GameState::Title), systems::flow::enter_title)
             .add_systems(
-                OnExit(GameState::Title),
-                systems::flow::despawn_screen::<systems::flow::TitleScreen>,
-            )
-            .add_systems(
                 Update,
                 systems::flow::title_input.run_if(in_state(GameState::Title)),
             )
-            // ── spawn the slice + reset run state on entering Playing ───
+            // ── start a fresh run on leaving the title (NOT on shop-close,
+            //    which also re-enters Playing) ────────────────────────────
             .add_systems(
-                OnEnter(GameState::Playing),
+                OnExit(GameState::Title),
                 (
+                    systems::flow::despawn_screen::<systems::flow::TitleScreen>,
                     systems::flow::reset_run,
                     systems::spawn::spawn_player,
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
                 ),
+            )
+            // ── shop (on-demand; pauses the sim) ────────────────────────
+            .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)
+            .add_systems(
+                OnExit(GameState::Shop),
+                systems::flow::despawn_screen::<systems::shop::ShopPanel>,
+            )
+            .add_systems(
+                Update,
+                (systems::shop::shop_ui_update, systems::shop::shop_input)
+                    .run_if(in_state(GameState::Shop)),
             )
             // ── input: read devices every frame → Intent ────────────────
             .add_systems(
@@ -101,6 +112,7 @@ impl Plugin for GamePlugin {
                     systems::power_weapon::cycle_power_weapon,
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,
+                    systems::shop::open_shop,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

@@ -573,3 +573,20 @@ fn gold_value_scales_and_tiers() {
     assert!(v_boss > v1, "later wave + boss profile yields more gold");
     assert_eq!(gold_tier(v_boss), GoldTier::Platinum);
 }
+
+// ── 13. upgrade_cost_formula ──────────────────────────────────────────────────
+
+/// Shop cost = `base × 13 × 1.6^owned`, rounded to 500, floored at 500 (spec VIII.4).
+#[test]
+fn upgrade_cost_formula() {
+    use crate::systems::shop::upgrade_cost;
+
+    // base 1200, owned 0: 1200×13 = 15600 → nearest 500 = 15500.
+    assert_eq!(upgrade_cost(1200, 0), 15500);
+    // owned 1: ×1.6 = 24960 → nearest 500 = 25000.
+    assert_eq!(upgrade_cost(1200, 1), 25000);
+    // 500 floor for a tiny base.
+    assert_eq!(upgrade_cost(1, 0), 500);
+    // strictly increasing per owned stack.
+    assert!(upgrade_cost(1500, 2) > upgrade_cost(1500, 1));
+}

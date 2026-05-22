@@ -99,12 +99,17 @@ pub fn title_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<G
 
 // ── New-run reset ──────────────────────────────────────────────────────────
 
-/// Reset run-scoped score + kill streak when a fresh run begins
-/// (`OnEnter(Playing)`). The `Wave` and `EnergyMeter` are reset by their own
-/// OnEnter(Playing) systems.
-pub fn reset_run(mut score: ResMut<Score>, mut streak: ResMut<KillStreak>) {
+/// Reset run-scoped score + kill streak + shop upgrades when a fresh run begins
+/// (`OnExit(Title)`, so closing the shop back into `Playing` does NOT reset
+/// them). The `Wave` and `EnergyMeter` are reset alongside this.
+pub fn reset_run(
+    mut score: ResMut<Score>,
+    mut streak: ResMut<KillStreak>,
+    mut upgrades: ResMut<crate::systems::shop::Upgrades>,
+) {
     *score = Score::default();
     streak.break_streak();
+    upgrades.reset();
 }
 
 // ── Game over ────────────────────────────────────────────────────────────────
