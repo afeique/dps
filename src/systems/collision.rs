@@ -12,12 +12,14 @@
 use crate::components::*;
 use crate::messages::Damage;
 use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
+use crate::systems::shop::{stun_chance, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     streak: Res<KillStreak>,
+    upgrades: Res<Upgrades>,
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
@@ -25,6 +27,8 @@ pub fn bullet_hits_enemy(
 ) {
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
     let streak_mult = streak.multiplier();
+    // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
+    let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
@@ -44,6 +48,10 @@ pub fn bullet_hits_enemy(
                 });
                 // Landing a hit charges the power-weapon energy meter (spec III.3).
                 energy.gain(ENERGY_PER_HIT);
+                // `_STUN` trait proc: briefly stun the enemy (spec III.6).
+                if stun_p > 0.0 && rng.next_f32() < stun_p {
+                    commands.entity(enemy_e).insert(Stunned { secs: 1.0 });
+                }
                 // Piercing bullets pass through; others die on the first hit.
                 // (One hit per frame — a fast bullet clears an enemy's radius
                 // before the next tick, so re-hits are rare. Tracking a hit-set

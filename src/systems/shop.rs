@@ -30,11 +30,12 @@ pub enum UpgradeId {
     RapidFire,
     Piercing,
     BigShot,
+    StunShot,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order).
-    pub const ALL: [UpgradeId; 8] = [
+    pub const ALL: [UpgradeId; 9] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -43,6 +44,7 @@ impl UpgradeId {
         Self::RapidFire,
         Self::Piercing,
         Self::BigShot,
+        Self::StunShot,
     ];
 
     fn idx(self) -> usize {
@@ -55,6 +57,7 @@ impl UpgradeId {
             Self::RapidFire => 5,
             Self::Piercing => 6,
             Self::BigShot => 7,
+            Self::StunShot => 8,
         }
     }
 
@@ -68,6 +71,7 @@ impl UpgradeId {
             Self::RapidFire => "Rapid Fire    (-12% cd)",
             Self::Piercing => "Piercing      (+1 pierce)",
             Self::BigShot => "Big Shot      (+2.2 radius)",
+            Self::StunShot => "Stun Rounds   (+12% stun)",
         }
     }
 
@@ -82,6 +86,7 @@ impl UpgradeId {
             Self::RapidFire => 1200,
             Self::Piercing => 1500,
             Self::BigShot => 1200,
+            Self::StunShot => 1500,
         }
     }
 
@@ -95,14 +100,21 @@ impl UpgradeId {
             Self::RapidFire => 4,
             Self::Piercing => 3,
             Self::BigShot => 3,
+            Self::StunShot => 3,
         }
     }
+}
+
+/// Stun chance applied by the `_STUN` bullet trait at `stacks` (spec III.6:
+/// `0.12 × stacks`).
+pub fn stun_chance(stacks: u32) -> f32 {
+    0.12 * stacks as f32
 }
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
 pub struct Upgrades {
-    owned: [u32; 8],
+    owned: [u32; 9],
 }
 
 impl Upgrades {
@@ -114,7 +126,7 @@ impl Upgrades {
     }
     /// Reset all stacks (called at the start of a fresh run).
     pub fn reset(&mut self) {
-        self.owned = [0; 8];
+        self.owned = [0; 9];
     }
 }
 
@@ -289,6 +301,7 @@ fn apply_upgrade(
         UpgradeId::Multishot
         | UpgradeId::RapidFire
         | UpgradeId::Piercing
-        | UpgradeId::BigShot => {}
+        | UpgradeId::BigShot
+        | UpgradeId::StunShot => {}
     }
 }
