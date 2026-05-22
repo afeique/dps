@@ -41,54 +41,72 @@ fn test_app() -> App {
 
 // ── 1. wave_spawns_enemies_over_time ─────────────────────────────────────────
 
-/// `spawn_waves` populates the world with `Enemy` entities when the stagger
-/// timer reaches zero. We pre-advance `Time` by enough seconds so each call to
-/// `spawn_waves` sees a large `dt` and clears the between-wave pause *and* the
-/// per-enemy stagger timer, guaranteeing at least one spawn per step.
+/// Pulse-paced spawning (port spec V.3): pulse 0 fires after the intro delay,
+/// then later pulses fire on the 12 s stale-timer fallback (no enemies die in
+/// this test, so the ≤2-remaining trigger never hits). Wave 1 = Hunter×3 (P0)
+/// then Hunter×2,Wasp×2 (P1), so the count must grow across pulses.
 #[test]
 fn wave_spawns_enemies_over_time() {
     let mut app = test_app();
     let world = app.world_mut();
 
-    // `spawn_waves` reads these two resources.
     world.insert_resource(Wave::default());
     world.insert_resource(PlayBounds::default());
 
-    // Advance time by 10 s — far beyond the 3 s between-wave pause and the
-    // 0.5 s per-enemy stagger, so each `spawn_waves` call lands ≥1 spawn.
     let mut time = Time::<()>::default();
-    time.advance_by(Duration::from_secs(10));
-    world.insert_resource(time);
+    world.insert_resource(time.clone());
 
     let mut step = Schedule::default();
     step.add_systems(wave::spawn_waves);
 
-    // Count enemies before any run.
-    let before: usize = world
-        .query_filtered::<Entity, With<Enemy>>()
-        .iter(world)
-        .count();
-    assert_eq!(before, 0, "world should start empty");
+    let count = |world: &mut World| -> usize {
+        world.query_filtered::<Entity, With<Enemy>>().iter(world).count()
+    };
 
-    // Run several ticks; each one should spawn at least one enemy (large dt).
-    step.run(world);
-    let after_1: usize = world
-        .query_filtered::<Entity, With<Enemy>>()
-        .iter(world)
-        .count();
-    assert!(after_1 > 0, "wave spawner should emit enemies on first tick with large dt");
+    assert_eq!(count(world), 0, "world should start empty");
 
+    // Step 1 (dt = 1.5 s) clears the 1 s intro delay → pulse 0 (Hunter×3).
+    time.advance_by(Duration::from_secs_f32(1.5));
+    world.insert_resource(time.clone());
     step.run(world);
-    let after_2: usize = world
-        .query_filtered::<Entity, With<Enemy>>()
-        .iter(world)
-        .count();
-    assert!(
-        after_2 > after_1,
-        "enemy count should keep growing across ticks (got {} then {})",
-        after_1,
-        after_2
+    let after_p0 = count(world);
+    assert_eq!(after_p0, 3, "pulse 0 of wave 1 spawns Hunter×3 (got {after_p0})");
+
+    // Step 2 (dt = 13 s ≥ 12 s stale) → pulse 1 (Hunter×2 + Wasp×2 = +4).
+    time.advance_by(Duration::from_secs_f32(13.0));
+    world.insert_resource(time.clone());
+    step.run(world);
+    let after_p1 = count(world);
+    assert_eq!(
+        after_p1, 7,
+        "pulse 1 adds Hunter×2+Wasp×2 → 7 total (got {after_p1})"
     );
+}
+
+/// A boss-tier TITAN spawns with the HP/size overlay from `boss_tier_mul`
+/// (port spec IV.7): tier 1 = 4.0× HP, 1.35× size. Wave 3's final pulse holds
+/// a tier-1 boss TITAN; here we spawn one directly and check the overlay.
+#[test]
+fn boss_titan_gets_tier_overlay() {
+    use crate::systems::enemy;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let mut step = Schedule::default();
+    step.add_systems(|mut commands: Commands| {
+        enemy::spawn_tiered(&mut commands, EnemyKind::Titan, Vec2::ZERO, 1);
+    });
+    step.run(world);
+
+    let mut q = world.query_filtered::<(&Health, &Collider, &Boss), With<Enemy>>();
+    let (hp, col, boss) = q.iter(world).next().expect("a boss titan should exist");
+    // Base TITAN HP is 20 in the JS roster; tier-1 overlay = ×4.0 → 80.
+    assert_eq!(boss.tier, 1, "tier recorded");
+    assert!((hp.max - 80.0).abs() < 0.01, "tier-1 HP = base×4.0 (got {})", hp.max);
+    // Collider grows by the 1.35× size multiplier.
+    let base_radius = col.radius / 1.35;
+    assert!(base_radius > 1.0, "collider scaled by tier size mult (got {})", col.radius);
 }
 
 // ── 2. player_bullet_kills_enemy_increments_score_and_emits_death ────────────

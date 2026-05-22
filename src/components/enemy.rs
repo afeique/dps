@@ -24,6 +24,15 @@ pub struct Enemy {
     pub kind: EnemyKind,
 }
 
+/// Marks a boss-promoted enemy and carries its tier (1–4). Boss TITANs get
+/// HP/size overlays per `enemy::boss_tier_mul` and (later) the rage mechanics
+/// from `boss-rage.js`. Tier stats: T1 4.0×hp/1.35×sz, T2 5.0/1.45,
+/// T3 6.0/1.55, T4 8.0/1.75 (port spec IV.7).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Boss {
+    pub tier: u8,
+}
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

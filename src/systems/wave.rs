@@ -1,320 +1,376 @@
-//! Data-driven wave spawner — ports the 10-stage × 3-wave structure from
-//! `js/modules/wave/wave-data.js` and the sub-wave progression logic from
-//! `js/modules/wave/wave-manager.js`.
+//! Data-driven wave spawner — ports the full 30-wave / 10-stage campaign from
+//! `js/modules/wave/wave-data.js` and the live progression logic from
+//! `wave-manager.js` (`updateWaveSystem` / `tryAdvanceSubWave`), per port-spec
+//! Part V.
 //!
-//! Simplifications vs. the JS source:
-//! - 30 JS waves collapsed to 12 representative waves (one normal + one normal
-//!   + one boss per stage for stages 1-4; combined arms for stages 5-6 as
-//!   single waves). Endless loop restarts from wave 0 with +1 count bump.
-//! - Sub-waves are flattened into a single ordered list of `SpawnEntry`s with
-//!   a stagger timer (0.5 s), no kill-count gating (JS gates on ≤2 remaining).
-//! - No boss-tier stat scaling, no mini-boss promotions, no asteroids, no
-//!   mission system — those live in later phases.
-//! - Spawn positions use a deterministic `sin`-based spread, no `rand` crate.
+//! Faithful behaviors implemented here:
+//! - The **exact 30-wave table** (spec V.2), each wave a list of *pulses*, each
+//!   pulse a list of `(kind, count)` groups. Pulse 0 spawns immediately at wave
+//!   start; later pulses spawn when **≤2 enemies remain OR 12 s** elapsed since
+//!   the last pulse (`tryAdvanceSubWave`).
+//! - **Kill-gated advance:** a wave completes only when every pulse has spawned
+//!   *and* no enemies remain (asteroids never block). A short between-wave
+//!   breather then starts the next wave.
+//! - **Boss tiers:** designated TITAN groups carry a tier (1–4) → HP/size
+//!   overlay via `enemy::spawn_tiered` (spec IV.7). After wave 30 clears the
+//!   campaign is complete (no endless loop).
+//!
+//! Deferred (separate increments, noted in the spec): on-screen edge spawn
+//! positioning (V.5), mini-boss promotion, formations, boss rage, the mission
+//! system, per-wave asteroid counts (kept as data in `WaveDef.asteroids` but
+//! left to the standalone `AsteroidSpawner`), survivor-card/shop flow, and
+//! boss speed-scaling.
 
-use crate::components::EnemyKind;
+use crate::components::{Enemy, EnemyKind};
 use crate::resources::PlayBounds;
 use crate::systems::enemy;
 use bevy::prelude::*;
 
+// Bring the variants into scope so the wave table reads compactly.
+use crate::components::EnemyKind::*;
+
 // ---------------------------------------------------------------------------
-// Static wave table
+// Wave table data model
 // ---------------------------------------------------------------------------
 
-/// A single entry in a wave: spawn `count` enemies of `kind`.
+/// A spawn group within a pulse: `count` enemies of `kind`, optionally promoted
+/// to a boss of `tier` (0 = normal).
 #[derive(Clone, Copy)]
-struct SpawnEntry {
-    kind:  EnemyKind,
+struct Group {
+    kind: EnemyKind,
     count: u32,
+    tier: u8,
 }
 
-const fn e(kind: EnemyKind, count: u32) -> SpawnEntry {
-    SpawnEntry { kind, count }
+const fn g(kind: EnemyKind, count: u32) -> Group {
+    Group { kind, count, tier: 0 }
+}
+const fn boss(kind: EnemyKind, count: u32, tier: u8) -> Group {
+    Group { kind, count, tier }
 }
 
-/// One wave definition: a flat list of spawn entries executed sequentially
-/// with `SPAWN_STAGGER` seconds between each *individual* enemy.
+/// One in-wave pulse (a batch of groups spawned together).
+struct Pulse(&'static [Group]);
+
+/// One wave: an asteroid count (data only for now) + an ordered pulse list.
 struct WaveDef {
-    entries: &'static [SpawnEntry],
+    #[allow(dead_code)]
+    asteroids: u32,
+    pulses: &'static [Pulse],
 }
 
 // ---------------------------------------------------------------------------
-// 12-wave table (ported from wave-data.js, simplified).
-//
-// Stage 1 (JS waves 1-3)  : HUNTER + WASP; boss = TITAN
-// Stage 2 (JS waves 4-6)  : adds GUARDIAN; boss = TITAN
-// Stage 3 (JS waves 7-9)  : adds STALKER;  boss = TITAN
-// Stage 4 (JS waves 10-12): adds DRIFTER + TANGERINE; boss = 2× TITAN
-// Stage 5 (JS wave 13-14) : adds WEAVER + SENTINEL (merged to 2 waves)
-// Stage 6 (JS wave 15-16) : full roster incl. PROWLER (merged to 2 waves)
+// The exact 30-wave campaign (port spec V.2). Abbreviation key:
+//   Hunter, Wasp, Guardian, Stalker, Drifter, Tangerine, Weaver, Sentinel,
+//   Prowler, Titan.
 // ---------------------------------------------------------------------------
 static WAVES: &[WaveDef] = &[
-    // ── Wave 0 — Stage 1-1: First Contact ──────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Hunter, 3),
-        e(EnemyKind::Wasp,   2),
-        e(EnemyKind::Hunter, 2),
-        e(EnemyKind::Wasp,   2),
+    // ── Stage 1 — HUNTER + WASP ──────────────────────────────────────────
+    WaveDef { asteroids: 5, pulses: &[ // W1 (1-1)
+        Pulse(&[g(Hunter, 3)]),
+        Pulse(&[g(Hunter, 2), g(Wasp, 2)]),
+        Pulse(&[g(Hunter, 3), g(Wasp, 2)]),
+    ]},
+    WaveDef { asteroids: 5, pulses: &[ // W2 (1-2)
+        Pulse(&[g(Hunter, 3), g(Wasp, 2)]),
+        Pulse(&[g(Wasp, 4)]),
+        Pulse(&[g(Hunter, 3), g(Wasp, 3)]),
+    ]},
+    WaveDef { asteroids: 3, pulses: &[ // W3 (1-3) BOSS T1
+        Pulse(&[g(Hunter, 3), g(Wasp, 2)]),
+        Pulse(&[boss(Titan, 1, 1), g(Hunter, 2), g(Wasp, 2)]),
     ]},
 
-    // ── Wave 1 — Stage 1-2 ─────────────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Hunter, 3),
-        e(EnemyKind::Wasp,   3),
-        e(EnemyKind::Hunter, 3),
-        e(EnemyKind::Wasp,   3),
+    // ── Stage 2 — +GUARDIAN ──────────────────────────────────────────────
+    WaveDef { asteroids: 5, pulses: &[ // W4 (2-1)
+        Pulse(&[g(Guardian, 2)]),
+        Pulse(&[g(Guardian, 2), g(Hunter, 3)]),
+        Pulse(&[g(Guardian, 2), g(Wasp, 3)]),
+    ]},
+    WaveDef { asteroids: 5, pulses: &[ // W5 (2-2)
+        Pulse(&[g(Guardian, 3), g(Hunter, 2)]),
+        Pulse(&[g(Wasp, 4), g(Guardian, 1)]),
+        Pulse(&[g(Guardian, 2), g(Hunter, 3), g(Wasp, 2)]),
+    ]},
+    WaveDef { asteroids: 3, pulses: &[ // W6 (2-3) BOSS T1
+        Pulse(&[g(Guardian, 3), g(Wasp, 2)]),
+        Pulse(&[boss(Titan, 1, 1), g(Guardian, 3), g(Hunter, 2)]),
     ]},
 
-    // ── Wave 2 — Stage 1-3: Boss ───────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Hunter, 3),
-        e(EnemyKind::Wasp,   2),
-        e(EnemyKind::Titan,  1),
-        e(EnemyKind::Hunter, 2),
-        e(EnemyKind::Wasp,   2),
+    // ── Stage 3 — +STALKER ───────────────────────────────────────────────
+    WaveDef { asteroids: 5, pulses: &[ // W7 (3-1)
+        Pulse(&[g(Stalker, 2)]),
+        Pulse(&[g(Stalker, 2), g(Hunter, 3)]),
+        Pulse(&[g(Stalker, 2), g(Guardian, 2), g(Wasp, 2)]),
+    ]},
+    WaveDef { asteroids: 5, pulses: &[ // W8 (3-2)
+        Pulse(&[g(Stalker, 3), g(Hunter, 2)]),
+        Pulse(&[g(Guardian, 3), g(Stalker, 1)]),
+        Pulse(&[g(Stalker, 2), g(Guardian, 2), g(Hunter, 3)]),
+    ]},
+    WaveDef { asteroids: 3, pulses: &[ // W9 (3-3) BOSS T2
+        Pulse(&[g(Stalker, 2), g(Guardian, 2)]),
+        Pulse(&[boss(Titan, 1, 2), g(Stalker, 2), g(Hunter, 2)]),
     ]},
 
-    // ── Wave 3 — Stage 2-1: Iron Sentinel (adds GUARDIAN) ──────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Hunter,   3),
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Wasp,     3),
+    // ── Stage 4 — +DRIFTER +TANGERINE ────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W10 (4-1)
+        Pulse(&[g(Drifter, 2), g(Hunter, 2)]),
+        Pulse(&[g(Tangerine, 2), g(Wasp, 2)]),
+        Pulse(&[g(Drifter, 2), g(Tangerine, 2), g(Hunter, 2)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W11 (4-2)
+        Pulse(&[g(Stalker, 2), g(Drifter, 2)]),
+        Pulse(&[g(Tangerine, 2), g(Guardian, 2)]),
+        Pulse(&[g(Stalker, 2), g(Drifter, 2), g(Tangerine, 1)]),
+    ]},
+    WaveDef { asteroids: 3, pulses: &[ // W12 (4-3) BOSS T2 ×2
+        Pulse(&[g(Guardian, 3), g(Stalker, 2), g(Wasp, 2)]),
+        Pulse(&[boss(Titan, 2, 2), g(Stalker, 2), g(Tangerine, 1)]),
     ]},
 
-    // ── Wave 4 — Stage 2-2 ─────────────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Guardian, 3),
-        e(EnemyKind::Hunter,   2),
-        e(EnemyKind::Wasp,     4),
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Hunter,   3),
-        e(EnemyKind::Wasp,     2),
+    // ── Stage 5 — +WEAVER +SENTINEL ──────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W13 (5-1)
+        Pulse(&[g(Weaver, 2), g(Wasp, 3)]),
+        Pulse(&[g(Weaver, 2), g(Hunter, 3)]),
+        Pulse(&[g(Weaver, 2), g(Guardian, 2), g(Stalker, 1)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W14 (5-2)
+        Pulse(&[g(Sentinel, 2), g(Wasp, 2)]),
+        Pulse(&[g(Sentinel, 2), g(Guardian, 2), g(Weaver, 1)]),
+        Pulse(&[g(Sentinel, 2), g(Stalker, 2), g(Weaver, 2)]),
+    ]},
+    WaveDef { asteroids: 2, pulses: &[ // W15 (5-3) BOSS T3 ×3
+        Pulse(&[g(Guardian, 3), g(Sentinel, 2), g(Weaver, 1)]),
+        Pulse(&[boss(Titan, 3, 3), g(Sentinel, 2), g(Stalker, 1)]),
     ]},
 
-    // ── Wave 5 — Stage 2-3: Boss ───────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Guardian, 3),
-        e(EnemyKind::Wasp,     2),
-        e(EnemyKind::Titan,    1),
-        e(EnemyKind::Guardian, 3),
-        e(EnemyKind::Hunter,   2),
+    // ── Stage 6 — +PROWLER (full roster) ─────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W16 (6-1)
+        Pulse(&[g(Prowler, 2), g(Hunter, 3)]),
+        Pulse(&[g(Prowler, 2), g(Stalker, 2), g(Wasp, 2)]),
+        Pulse(&[g(Prowler, 2), g(Guardian, 2), g(Weaver, 2)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W17 (6-2)
+        Pulse(&[g(Tangerine, 2), g(Drifter, 2), g(Hunter, 2)]),
+        Pulse(&[g(Sentinel, 2), g(Weaver, 2), g(Stalker, 2)]),
+        Pulse(&[g(Prowler, 2), g(Guardian, 2), g(Wasp, 3)]),
+    ]},
+    WaveDef { asteroids: 2, pulses: &[ // W18 (6-3) BOSS T3 ×3
+        Pulse(&[g(Prowler, 3), g(Sentinel, 2), g(Wasp, 2)]),
+        Pulse(&[boss(Titan, 3, 3), g(Prowler, 2), g(Guardian, 2)]),
     ]},
 
-    // ── Wave 6 — Stage 3-1: Iron Vanguard (adds STALKER) ───────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Hunter,   3),
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Wasp,     2),
+    // ── Stage 7 — combined arms ──────────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W19 (7-1)
+        Pulse(&[g(Hunter, 4), g(Guardian, 2), g(Wasp, 2)]),
+        Pulse(&[g(Stalker, 2), g(Weaver, 2), g(Drifter, 2)]),
+        Pulse(&[g(Prowler, 2), g(Sentinel, 2), g(Tangerine, 2)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W20 (7-2)
+        Pulse(&[g(Stalker, 3), g(Prowler, 2), g(Wasp, 2)]),
+        Pulse(&[g(Sentinel, 3), g(Guardian, 2), g(Hunter, 2)]),
+        Pulse(&[g(Weaver, 2), g(Tangerine, 2), g(Drifter, 2)]),
+    ]},
+    WaveDef { asteroids: 2, pulses: &[ // W21 (7-3) BOSS T4 ×4
+        Pulse(&[g(Stalker, 3), g(Guardian, 3), g(Weaver, 1)]),
+        Pulse(&[boss(Titan, 4, 4), g(Stalker, 2), g(Sentinel, 2)]),
     ]},
 
-    // ── Wave 7 — Stage 3-2 ─────────────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Stalker,  3),
-        e(EnemyKind::Hunter,   2),
-        e(EnemyKind::Guardian, 3),
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Hunter,   3),
+    // ── Stage 8 ──────────────────────────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W22 (8-1)
+        Pulse(&[g(Tangerine, 2), g(Guardian, 2), g(Hunter, 2)]),
+        Pulse(&[g(Weaver, 2), g(Drifter, 2), g(Stalker, 2)]),
+        Pulse(&[g(Prowler, 2), g(Sentinel, 2), g(Wasp, 3)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W23 (8-2)
+        Pulse(&[g(Hunter, 5), g(Stalker, 2)]),
+        Pulse(&[g(Sentinel, 3), g(Prowler, 2), g(Weaver, 2)]),
+        Pulse(&[g(Guardian, 3), g(Tangerine, 2), g(Drifter, 1)]),
+    ]},
+    WaveDef { asteroids: 2, pulses: &[ // W24 (8-3) BOSS T4 ×4
+        Pulse(&[g(Tangerine, 3), g(Guardian, 3), g(Stalker, 2)]),
+        Pulse(&[boss(Titan, 4, 4), g(Tangerine, 2), g(Prowler, 2)]),
     ]},
 
-    // ── Wave 8 — Stage 3-3: Boss ───────────────────────────────────────
-    WaveDef { entries: &[
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Titan,    1),
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Hunter,   2),
+    // ── Stage 9 — peak density ───────────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W25 (9-1)
+        Pulse(&[g(Stalker, 3), g(Guardian, 3), g(Wasp, 2)]),
+        Pulse(&[g(Sentinel, 3), g(Prowler, 2), g(Weaver, 2)]),
+        Pulse(&[g(Tangerine, 3), g(Drifter, 2), g(Hunter, 3)]),
+    ]},
+    WaveDef { asteroids: 4, pulses: &[ // W26 (9-2)
+        Pulse(&[g(Prowler, 3), g(Sentinel, 2), g(Tangerine, 2)]),
+        Pulse(&[g(Weaver, 3), g(Stalker, 2), g(Guardian, 2)]),
+        Pulse(&[g(Hunter, 4), g(Wasp, 3), g(Drifter, 2)]),
+    ]},
+    WaveDef { asteroids: 2, pulses: &[ // W27 (9-3) BOSS T4 ×5
+        Pulse(&[g(Weaver, 3), g(Guardian, 2), g(Sentinel, 2)]),
+        Pulse(&[boss(Titan, 5, 4), g(Weaver, 2), g(Stalker, 2)]),
     ]},
 
-    // ── Wave 9 — Stage 4-1: Twin Iron (adds DRIFTER + TANGERINE) ───────
-    WaveDef { entries: &[
-        e(EnemyKind::Drifter,   2),
-        e(EnemyKind::Hunter,    2),
-        e(EnemyKind::Tangerine, 2),
-        e(EnemyKind::Wasp,      2),
-        e(EnemyKind::Drifter,   2),
-        e(EnemyKind::Tangerine, 2),
-        e(EnemyKind::Hunter,    2),
+    // ── Stage 10 — finale ────────────────────────────────────────────────
+    WaveDef { asteroids: 4, pulses: &[ // W28 (10-1)
+        Pulse(&[g(Stalker, 3), g(Guardian, 3), g(Wasp, 3)]),
+        Pulse(&[g(Tangerine, 3), g(Prowler, 2), g(Hunter, 3)]),
+        Pulse(&[g(Sentinel, 3), g(Weaver, 3), g(Drifter, 2)]),
     ]},
-
-    // ── Wave 10 — Stage 5 combined: Triple Threat (WEAVER + SENTINEL) ──
-    WaveDef { entries: &[
-        e(EnemyKind::Weaver,   2),
-        e(EnemyKind::Wasp,     3),
-        e(EnemyKind::Sentinel, 2),
-        e(EnemyKind::Guardian, 2),
-        e(EnemyKind::Weaver,   2),
-        e(EnemyKind::Stalker,  2),
-        e(EnemyKind::Sentinel, 2),
+    WaveDef { asteroids: 4, pulses: &[ // W29 (10-2) — final TITAN is NORMAL, not a boss
+        Pulse(&[g(Hunter, 4), g(Guardian, 3), g(Wasp, 3)]),
+        Pulse(&[g(Stalker, 3), g(Weaver, 3), g(Prowler, 2)]),
+        Pulse(&[g(Titan, 1), g(Sentinel, 2), g(Tangerine, 2), g(Drifter, 2)]),
     ]},
-
-    // ── Wave 11 — Stage 6 combined: Iron Quartet (full roster + PROWLER)
-    WaveDef { entries: &[
-        e(EnemyKind::Prowler,   2),
-        e(EnemyKind::Hunter,    3),
-        e(EnemyKind::Sentinel,  2),
-        e(EnemyKind::Weaver,    2),
-        e(EnemyKind::Stalker,   2),
-        e(EnemyKind::Tangerine, 2),
-        e(EnemyKind::Drifter,   2),
-        e(EnemyKind::Prowler,   2),
-        e(EnemyKind::Guardian,  2),
-        e(EnemyKind::Wasp,      3),
-        e(EnemyKind::Titan,     2),
-        e(EnemyKind::Prowler,   2),
-        e(EnemyKind::Guardian,  2),
+    WaveDef { asteroids: 2, pulses: &[ // W30 (10-3) FINAL BOSS T4 ×5
+        Pulse(&[g(Guardian, 3), g(Sentinel, 2), g(Stalker, 2)]),
+        Pulse(&[g(Prowler, 2), g(Weaver, 2), g(Tangerine, 2)]),
+        Pulse(&[boss(Titan, 5, 4), g(Guardian, 2), g(Sentinel, 2), g(Stalker, 2), g(Prowler, 1)]),
     ]},
 ];
 
 // ---------------------------------------------------------------------------
-// Tuning constants
+// Tuning constants (port spec V.3)
 // ---------------------------------------------------------------------------
 
-/// Seconds between spawning individual enemies within a wave.
-const SPAWN_STAGGER: f32 = 0.5;
-
-/// Seconds of pause after a wave's last spawn before the next wave begins.
-const BETWEEN_WAVE_PAUSE: f32 = 3.0;
+/// Spawn the next pulse once living enemies drop to this many or fewer.
+const PULSE_ADVANCE_ENEMY_THRESHOLD: usize = 2;
+/// …or this many seconds since the last pulse, whichever comes first.
+const PULSE_STALE_SECS: f32 = 12.0;
+/// Breather between a wave clearing and the next wave's pulse 0.
+const BETWEEN_WAVE_SECS: f32 = 2.0;
+/// Initial delay before the very first pulse of the run.
+const INTRO_SECS: f32 = 1.0;
 
 // ---------------------------------------------------------------------------
 // Wave resource
 // ---------------------------------------------------------------------------
 
-/// Wave state — tracks progression through the static wave table.
-///
-/// `loop_bonus` increments by 1 each time we've exhausted the full table,
-/// adding that many extra enemies to each `SpawnEntry` count so the game
-/// grows harder on successive loops.
+/// Live campaign progression state. Mirrors `wave-manager.js`'s `_waveState`.
 #[derive(Resource)]
 pub struct Wave {
-    /// Index into `WAVES` (the current wave definition).
-    wave_idx:     usize,
-    /// Flat enemy cursor within the expanded spawn list for this wave.
-    /// One unit = one enemy (entries are expanded per `count`).
-    enemy_cursor: u32,
-    /// Total enemies to spawn this wave (expanded from entries + loop_bonus).
-    enemy_total:  u32,
-    /// Per-enemy stagger countdown (seconds).
-    spawn_timer:  f32,
-    /// Between-wave pause countdown (seconds). Active only when
-    /// `enemy_cursor >= enemy_total`.
-    pause_timer:  f32,
-    /// Number of full loops through `WAVES` completed. Added to each entry
-    /// count so endless play escalates.
-    loop_bonus:   u32,
-    /// Running counter used for deterministic x-position spread.
-    spawn_seq:    u32,
+    /// Index into `WAVES` (0-based; 0 = wave 1, … 29 = wave 30).
+    idx: usize,
+    /// How many pulses of the current wave have been spawned.
+    spawned_pulses: usize,
+    /// Seconds since the last pulse (drives the 12 s stale fallback).
+    pulse_timer: f32,
+    /// Countdown before the current wave's pulse 0 spawns (intro / breather).
+    start_timer: f32,
+    /// Has pulse 0 of the current wave been spawned yet?
+    started: bool,
+    /// Campaign cleared (wave 30 done) — spawning halts.
+    pub completed: bool,
+    /// Deterministic spread counter for spawn x-positions.
+    spawn_seq: u32,
 }
 
 impl Default for Wave {
     fn default() -> Self {
-        let (total, _) = expanded_total(0, 0);
         Self {
-            wave_idx:     0,
-            enemy_cursor: 0,
-            enemy_total:  total,
-            spawn_timer:  0.0,
-            pause_timer:  BETWEEN_WAVE_PAUSE,
-            loop_bonus:   0,
-            spawn_seq:    0,
+            idx: 0,
+            spawned_pulses: 0,
+            pulse_timer: 0.0,
+            start_timer: INTRO_SECS,
+            started: false,
+            completed: false,
+            spawn_seq: 0,
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
-
-/// Compute the total enemy count for a wave given the loop bonus, and also
-/// return the expanded entry list so `spawn_waves` can index into it.
-fn expanded_total(wave_idx: usize, loop_bonus: u32) -> (u32, Vec<EnemyKind>) {
-    let def = &WAVES[wave_idx % WAVES.len()];
-    let mut list = Vec::new();
-    for entry in def.entries {
-        let n = entry.count + loop_bonus;
-        for _ in 0..n {
-            list.push(entry.kind);
-        }
+impl Wave {
+    /// Current wave number, 1-based (for HUD/logging).
+    pub fn number(&self) -> usize {
+        self.idx + 1
     }
-    (list.len() as u32, list)
 }
 
-/// Deterministic spawn x using a `sin`-based hash of the sequence counter.
-/// Returns a value in `[-half_x * 0.85, half_x * 0.85]`.
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Deterministic spawn x using a `sin`/`cos` hash of the sequence counter
+/// (placeholder for the spec's on-screen edge spawning, V.5).
 fn spawn_x(seq: u32, half_x: f32) -> f32 {
-    // Two superimposed frequencies give a pseudo-random spread without `rand`.
     let a = (seq as f32 * 97.13_f32).sin();
     let b = (seq as f32 * 43.71_f32).cos();
     (a * 0.6 + b * 0.4) * half_x * 0.85
 }
 
+/// Spawn every group in pulse `pulse_idx` of wave `wave_idx`.
+fn spawn_pulse(commands: &mut Commands, bounds: &PlayBounds, wave: &mut Wave, wave_idx: usize, pulse_idx: usize) {
+    let pulse = &WAVES[wave_idx].pulses[pulse_idx];
+    let y = bounds.half.y - 30.0;
+    for group in pulse.0 {
+        for _ in 0..group.count {
+            wave.spawn_seq += 1;
+            let x = spawn_x(wave.spawn_seq, bounds.half.x);
+            enemy::spawn_tiered(commands, group.kind, Vec2::new(x, y), group.tier);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Public systems
+// Systems
 // ---------------------------------------------------------------------------
 
-/// Reset wave state — called on `OnEnter(Playing)` so every new game starts
-/// fresh from wave 0 with no loop bonus.
+/// Reset wave state — `OnEnter(Playing)`, so each new game starts at wave 1.
 pub fn reset(mut wave: ResMut<Wave>) {
     *wave = Wave::default();
 }
 
-/// Per-tick spawn driver. Stagger-spawns enemies from the current wave;
-/// pauses between waves; advances to the next wave when the pause elapses.
+/// Per-tick campaign driver (FixedUpdate). Pulse pacing + kill-gated advance.
 pub fn spawn_waves(
-    time:   Res<Time>,
+    time: Res<Time>,
     bounds: Res<PlayBounds>,
+    enemies: Query<(), With<Enemy>>,
     mut wave: ResMut<Wave>,
     mut commands: Commands,
 ) {
+    if wave.completed {
+        return;
+    }
     let dt = time.delta_secs();
+    let enemy_count = enemies.iter().count();
 
-    // ── Phase A: between-wave pause ──────────────────────────────────────
-    if wave.enemy_cursor >= wave.enemy_total {
-        wave.pause_timer -= dt;
-        if wave.pause_timer > 0.0 {
+    // ── Wave start (intro / between-wave breather) ───────────────────────
+    if !wave.started {
+        wave.start_timer -= dt;
+        if wave.start_timer > 0.0 {
             return;
         }
-        // Advance to next wave.
-        let next_idx = wave.wave_idx + 1;
-        let (new_loop_bonus, new_wave_idx) = if next_idx >= WAVES.len() {
-            (wave.loop_bonus + 1, 0)
-        } else {
-            (wave.loop_bonus, next_idx)
-        };
-        let (total, _) = expanded_total(new_wave_idx, new_loop_bonus);
-        *wave = Wave {
-            wave_idx:     new_wave_idx,
-            enemy_cursor: 0,
-            enemy_total:  total,
-            spawn_timer:  0.0,
-            pause_timer:  BETWEEN_WAVE_PAUSE,
-            loop_bonus:   new_loop_bonus,
-            spawn_seq:    wave.spawn_seq, // carry sequence counter across waves
-        };
-    }
-
-    // ── Phase B: stagger timer ───────────────────────────────────────────
-    wave.spawn_timer -= dt;
-    if wave.spawn_timer > 0.0 {
+        let idx = wave.idx;
+        spawn_pulse(&mut commands, &bounds, &mut wave, idx, 0);
+        wave.spawned_pulses = 1;
+        wave.pulse_timer = 0.0;
+        wave.started = true;
         return;
     }
-    wave.spawn_timer = SPAWN_STAGGER;
 
-    // ── Phase C: pick the next enemy from the expanded list ──────────────
-    let (_, expanded) = expanded_total(wave.wave_idx, wave.loop_bonus);
-    let cursor = wave.enemy_cursor as usize;
-    if cursor >= expanded.len() {
-        // Should not happen, but guard defensively.
+    let total_pulses = WAVES[wave.idx].pulses.len();
+
+    // ── More pulses to spawn? (≤2 enemies OR 12 s) ───────────────────────
+    if wave.spawned_pulses < total_pulses {
+        wave.pulse_timer += dt;
+        if enemy_count <= PULSE_ADVANCE_ENEMY_THRESHOLD || wave.pulse_timer >= PULSE_STALE_SECS {
+            let (idx, next) = (wave.idx, wave.spawned_pulses);
+            spawn_pulse(&mut commands, &bounds, &mut wave, idx, next);
+            wave.spawned_pulses += 1;
+            wave.pulse_timer = 0.0;
+        }
         return;
     }
-    let kind = expanded[cursor];
-    wave.enemy_cursor += 1;
-    wave.spawn_seq += 1;
 
-    // ── Phase D: compute spawn position (top edge, varied x) ─────────────
-    let x = spawn_x(wave.spawn_seq, bounds.half.x);
-    let y = bounds.half.y - 30.0;
-    enemy::spawn(&mut commands, kind, Vec2::new(x, y));
+    // ── All pulses spawned — wait for the field to clear (kill-gated) ────
+    if enemy_count == 0 {
+        if wave.idx + 1 >= WAVES.len() {
+            wave.completed = true;
+            info!("CAMPAIGN COMPLETE — all 30 waves cleared");
+            return;
+        }
+        wave.idx += 1;
+        wave.spawned_pulses = 0;
+        wave.started = false;
+        wave.start_timer = BETWEEN_WAVE_SECS;
+        info!("WAVE {} CLEAR — advancing to wave {}", wave.idx, wave.idx + 1);
+    }
 }

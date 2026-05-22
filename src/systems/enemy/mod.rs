@@ -69,19 +69,44 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
     }
 }
 
-/// Spawn one enemy of `kind` at world position `pos`.
+/// Boss-tier stat multipliers `(hp, size, speed)` from `BOSS_TIER_STATS`
+/// (port spec IV.7). Tier 0 = a normal (non-boss) enemy.
+pub fn boss_tier_mul(tier: u8) -> (f32, f32, f32) {
+    match tier {
+        1 => (4.0, 1.35, 1.00),
+        2 => (5.0, 1.45, 1.05),
+        3 => (6.0, 1.55, 1.10),
+        4 => (8.0, 1.75, 1.15),
+        _ => (1.0, 1.0, 1.0),
+    }
+}
+
+/// Spawn one enemy of `kind` at world position `pos` (non-boss).
 pub fn spawn(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
+    spawn_tiered(commands, kind, pos, 0);
+}
+
+/// Spawn one enemy, applying a boss-tier HP/size overlay when `tier > 0`.
+/// (Speed-scaling is a follow-up — AI reads a fixed per-kind `stats().speed`,
+/// so it needs an entity-stored multiplier, tracked separately.)
+pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u8) {
     let st = stats_for(kind);
+    let (hp_mul, sz_mul, _sp_mul) = boss_tier_mul(tier);
+
     let mut e = commands.spawn((
         Enemy { kind },
         AiState::default(),
         Velocity::default(),
-        Collider { radius: st.radius },
-        Health::new(st.health),
+        Collider { radius: st.radius * sz_mul },
+        Health::new(st.health * hp_mul),
         Faction::Enemy,
         shape_for(kind),
-        Transform::from_translation(pos.extend(0.0)),
+        Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul)),
     ));
+
+    if tier > 0 {
+        e.insert(Boss { tier });
+    }
 
     if let Some(cd) = st.fire_cooldown {
         e.insert(FireCooldown {
