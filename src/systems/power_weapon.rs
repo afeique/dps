@@ -659,6 +659,8 @@ pub fn update_beams(
                 let length = match best {
                     Some((t, e)) => {
                         dmg.write(Damage { target: e, amount: tick_dmg });
+                        // Lance burn (spec III.3): a refreshing DoT on the target.
+                        commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
                         t
                     }
                     None => beam.range,
@@ -687,6 +689,8 @@ pub fn update_beams(
                 match best {
                     Some((_, epos, e)) => {
                         dmg.write(Damage { target: e, amount: tick_dmg });
+                        // Arc stun (spec III.3): a refreshing fire-suppress lock.
+                        commands.entity(e).insert(Stunned { secs: 0.5 });
                         let to = epos - origin;
                         let len = to.length();
                         let dir = if len > 1e-6 { to / len } else { fwd };

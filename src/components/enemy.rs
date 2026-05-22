@@ -38,6 +38,21 @@ pub struct Boss {
 #[derive(Component, Debug)]
 pub struct Raged;
 
+/// A damage-over-time burn (Lance Beam, Nova Inferno — spec III.3/III.7).
+/// `tick_burning` applies `dps × dt` each tick and removes it at `secs ≤ 0`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Burning {
+    pub dps: f32,
+    pub secs: f32,
+}
+
+/// A stun: while present the enemy can't fire (Arc Lightning, Nova Lightning,
+/// EMP, the `_STUN` bullet trait — spec III.3/III.6). `tick_stun` counts it down.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Stunned {
+    pub secs: f32,
+}
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

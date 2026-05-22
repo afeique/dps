@@ -216,10 +216,15 @@ pub fn spawn_drops(
             Lifetime { seconds: 12.0 },
         ));
 
-        // Point orb — the enemy's roster point value (offset so it doesn't stack
-        // on the gold orb).
+        // Point orb — per-tier boss points (spec IV.7) or the enemy's roster
+        // value, offset so it doesn't stack on the gold orb.
+        let points = if death.boss_tier > 0 {
+            enemy::boss_points(death.boss_tier)
+        } else {
+            enemy::points(kind)
+        };
         commands.spawn((
-            Orb { gold: 0, points: enemy::points(kind), heal: 0.0 },
+            Orb { gold: 0, points, heal: 0.0 },
             shape_orb(false),
             Transform::from_xyz(death.position.x + 6.0, death.position.y, base_z),
             Velocity(-drift * 0.8), // opposite drift so they spread apart

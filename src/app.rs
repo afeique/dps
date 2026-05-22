@@ -204,6 +204,7 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,
                         systems::power_weapon::update_beams,
+                        systems::status::tick_burning,
                     )
                         .chain(),
                     systems::damage::apply_damage,
@@ -218,6 +219,7 @@ impl Plugin for GamePlugin {
                         .chain(),
                     systems::damage::tick_invulnerability,
                     systems::damage::tick_streak,
+                    systems::status::tick_stun,
                     // Cleanup.
                     (
                         systems::cleanup::tick_lifetimes,

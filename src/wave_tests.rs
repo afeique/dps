@@ -698,3 +698,42 @@ fn weapon_trait_helpers() {
     assert!((multishot_fan(2) - 0.12).abs() < 1e-5);
     assert!(multishot_fan(100) <= 0.8, "fan width is capped at 0.8 rad");
 }
+
+// ── 18. burning_dots_then_expires ─────────────────────────────────────────────
+
+/// A `Burning` status ticks `dps × dt` damage into its enemy and removes itself
+/// once its duration lapses (spec III.3 Lance burn).
+#[test]
+fn burning_dots_then_expires() {
+    use crate::components::Burning;
+    use crate::systems::status::tick_burning;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(20.0),
+            Burning { dps: 6.0, secs: 0.3 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_burning, apply_damage).chain());
+
+    // Step 1 (dt 0.1 s): 0.6 dmg dealt, burn persists.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert!(world.get::<Health>(e).unwrap().current < 20.0, "burn deals damage");
+    assert!(world.get::<Burning>(e).is_some(), "burn persists mid-duration");
+
+    // Step 2 (dt 0.5 s): pushes past the remaining 0.2 s → burn removed.
+    time.advance_by(Duration::from_secs_f32(0.5));
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<Burning>(e).is_none(), "burn expires");
+}

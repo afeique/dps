@@ -130,6 +130,17 @@ pub fn points(kind: EnemyKind) -> u64 {
     }
 }
 
+/// Per-tier boss point value (spec IV.7 — overrides the base roster points).
+pub fn boss_points(tier: u8) -> u64 {
+    match tier {
+        1 => 500,
+        2 => 1000,
+        3 => 1750,
+        4 => 3000,
+        _ => 0,
+    }
+}
+
 /// `ENEMY_DROP_PROFILES` gold-budget multiplier (spec VI.5). A boss overrides
 /// the per-kind profile with the 2.4× boss budget.
 pub fn drop_budget_mul(kind: EnemyKind, boss: bool) -> f32 {
