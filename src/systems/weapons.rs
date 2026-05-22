@@ -59,6 +59,17 @@ impl WeaponKind {
             Self::ClusterLauncher => Self::PulseCannon,
         }
     }
+
+    /// Human-readable name (HUD).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::PulseCannon => "Pulse Cannon",
+            Self::StormNeedles => "Storm Needles",
+            Self::ScatterShot => "Scatter Shot",
+            Self::RailDriver => "Rail Driver",
+            Self::ClusterLauncher => "Cluster Launcher",
+        }
+    }
 }
 
 /// Resolved per-shot stats for a weapon kind.

@@ -58,8 +58,20 @@ impl PowerWeaponKind {
         }
     }
 
+    /// Human-readable name (HUD).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::MissileSalvo => "Missile Salvo",
+            Self::ChargeShot => "Charge Shot",
+            Self::NovaBlast => "Nova Blast",
+            Self::MineLayer => "Mine Layer",
+            Self::LanceBeam => "Lance Beam",
+            Self::ArcLightning => "Arc Lightning",
+        }
+    }
+
     /// Energy cost per fire (`POWER_ENERGY_COST`, spec III.3).
-    fn energy_cost(self) -> f32 {
+    pub fn energy_cost(self) -> f32 {
         match self {
             Self::ChargeShot => 20.0,
             Self::MineLayer => 25.0,

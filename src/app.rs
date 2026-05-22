@@ -54,6 +54,7 @@ impl Plugin for GamePlugin {
                     render::bullets::setup_bullet_assets,
                     render::starfield::spawn_starfield,
                     render::nebula::spawn_nebula,
+                    render::hud::setup_hud,
                     audio::setup_sfx,
                 ),
             )
@@ -65,6 +66,7 @@ impl Plugin for GamePlugin {
                     render::explosion::tick_explosion_timers,
                     render::starfield::parallax_stars,
                     render::nebula::parallax_nebula,
+                    render::hud::update_hud,
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,

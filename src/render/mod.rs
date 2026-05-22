@@ -7,6 +7,7 @@
 
 pub mod bullets;
 pub mod explosion;
+pub mod hud;
 pub mod nebula;
 pub mod screenshot;
 pub mod shapes;
