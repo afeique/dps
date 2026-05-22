@@ -25,6 +25,7 @@ fn test_app() -> App {
     let mut app = App::new();
     app.add_message::<Damage>()
         .add_message::<Death>()
+        .add_message::<crate::messages::Knockback>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()

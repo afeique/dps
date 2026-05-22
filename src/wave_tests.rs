@@ -34,6 +34,7 @@ fn test_app() -> App {
     app.add_message::<Damage>()
         .add_message::<Death>()
         .add_message::<Fire>()
+        .add_message::<crate::messages::Knockback>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -754,6 +755,36 @@ fn weapon_trait_homing_explode_helpers() {
     assert_eq!(explosion_radius(0), 0.0);
     assert_eq!(explosion_radius(1), 40.0);
     assert_eq!(explosion_radius(3), 60.0);
+}
+
+// ── 21. knockback_shoves_target ───────────────────────────────────────────────
+
+/// `knock_chance` = 0.15×stacks, and `apply_knockback` nudges the target's
+/// position by the impulse (spec III.2/III.6 `_KNOCK`).
+#[test]
+fn knockback_shoves_target() {
+    use crate::messages::Knockback;
+    use crate::systems::collision::apply_knockback;
+    use crate::systems::shop::knock_chance;
+
+    assert_eq!(knock_chance(0), 0.0);
+    assert!((knock_chance(2) - 0.30).abs() < 1e-5);
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world.spawn(Transform::from_xyz(10.0, 0.0, 0.0)).id();
+
+    // Queue a shove via the message, then run the applier.
+    world.write_message(Knockback {
+        target: e,
+        impulse: Vec2::new(16.0, 0.0),
+    });
+    let mut step = Schedule::default();
+    step.add_systems(apply_knockback);
+    step.run(world);
+
+    let x = world.get::<Transform>(e).unwrap().translation.x;
+    assert!((x - 26.0).abs() < 1e-4, "target shoved +16 px on x (got {x})");
 }
 
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────

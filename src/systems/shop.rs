@@ -33,12 +33,13 @@ pub enum UpgradeId {
     StunShot,
     HomingShot,
     ExplodeShot,
+    KnockShot,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 11] = [
+    pub const ALL: [UpgradeId; 12] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -50,6 +51,7 @@ impl UpgradeId {
         Self::StunShot,
         Self::HomingShot,
         Self::ExplodeShot,
+        Self::KnockShot,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -68,6 +70,7 @@ impl UpgradeId {
             Self::StunShot => 8,
             Self::HomingShot => 9,
             Self::ExplodeShot => 10,
+            Self::KnockShot => 11,
         }
     }
 
@@ -84,6 +87,7 @@ impl UpgradeId {
             Self::StunShot => "Stun Rounds   (+12% stun)",
             Self::HomingShot => "Homing Rounds (seek enemies)",
             Self::ExplodeShot => "Explosive     (+AoE on hit)",
+            Self::KnockShot => "Knockback     (+15% shove)",
         }
     }
 
@@ -101,6 +105,7 @@ impl UpgradeId {
             Self::StunShot => 1500,
             Self::HomingShot => 1600,
             Self::ExplodeShot => 1800,
+            Self::KnockShot => 1300,
         }
     }
 
@@ -117,6 +122,7 @@ impl UpgradeId {
             Self::StunShot => 3,
             Self::HomingShot => 3,
             Self::ExplodeShot => 3,
+            Self::KnockShot => 3,
         }
     }
 }
@@ -145,6 +151,15 @@ pub fn explosion_radius(stacks: u32) -> f32 {
         30.0 + 10.0 * stacks as f32
     }
 }
+
+/// `_KNOCK` trait shove chance at `stacks` (spec III.6: `0.15 × stacks`); the
+/// proc itself is a flat 16 px shove (`KNOCK_PX`).
+pub fn knock_chance(stacks: u32) -> f32 {
+    0.15 * stacks as f32
+}
+
+/// Flat positional shove distance for a `_KNOCK` proc (spec III.6).
+pub const KNOCK_PX: f32 = 16.0;
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
@@ -343,6 +358,7 @@ fn apply_upgrade(
         | UpgradeId::BigShot
         | UpgradeId::StunShot
         | UpgradeId::HomingShot
-        | UpgradeId::ExplodeShot => {}
+        | UpgradeId::ExplodeShot
+        | UpgradeId::KnockShot => {}
     }
 }

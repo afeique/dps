@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::HanabiPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 
-use crate::messages::{Collision, Damage, Death, Fire};
+use crate::messages::{Collision, Damage, Death, Fire, Knockback};
 use crate::resources::{PlayBounds, Score};
 use crate::states::GameState;
 use crate::{audio, render, systems};
@@ -48,6 +48,7 @@ impl Plugin for GamePlugin {
             .add_message::<Damage>()
             .add_message::<Death>()
             .add_message::<Fire>()
+            .add_message::<Knockback>()
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,
@@ -198,6 +199,7 @@ impl Plugin for GamePlugin {
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,
+                        systems::collision::apply_knockback,
                         systems::collision::enemy_bullet_hits_player,
                         systems::collision::enemy_contact_player,
                         systems::asteroids::asteroid_hits,

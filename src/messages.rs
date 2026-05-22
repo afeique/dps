@@ -40,6 +40,15 @@ pub struct Death {
     pub boss_tier: u8,
 }
 
+/// Shove `target` by `impulse` world-units (the `_KNOCK` bullet trait, spec
+/// III.2/III.6 — a flat 16 px positional shove). Applied by
+/// `collision::apply_knockback` so the producer needn't hold a mutable handle.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Knockback {
+    pub target: Entity,
+    pub impulse: Vec2,
+}
+
 /// A weapon fired: spawn a bullet from `origin` along unit `dir`. `faction`
 /// selects the bullet's kind / team / color (player gold vs enemy magenta).
 #[derive(Message, Debug, Clone, Copy)]

@@ -10,14 +10,15 @@
 //! and adds the remaining pairs (AOE rings, asteroids).
 
 use crate::components::*;
-use crate::messages::Damage;
+use crate::messages::{Damage, Knockback};
 use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
-use crate::systems::shop::{explosion_radius, stun_chance, UpgradeId, Upgrades};
+use crate::systems::shop::{explosion_radius, knock_chance, stun_chance, UpgradeId, Upgrades, KNOCK_PX};
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
+    mut knock: MessageWriter<Knockback>,
     streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
     mut rng: ResMut<GameRng>,
@@ -31,6 +32,8 @@ pub fn bullet_hits_enemy(
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
     let explode_r = explosion_radius(upgrades.owned(UpgradeId::ExplodeShot));
+    // `_KNOCK` bullet trait: chance to shove the enemy on hit.
+    let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
     for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
@@ -53,6 +56,17 @@ pub fn bullet_hits_enemy(
                 // `_STUN` trait proc: briefly stun the enemy (spec III.6).
                 if stun_p > 0.0 && rng.next_f32() < stun_p {
                     commands.entity(enemy_e).insert(Stunned { secs: 1.0 });
+                }
+                // `_KNOCK` trait proc: shove the enemy away from the impact.
+                if knock_p > 0.0 && rng.next_f32() < knock_p {
+                    let dir = (etf.translation.truncate() - btf.translation.truncate())
+                        .normalize_or_zero();
+                    if dir != Vec2::ZERO {
+                        knock.write(Knockback {
+                            target: enemy_e,
+                            impulse: dir * KNOCK_PX,
+                        });
+                    }
                 }
                 // `_EXPLODE` trait: splash the streak-scaled (no-crit) bullet
                 // damage to every other enemy within the blast radius.
@@ -107,6 +121,18 @@ pub fn enemy_bullet_hits_player(
                 amount: bullet.damage,
             });
             commands.entity(bullet_e).despawn();
+        }
+    }
+}
+
+/// Apply queued `Knockback` shoves (the `_KNOCK` trait): nudge each target's
+/// position by its impulse. A separate system so producers (e.g.
+/// `bullet_hits_enemy`) needn't hold a mutable `Transform` handle.
+pub fn apply_knockback(mut knock: MessageReader<Knockback>, mut q: Query<&mut Transform>) {
+    for k in knock.read() {
+        if let Ok(mut tf) = q.get_mut(k.target) {
+            tf.translation.x += k.impulse.x;
+            tf.translation.y += k.impulse.y;
         }
     }
 }
