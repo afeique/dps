@@ -1245,6 +1245,24 @@ fn damage_numbers_spawn_and_float() {
     );
 }
 
+// ── 32. minimap_maps_world_to_panel ───────────────────────────────────────────
+
+/// The minimap mapping puts world-center at panel-center, the arena corners at
+/// the panel corners (y flipped for top-down UI), and clamps out-of-arena points.
+#[test]
+fn minimap_maps_world_to_panel() {
+    use crate::render::minimap::world_to_minimap;
+
+    let half = Vec2::new(640.0, 360.0);
+    let size = 150.0;
+    assert_eq!(world_to_minimap(Vec2::ZERO, half, size), Vec2::new(75.0, 75.0));
+    assert_eq!(world_to_minimap(Vec2::new(-640.0, 360.0), half, size), Vec2::new(0.0, 0.0));
+    assert_eq!(world_to_minimap(Vec2::new(640.0, -360.0), half, size), Vec2::new(150.0, 150.0));
+
+    let c = world_to_minimap(Vec2::new(9_999.0, -9_999.0), half, size);
+    assert!((0.0..=150.0).contains(&c.x) && (0.0..=150.0).contains(&c.y), "clamps in-bounds");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other
