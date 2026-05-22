@@ -1028,6 +1028,38 @@ fn emp_pulse_stuns_in_radius() {
     assert!(world.get::<Stunned>(far).is_none(), "enemy outside the radius is not");
 }
 
+// ── 27. bulwark_halves_player_damage ──────────────────────────────────────────
+
+/// While Bulwark is active, incoming player damage is halved after the shield
+/// (spec II.2 step 7 / III.4).
+#[test]
+fn bulwark_halves_player_damage() {
+    use crate::components::Bulwark;
+    use crate::messages::Damage;
+    use crate::systems::damage::apply_damage;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // No shield → isolate Bulwark's 50% cut. 100-dmg hit → 50 with Bulwark.
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health::new(1000.0),
+            Bulwark { seconds: 4.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.write_message(Damage { target: player, amount: 100.0 });
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!((hp - 950.0).abs() < 1e-3, "Bulwark halves 100 → 50 (hp now {hp})");
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

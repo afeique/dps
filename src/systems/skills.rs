@@ -20,6 +20,8 @@ pub struct Skills {
     pub bomb_cd: f32,
     /// Remaining cooldown for EMP Pulse (V). Ready at 0.
     pub emp_cd: f32,
+    /// Remaining cooldown for Bulwark (G). Ready at 0.
+    pub bulwark_cd: f32,
 }
 
 impl Default for Skills {
@@ -29,6 +31,7 @@ impl Default for Skills {
             shield_cd: 0.0,
             bomb_cd: 0.0,
             emp_cd: 0.0,
+            bulwark_cd: 0.0,
         }
     }
 }
@@ -42,6 +45,8 @@ impl Default for Skills {
 ///   "refill" — this is a deliberate-invuln defensive pop.)
 /// * **Bomb** (`X`, 15 s CD) — despawn every enemy and enemy bullet;
 ///   each enemy triggers a `Death` message so explosion FX fire normally.
+/// * **Bulwark** (`G`, 20 s CD) — a 4 s window of 50% incoming-damage resist
+///   (the `Bulwark` component, read by `apply_damage`).
 pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
@@ -60,12 +65,15 @@ pub fn use_skills(
     skills.dash_cd = (skills.dash_cd - dt).max(0.0);
     skills.shield_cd = (skills.shield_cd - dt).max(0.0);
     skills.bomb_cd = (skills.bomb_cd - dt).max(0.0);
+    skills.bulwark_cd = (skills.bulwark_cd - dt).max(0.0);
 
-    // Gamepad triggers (first connected pad): LT = dash, LB = shield, North = bomb.
+    // Gamepad triggers (first connected pad): LT = dash, LB = shield, North = bomb,
+    // DPadDown = bulwark (East is EMP).
     let pad = gamepads.iter().next();
     let dash_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger2));
     let shield_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::LeftTrigger));
     let bomb_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::North));
+    let bulwark_btn = pad.is_some_and(|gp| gp.just_pressed(GamepadButton::DPadDown));
 
     // Bail if the player ship is absent (GameOver, not yet spawned, etc.).
     let Ok((player_entity, mut vel, tf)) = player.single_mut() else {
@@ -113,6 +121,31 @@ pub fn use_skills(
             }
         }
         skills.bomb_cd = 15.0;
+    }
+
+    // --- BULWARK (G) -----------------------------------------------------
+    // A 4 s window of halved incoming damage (spec III.4). The Bulwark
+    // component is read by apply_damage; tick_bulwark expires it.
+    if (keys.just_pressed(KeyCode::KeyG) || bulwark_btn) && skills.bulwark_cd <= 0.0 {
+        commands
+            .entity(player_entity)
+            .insert(Bulwark { seconds: 4.0 });
+        skills.bulwark_cd = 20.0;
+    }
+}
+
+/// Count down the Bulwark window and remove it on expiry (mirrors
+/// `damage::tick_invulnerability`).
+pub fn tick_bulwark(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut Bulwark)>,
+) {
+    for (e, mut b) in &mut q {
+        b.seconds -= time.delta_secs();
+        if b.seconds <= 0.0 {
+            commands.entity(e).remove::<Bulwark>();
+        }
     }
 }
 

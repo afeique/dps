@@ -28,6 +28,17 @@ pub struct Shield {
     pub reduction: f32,
 }
 
+/// Active **Bulwark** skill window (spec III.4): while present, incoming player
+/// damage is halved (after the shield, per the spec pipeline step 7). Counted
+/// down + removed by `skills::tick_bulwark`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Bulwark {
+    pub seconds: f32,
+}
+
+/// Bulwark damage-resist fraction (spec III.4: 50%, 65% with IRON_WILL).
+pub const BULWARK_RESIST: f32 = 0.5;
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

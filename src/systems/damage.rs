@@ -12,7 +12,9 @@
 //!
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
-use crate::components::{Boss, Enemy, Health, Invulnerable, Lives, Shield, Ship};
+use crate::components::{
+    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, Shield, Ship, BULWARK_RESIST,
+};
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{GameRng, KillStreak, Score};
 use crate::states::GameState;
@@ -38,10 +40,11 @@ pub fn apply_damage(
         Has<Invulnerable>,
         Option<&Enemy>,
         Option<&Boss>,
+        Option<&Bulwark>,
     )>,
 ) {
     for ev in dmg.read() {
-        let Ok((mut hp, tf, shield, mut lives, is_player, invulnerable, enemy, boss)) =
+        let Ok((mut hp, tf, shield, mut lives, is_player, invulnerable, enemy, boss, bulwark)) =
             q.get_mut(ev.target)
         else {
             continue; // target already gone this tick
@@ -67,6 +70,10 @@ pub fn apply_damage(
         let mut amount = ev.amount;
         if let Some(s) = shield {
             amount *= 1.0 - s.reduction;
+        }
+        // BULWARK halves what's left (spec II.2 step 7); player-only component.
+        if bulwark.is_some() {
+            amount *= 1.0 - BULWARK_RESIST;
         }
         if is_player {
             amount = amount.round();
