@@ -545,3 +545,31 @@ fn lance_beam_damages_target_and_expires() {
         "beam despawns at end of life"
     );
 }
+
+// ── 12. gold_value_scales_and_tiers ───────────────────────────────────────────
+
+/// Gold value scales with wave × Gold Find × streak × drop profile (spec VI.5)
+/// and classifies into the bronze/silver/gold/platinum tiers (spec VI.4).
+#[test]
+fn gold_value_scales_and_tiers() {
+    use crate::systems::drops::{gold_tier, gold_value, GoldTier};
+
+    // Wave 1, standard profile, no streak: avg (10+20)/2 = 15, goldFind 1.0 → 15.
+    let v1 = gold_value(1, 1.0, 1.0);
+    assert_eq!(v1, 15);
+    assert_eq!(gold_tier(v1), GoldTier::Bronze);
+
+    // Tier thresholds.
+    assert_eq!(gold_tier(34), GoldTier::Bronze);
+    assert_eq!(gold_tier(35), GoldTier::Silver);
+    assert_eq!(gold_tier(99), GoldTier::Silver);
+    assert_eq!(gold_tier(100), GoldTier::Gold);
+    assert_eq!(gold_tier(199), GoldTier::Gold);
+    assert_eq!(gold_tier(200), GoldTier::Platinum);
+
+    // Wave 10 boss with a full streak gold mult pushes value into platinum:
+    // min 37, max 65, avg 51; goldFind 1.9 → 51×1.9×1.5×2.4 ≈ 349.
+    let v_boss = gold_value(10, 2.4, 1.5);
+    assert!(v_boss > v1, "later wave + boss profile yields more gold");
+    assert_eq!(gold_tier(v_boss), GoldTier::Platinum);
+}

@@ -53,6 +53,15 @@ impl KillStreak {
             1.0
         }
     }
+    /// Active gold multiplier (`STREAK_TIERS` goldMult) while the buff window is
+    /// open; 1.0 otherwise. Applied to money-orb budgets (spec VI.5 `streakGold`).
+    pub fn gold_multiplier(&self) -> f32 {
+        if self.timer > 0.0 {
+            streak_gold_mult(self.kills)
+        } else {
+            1.0
+        }
+    }
     /// Register a kill: bump the count and refresh the buff window.
     pub fn on_kill(&mut self) {
         self.kills += 1;
@@ -140,6 +149,23 @@ pub fn streak_mult(kills: u32) -> f32 {
         (60, 2.00), (70, 2.12), (80, 2.23), (90, 2.33), (100, 2.42),
         (110, 2.50), (120, 2.58), (130, 2.65), (140, 2.72), (150, 2.78),
         (160, 2.84), (170, 2.89), (180, 2.93), (190, 2.97), (200, 3.00),
+    ];
+    let mut m = 1.0;
+    for &(threshold, mult) in TIERS {
+        if kills >= threshold {
+            m = mult;
+        }
+    }
+    m
+}
+
+/// `STREAK_TIERS` *gold* multiplier for a given kill count (spec III.6/VI.5):
+/// the documented breakpoints climb from 1.05× at 10 kills to the 1.50× cap at
+/// 200. Unlisted counts hold the previous breakpoint.
+pub fn streak_gold_mult(kills: u32) -> f32 {
+    const TIERS: &[(u32, f32)] = &[
+        (10, 1.05), (20, 1.10), (30, 1.15), (50, 1.25),
+        (70, 1.32), (100, 1.38), (150, 1.45), (200, 1.50),
     ];
     let mut m = 1.0;
     for &(threshold, mult) in TIERS {

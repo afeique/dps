@@ -11,7 +11,7 @@
 
 use bevy::prelude::*;
 
-use crate::components::Faction;
+use crate::components::{EnemyKind, Faction};
 
 /// Broadphase/narrowphase output: entity `a` overlapped entity `b` this tick.
 #[derive(Message, Debug, Clone, Copy)]
@@ -28,11 +28,16 @@ pub struct Damage {
 }
 
 /// `entity` reached 0 HP at `position` (captured before despawn so death FX
-/// can place an explosion there). Drives death FX now; drops + score in Phase 3.
+/// can place an explosion there). Drives death FX + drops/score.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Death {
     pub entity: Entity,
     pub position: Vec2,
+    /// The enemy kind that died, or `None` for the player. Lets `spawn_drops`
+    /// compute the gold budget + point reward from the roster (spec VI.4/VI.5).
+    pub kind: Option<EnemyKind>,
+    /// Boss tier (0 = not a boss); bumps the gold drop-profile budget.
+    pub boss_tier: u8,
 }
 
 /// A weapon fired: spawn a bullet from `origin` along unit `dir`. `faction`

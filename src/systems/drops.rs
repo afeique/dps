@@ -6,7 +6,9 @@
 
 use crate::components::*;
 use crate::messages::Death;
-use crate::resources::Score;
+use crate::resources::{KillStreak, Score};
+use crate::systems::enemy;
+use crate::systems::wave::Wave;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -19,6 +21,62 @@ pub struct Orb {
     pub points: u64,
 }
 
+// ─── Gold drop tiers (spec VI.4) ─────────────────────────────────────────────
+
+/// A gold drop's value tier — sets its tint + scale (spec VI.4).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GoldTier {
+    Bronze,
+    Silver,
+    Gold,
+    Platinum,
+}
+
+/// Classify a gold value into its drop tier (spec VI.4 thresholds).
+pub fn gold_tier(value: u64) -> GoldTier {
+    match value {
+        v if v >= 200 => GoldTier::Platinum,
+        v if v >= 100 => GoldTier::Gold,
+        v if v >= 35 => GoldTier::Silver,
+        _ => GoldTier::Bronze,
+    }
+}
+
+impl GoldTier {
+    /// Visual scale multiplier (spec VI.4).
+    fn scale(self) -> f32 {
+        match self {
+            GoldTier::Bronze => 0.80,
+            GoldTier::Silver => 0.95,
+            GoldTier::Gold => 1.00,
+            GoldTier::Platinum => 1.20,
+        }
+    }
+    /// HDR-emissive tint (spec VI.4 colors `#cd7f32`/`#dcdcdc`/`#ffd700`/`#88ddff`,
+    /// pushed past 1.0 so Bloom gives the gem a glow).
+    fn color(self) -> Color {
+        match self {
+            GoldTier::Bronze => Color::linear_rgb(7.0, 3.5, 1.0),
+            GoldTier::Silver => Color::linear_rgb(7.0, 7.0, 7.5),
+            GoldTier::Gold => Color::linear_rgb(9.0, 7.0, 1.0),
+            GoldTier::Platinum => Color::linear_rgb(4.0, 8.0, 9.0),
+        }
+    }
+}
+
+/// Per-kill gold value (spec VI.5 money budget, simplified to one orb):
+/// `avgMoney × goldFind × streakGold × profileBudget`, where
+/// `avgMoney = (minMoney+maxMoney)/2`, `minMoney = 10+(wave−1)*3`,
+/// `maxMoney = 20+(wave−1)*5`, and `goldFind = 1 + max(0,wave−1)*0.10`.
+pub fn gold_value(wave: u64, profile_mul: f32, streak_gold: f32) -> u64 {
+    let w = wave.max(1) as f32;
+    let min_money = 10.0 + (w - 1.0) * 3.0;
+    let max_money = 20.0 + (w - 1.0) * 5.0;
+    let avg = (min_money + max_money) * 0.5;
+    let gold_find = 1.0 + (w - 1.0) * 0.10;
+    (avg * gold_find * streak_gold * profile_mul).round().max(1.0) as u64
+}
+
 // ─── Shape builders ──────────────────────────────────────────────────────────
 
 /// A small 4-pointed diamond (rhombus) used for both orb kinds.
@@ -29,28 +87,30 @@ pub struct Orb {
 /// The diamond is axis-aligned: tips at ±`R` on Y, ±`R*0.55` on X, giving a
 /// slightly tall gem silhouette. Bevy 2D is +Y up, which matches our intent.
 pub fn shape_orb(gold_orb: bool) -> Shape {
-    const R: f32 = 5.0;
-    // Top → right → bottom → left  (axis-aligned diamond)
-    let pts = [
-        Vec2::new(0.0, R),          // top
-        Vec2::new(R * 0.55, 0.0),   // right
-        Vec2::new(0.0, -R),         // bottom
-        Vec2::new(-R * 0.55, 0.0),  // left
-    ];
+    orb_shape_colored(if gold_orb {
+        Color::linear_rgb(9.0, 7.0, 1.0) // HDR warm gold
+    } else {
+        Color::linear_rgb(1.0, 7.0, 9.0) // HDR cool cyan
+    })
+}
 
+/// Build the orb diamond in an arbitrary color (gold orbs tint it per their
+/// value tier; point orbs stay cyan). Axis-aligned: tips at ±`R` on Y,
+/// ±`R*0.55` on X.
+fn orb_shape_colored(color: Color) -> Shape {
+    const R: f32 = 5.0;
+    let pts = [
+        Vec2::new(0.0, R),         // top
+        Vec2::new(R * 0.55, 0.0),  // right
+        Vec2::new(0.0, -R),        // bottom
+        Vec2::new(-R * 0.55, 0.0), // left
+    ];
     let path = ShapePath::new()
         .move_to(pts[0])
         .line_to(pts[1])
         .line_to(pts[2])
         .line_to(pts[3])
         .close();
-
-    let color = if gold_orb {
-        Color::linear_rgb(9.0, 7.0, 1.0) // HDR warm gold
-    } else {
-        Color::linear_rgb(1.0, 7.0, 9.0) // HDR cool cyan
-    };
-
     ShapeBuilder::with(&path)
         .fill(color)
         .stroke((color, 1.5))
@@ -71,58 +131,61 @@ fn drift_from_index(index: u32) -> Vec2 {
     Vec2::new(fx, fy)
 }
 
-/// Spawn one or two orbs at the position of every `Death` message.
-///
-/// Parity of `death.entity.index()` selects gold vs point orb as the primary
-/// drop. Every 3rd kill (index divisible by 3) drops *both* a gold and a point
-/// orb so the field stays lively.
+/// On every *enemy* `Death`, spawn a gold orb + a point orb (player deaths drop
+/// nothing). The gold orb's value scales with the wave, the kill-streak gold
+/// multiplier, and the enemy's drop profile (spec VI.5), and its value tier sets
+/// its tint + scale (spec VI.4). The point orb carries the enemy's roster points.
 ///
 /// Each orb gets:
 /// - `Collider { radius: 8.0 }` (larger than visual — forgiving pickup zone)
 /// - `Velocity` — small deterministic drift so orbs spread out naturally
 /// - `Lifetime { seconds: 12.0 }` — uncollected orbs fade before they clutter
-pub fn spawn_drops(mut commands: Commands, mut deaths: MessageReader<Death>) {
+///
+/// Simplified vs. spec VI.5: the money budget is one orb (not split into pixel
+/// coins + chunky shapes), and drops are unconditional (the `rate` gate and
+/// cooldown-gated health orbs are deferred).
+pub fn spawn_drops(
+    mut commands: Commands,
+    mut deaths: MessageReader<Death>,
+    wave: Res<Wave>,
+    streak: Res<KillStreak>,
+) {
+    let wave_n = wave.number() as u64;
+    let streak_gold = streak.gold_multiplier();
+
     for death in deaths.read() {
+        let Some(kind) = death.kind else {
+            continue; // player death — no drops
+        };
         let idx = death.entity.to_bits() as u32;
         let drift = drift_from_index(idx) * 28.0; // world-units / second
         let base_z = 0.5_f32;
 
-        let gold_primary = idx % 2 == 0;
-        let drop_both = idx % 3 == 0;
+        // Gold orb — value scales with wave × Gold Find × streak × drop profile;
+        // the resulting tier sets its tint + scale.
+        let profile = enemy::drop_budget_mul(kind, death.boss_tier > 0);
+        let value = gold_value(wave_n, profile, streak_gold);
+        let tier = gold_tier(value);
+        commands.spawn((
+            Orb { gold: value, points: 0 },
+            orb_shape_colored(tier.color()),
+            Transform::from_xyz(death.position.x, death.position.y, base_z)
+                .with_scale(Vec3::splat(tier.scale())),
+            Velocity(drift),
+            Collider { radius: 8.0 },
+            Lifetime { seconds: 12.0 },
+        ));
 
-        // Primary drop
-        if gold_primary || drop_both {
-            // gold values: 1–3 (hash into tiny range)
-            let gold_amt = 1 + (idx % 3) as u64;
-            commands.spawn((
-                Orb { gold: gold_amt, points: 0 },
-                shape_orb(true),
-                Transform::from_xyz(death.position.x, death.position.y, base_z),
-                Velocity(drift),
-                Collider { radius: 8.0 },
-                Lifetime { seconds: 12.0 },
-            ));
-        }
-
-        if !gold_primary || drop_both {
-            // point values: 25, 50, or 100
-            let pts_tiers = [25_u64, 50, 100];
-            let pts_amt = pts_tiers[((idx / 2) % 3) as usize];
-            // Offset slightly so the two orbs don't stack on top of each other.
-            let offset = if drop_both { Vec2::new(6.0, 0.0) } else { Vec2::ZERO };
-            commands.spawn((
-                Orb { gold: 0, points: pts_amt },
-                shape_orb(false),
-                Transform::from_xyz(
-                    death.position.x + offset.x,
-                    death.position.y + offset.y,
-                    base_z,
-                ),
-                Velocity(-drift * 0.8), // opposite drift so they spread apart
-                Collider { radius: 8.0 },
-                Lifetime { seconds: 12.0 },
-            ));
-        }
+        // Point orb — the enemy's roster point value (offset so it doesn't stack
+        // on the gold orb).
+        commands.spawn((
+            Orb { gold: 0, points: enemy::points(kind) },
+            shape_orb(false),
+            Transform::from_xyz(death.position.x + 6.0, death.position.y, base_z),
+            Velocity(-drift * 0.8), // opposite drift so they spread apart
+            Collider { radius: 8.0 },
+            Lifetime { seconds: 12.0 },
+        ));
     }
 }
 

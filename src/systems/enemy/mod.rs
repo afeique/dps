@@ -71,6 +71,40 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
     }
 }
 
+/// Roster point value for destroying this kind (spec IV.1 "Points" column).
+pub fn points(kind: EnemyKind) -> u64 {
+    match kind {
+        EnemyKind::Hunter => 120,
+        EnemyKind::Guardian => 200,
+        EnemyKind::Wasp => 100,
+        EnemyKind::Stalker => 130,
+        EnemyKind::Drifter => 180,
+        EnemyKind::Prowler => 240,
+        EnemyKind::Weaver => 160,
+        EnemyKind::Sentinel => 220,
+        EnemyKind::Tangerine => 160,
+        EnemyKind::Titan => 320,
+    }
+}
+
+/// `ENEMY_DROP_PROFILES` gold-budget multiplier (spec VI.5). A boss overrides
+/// the per-kind profile with the 2.4× boss budget.
+pub fn drop_budget_mul(kind: EnemyKind, boss: bool) -> f32 {
+    if boss {
+        return 2.4; // boss profile
+    }
+    match kind {
+        // grunt
+        EnemyKind::Hunter | EnemyKind::Wasp | EnemyKind::Stalker => 0.75,
+        // standard
+        EnemyKind::Drifter | EnemyKind::Weaver | EnemyKind::Tangerine => 1.0,
+        // tanky
+        EnemyKind::Guardian | EnemyKind::Prowler | EnemyKind::Sentinel => 1.4,
+        // miniboss
+        EnemyKind::Titan => 1.8,
+    }
+}
+
 /// Boss-tier stat multipliers `(hp, size, speed)` from `BOSS_TIER_STATS`
 /// (port spec IV.7). Tier 0 = a normal (non-boss) enemy.
 pub fn boss_tier_mul(tier: u8) -> (f32, f32, f32) {
