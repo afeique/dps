@@ -1287,6 +1287,24 @@ fn wave_start_spawns_asteroids() {
     assert_eq!(asteroids, 5, "wave 1 spawns its 5-asteroid budget on pulse 0");
 }
 
+// ── 34. update_nova_no_query_conflict (regression: B0001) ─────────────────────
+
+/// `update_nova`'s mut-Transform ring query must stay disjoint from its
+/// immut-Transform enemy query (via `Without<Enemy>`). Running the system in a
+/// schedule triggers Bevy's intra-system access check — if the filter is ever
+/// dropped this panics with B0001 at initialize.
+#[test]
+fn update_nova_no_query_conflict() {
+    use crate::systems::power_weapon::update_nova;
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(Time::<()>::default());
+
+    let mut sched = Schedule::default();
+    sched.add_systems(update_nova);
+    sched.run(app.world_mut()); // would panic (B0001) if the queries conflicted
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other

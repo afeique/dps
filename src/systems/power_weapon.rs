@@ -547,7 +547,9 @@ pub fn update_nova(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
-    mut rings: Query<(Entity, &mut NovaRing, &mut Transform)>,
+    // `Without<Enemy>` makes the mut-Transform ring query disjoint from the
+    // immut-Transform enemy query above (a ring is never an enemy) — else B0001.
+    mut rings: Query<(Entity, &mut NovaRing, &mut Transform), Without<Enemy>>,
 ) {
     let dt = time.delta_secs();
     for (ring_e, mut ring, mut tf) in &mut rings {
