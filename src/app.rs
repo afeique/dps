@@ -72,10 +72,21 @@ impl Plugin for GamePlugin {
                     audio::play_player_hit,
                 ),
             )
-            // ── spawn the slice on entering Playing ─────────────────────
+            // ── title screen ────────────────────────────────────────────
+            .add_systems(OnEnter(GameState::Title), systems::flow::enter_title)
+            .add_systems(
+                OnExit(GameState::Title),
+                systems::flow::despawn_screen::<systems::flow::TitleScreen>,
+            )
+            .add_systems(
+                Update,
+                systems::flow::title_input.run_if(in_state(GameState::Title)),
+            )
+            // ── spawn the slice + reset run state on entering Playing ───
             .add_systems(
                 OnEnter(GameState::Playing),
                 (
+                    systems::flow::reset_run,
                     systems::spawn::spawn_player,
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
@@ -93,14 +104,32 @@ impl Plugin for GamePlugin {
                 )
                     .run_if(in_state(GameState::Playing)),
             )
-            // ── death → GameOver → restart flow ─────────────────────────
+            // ── death → GameOver → title flow ───────────────────────────
+            .add_systems(OnEnter(GameState::GameOver), systems::flow::enter_game_over)
             .add_systems(
-                OnEnter(GameState::GameOver),
-                systems::flow::game_over_cleanup,
+                OnExit(GameState::GameOver),
+                systems::flow::despawn_screen::<systems::flow::GameOverScreen>,
             )
             .add_systems(
                 Update,
-                systems::flow::restart_input.run_if(in_state(GameState::GameOver)),
+                systems::flow::game_over_input.run_if(in_state(GameState::GameOver)),
+            )
+            // ── campaign cleared → GameComplete → title flow ────────────
+            .add_systems(
+                Update,
+                systems::flow::check_campaign_complete.run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                OnEnter(GameState::GameComplete),
+                systems::flow::enter_game_complete,
+            )
+            .add_systems(
+                OnExit(GameState::GameComplete),
+                systems::flow::despawn_screen::<systems::flow::GameCompleteScreen>,
+            )
+            .add_systems(
+                Update,
+                systems::flow::game_complete_input.run_if(in_state(GameState::GameComplete)),
             )
             // ── simulation: fixed timestep, ordered ─────────────────────
             .add_systems(

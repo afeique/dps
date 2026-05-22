@@ -1,18 +1,23 @@
 //! Top-level game flow as Bevy `States`.
 //!
-//! Phase 1 boots straight into `Playing` (there is no title screen until the
-//! UI phase). `Paused`, `Shop`, `GameOver`, and a real `Title` come online in
-//! later phases — see `docs/port-plan.md` §1.
+//! Boot lands on `Title`; ENTER starts a run (`Playing`). A run ends in
+//! `GameOver` (death) or `GameComplete` (all 30 waves cleared), both of which
+//! return to `Title`. `Paused` is reserved but not yet wired. Screens + their
+//! transitions live in `systems::flow`.
 
 use bevy::prelude::*;
 
 #[derive(States, Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum GameState {
-    /// Active gameplay. Default for now so `cargo run` drops into the slice.
+    /// Start screen — boot lands here; ENTER → `Playing`.
     #[default]
+    Title,
+    /// Active gameplay.
     Playing,
-    /// Reserved — pause overlay (Phase 5).
+    /// Reserved — pause overlay (not yet wired).
     Paused,
-    /// Reserved — death/results screen (Phase 5).
+    /// Death / results screen; ENTER → `Title`.
     GameOver,
+    /// Campaign cleared (all 30 waves); ENTER → `Title`.
+    GameComplete,
 }
