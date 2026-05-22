@@ -681,3 +681,20 @@ fn boss_rages_at_one_third_hp() {
     let cd = world.get::<FireCooldown>(boss).unwrap().cooldown;
     assert!((cd - 2.0 * 0.66).abs() < 0.01, "fire cooldown cut ×0.66 (got {cd})");
 }
+
+// ── 17. weapon_trait_helpers ──────────────────────────────────────────────────
+
+/// The primary-weapon trait math (spec III.2): `_RAPID` = ×0.88^stacks (faster),
+/// `_MULTI` fan = `min(0.8, 0.12*(count−1))`.
+#[test]
+fn weapon_trait_helpers() {
+    use crate::systems::weapons::{multishot_fan, rapid_cooldown_mult};
+
+    assert_eq!(rapid_cooldown_mult(0), 1.0);
+    assert!((rapid_cooldown_mult(1) - 0.88).abs() < 1e-5);
+    assert!(rapid_cooldown_mult(4) < rapid_cooldown_mult(1), "more stacks → faster");
+
+    assert_eq!(multishot_fan(1), 0.0);
+    assert!((multishot_fan(2) - 0.12).abs() < 1e-5);
+    assert!(multishot_fan(100) <= 0.8, "fan width is capped at 0.8 rad");
+}

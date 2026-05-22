@@ -25,6 +25,7 @@
 use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
+use crate::systems::shop::{UpgradeId, Upgrades};
 use bevy::prelude::*;
 use bevy_hanabi::prelude::ParticleEffect;
 
@@ -138,6 +139,23 @@ fn jitter_rand(seed: f32) -> f32 {
     r * 2.0 - 1.0
 }
 
+/// `_RAPID` trait: fireRate `×(1−0.12)^stacks` (spec III.2).
+#[inline]
+pub fn rapid_cooldown_mult(stacks: u32) -> f32 {
+    0.88_f32.powi(stacks as i32)
+}
+
+/// `_MULTI` trait fan width for a total projectile `count`: `min(0.8,
+/// 0.12*(count−1))` rad (spec III.2); 0 for a single shot.
+#[inline]
+pub fn multishot_fan(count: u32) -> f32 {
+    if count > 1 {
+        (0.12 * (count as f32 - 1.0)).min(0.8)
+    } else {
+        0.0
+    }
+}
+
 // ─── Systems ─────────────────────────────────────────────────────────────────
 
 /// Cycle (Tab / Q) or directly select (1–5) the active weapon.
@@ -161,6 +179,7 @@ pub fn cycle_weapon(keys: Res<ButtonInput<KeyCode>>, mut cur: ResMut<CurrentWeap
 pub fn player_fire(
     time: Res<Time>,
     cur: Res<CurrentWeapon>,
+    upgrades: Res<Upgrades>,
     mut fire: MessageWriter<Fire>,
     mut q: Query<(&Intent, &mut Weapon, &Transform), With<Ship>>,
 ) {
@@ -168,12 +187,18 @@ pub fn player_fire(
     let st = stats(cur.0);
     let t = time.elapsed_secs();
 
+    // Live primary-weapon traits (spec III.2): faster fire + extra fanned shots.
+    let rapid = upgrades.owned(UpgradeId::RapidFire);
+    let count = st.count + upgrades.owned(UpgradeId::Multishot);
+    // The fan is the wider of the weapon's own spread and the `_MULTI` fan.
+    let fan = st.spread.max(multishot_fan(count));
+
     for (intent, mut weapon, tf) in &mut q {
         weapon.timer = (weapon.timer - dt).max(0.0);
         if !intent.firing || weapon.timer > 0.0 {
             continue;
         }
-        weapon.timer = st.cooldown;
+        weapon.timer = st.cooldown * rapid_cooldown_mult(rapid);
 
         let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
         let nose = tf.translation.truncate() + fwd * 20.0;
@@ -188,17 +213,16 @@ pub fn player_fire(
             });
         };
 
-        if st.count <= 1 {
+        if count <= 1 {
             // Single shot (+ optional cone-of-fire jitter for Storm Needles).
             let j = jitter_rand(t * 91.7) * st.jitter;
             shoot(rotate(fwd, j), &mut fire);
         } else {
-            // Even fan across [-spread/2, +spread/2] with small per-pellet jitter.
-            let n = st.count;
-            let half = st.spread * 0.5;
-            for i in 0..n {
-                let f = i as f32 / (n - 1) as f32; // 0..1
-                let base = -half + f * st.spread;
+            // Even fan across [-fan/2, +fan/2] with small per-pellet jitter.
+            let half = fan * 0.5;
+            for i in 0..count {
+                let f = i as f32 / (count - 1) as f32; // 0..1
+                let base = -half + f * fan;
                 let j = jitter_rand(t * 53.3 + i as f32 * 12.9) * st.jitter;
                 shoot(rotate(fwd, base + j), &mut fire);
             }
@@ -213,12 +237,16 @@ pub fn spawn_bullets(
     mut commands: Commands,
     assets: Res<BulletAssets>,
     cur: Res<CurrentWeapon>,
+    upgrades: Res<Upgrades>,
     mut fire: MessageReader<Fire>,
 ) {
     let pst = stats(cur.0);
+    // Live primary-weapon traits (spec III.2): +1 pierce / +2.2 px radius per stack.
+    let player_pierce = pst.pierce + upgrades.owned(UpgradeId::Piercing);
+    let player_radius = pst.radius + 2.2 * upgrades.owned(UpgradeId::BigShot) as f32;
     for shot in fire.read() {
         let (kind, radius, pierce, body, life) = match shot.faction {
-            Faction::Player => (BulletKind::Player, pst.radius, pst.pierce, assets.player_body.clone(), 1.5),
+            Faction::Player => (BulletKind::Player, player_radius, player_pierce, assets.player_body.clone(), 1.5),
             Faction::Enemy => (BulletKind::Enemy, 4.0, 0, assets.enemy_body.clone(), 3.0),
         };
 

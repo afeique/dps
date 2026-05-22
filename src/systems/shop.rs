@@ -17,22 +17,32 @@ use bevy::prelude::*;
 
 // ── Upgrade catalogue ──────────────────────────────────────────────────────
 
-/// The shop's player-stat upgrades (the suspended DEFENSE list, spec III.5/VIII.4).
+/// Shop upgrades: the player-stat (DEFENSE) set, applied to the ship on buy, plus
+/// four primary-weapon traits (spec III.2) whose effect is read *live* by the
+/// weapon systems from the `Upgrades` resource each shot.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum UpgradeId {
     HealthBoost,
     ShieldBoost,
     SpeedBoost,
     SpareShip,
+    Multishot,
+    RapidFire,
+    Piercing,
+    BigShot,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order).
-    pub const ALL: [UpgradeId; 4] = [
+    pub const ALL: [UpgradeId; 8] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
         Self::SpareShip,
+        Self::Multishot,
+        Self::RapidFire,
+        Self::Piercing,
+        Self::BigShot,
     ];
 
     fn idx(self) -> usize {
@@ -41,6 +51,10 @@ impl UpgradeId {
             Self::ShieldBoost => 1,
             Self::SpeedBoost => 2,
             Self::SpareShip => 3,
+            Self::Multishot => 4,
+            Self::RapidFire => 5,
+            Self::Piercing => 6,
+            Self::BigShot => 7,
         }
     }
 
@@ -50,16 +64,24 @@ impl UpgradeId {
             Self::ShieldBoost => "Shielding     (+8% DR)",
             Self::SpeedBoost => "Afterburner   (+thrust)",
             Self::SpareShip => "Spare Ship    (+1 tank)",
+            Self::Multishot => "Multishot     (+1 shot)",
+            Self::RapidFire => "Rapid Fire    (-12% cd)",
+            Self::Piercing => "Piercing      (+1 pierce)",
+            Self::BigShot => "Big Shot      (+2.2 radius)",
         }
     }
 
-    /// Pre-scale base cost (spec III.5 DEFENSE costs / VIII.4).
+    /// Pre-scale base cost (spec III.2 traits / III.5 DEFENSE costs / VIII.4).
     fn base_cost(self) -> u64 {
         match self {
             Self::HealthBoost => 1200,
             Self::ShieldBoost => 1500,
             Self::SpeedBoost => 2200,
             Self::SpareShip => 12000,
+            Self::Multishot => 1800,
+            Self::RapidFire => 1200,
+            Self::Piercing => 1500,
+            Self::BigShot => 1200,
         }
     }
 
@@ -69,6 +91,10 @@ impl UpgradeId {
             Self::ShieldBoost => 8,
             Self::SpeedBoost => 4,
             Self::SpareShip => 3,
+            Self::Multishot => 3,
+            Self::RapidFire => 4,
+            Self::Piercing => 3,
+            Self::BigShot => 3,
         }
     }
 }
@@ -76,7 +102,7 @@ impl UpgradeId {
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
 #[derive(Resource, Default)]
 pub struct Upgrades {
-    owned: [u32; 4],
+    owned: [u32; 8],
 }
 
 impl Upgrades {
@@ -88,7 +114,7 @@ impl Upgrades {
     }
     /// Reset all stacks (called at the start of a fresh run).
     pub fn reset(&mut self) {
-        self.owned = [0; 4];
+        self.owned = [0; 8];
     }
 }
 
@@ -258,5 +284,11 @@ fn apply_upgrade(
         UpgradeId::SpareShip => {
             lives.count += 1;
         }
+        // Primary-weapon traits take effect live in the weapon systems (they read
+        // the Upgrades resource each shot), so buying them is just the stack bump.
+        UpgradeId::Multishot
+        | UpgradeId::RapidFire
+        | UpgradeId::Piercing
+        | UpgradeId::BigShot => {}
     }
 }
