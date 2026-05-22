@@ -239,6 +239,7 @@ pub fn spawn_bullets(
     assets: Res<BulletAssets>,
     cur: Res<CurrentWeapon>,
     upgrades: Res<Upgrades>,
+    wave: Res<crate::systems::wave::Wave>,
     mut fire: MessageReader<Fire>,
 ) {
     let pst = stats(cur.0);
@@ -247,15 +248,17 @@ pub fn spawn_bullets(
     let player_pierce = pst.pierce + upgrades.owned(UpgradeId::Piercing);
     let player_radius = pst.radius + 2.2 * upgrades.owned(UpgradeId::BigShot) as f32;
     let player_homing = homing_turn_rate(upgrades.owned(UpgradeId::HomingShot));
+    // Enemy bullets speed up across the campaign (spec V.4, normalized to W1=1.0).
+    let enemy_speed_mul = crate::systems::enemy::difficulty_bullet_speed_mul(wave.number() as u64);
     for shot in fire.read() {
-        let (kind, radius, pierce, body, life) = match shot.faction {
-            Faction::Player => (BulletKind::Player, player_radius, player_pierce, assets.player_body.clone(), 1.5),
-            Faction::Enemy => (BulletKind::Enemy, 4.0, 0, assets.enemy_body.clone(), 3.0),
+        let (kind, radius, pierce, body, life, speed_mul) = match shot.faction {
+            Faction::Player => (BulletKind::Player, player_radius, player_pierce, assets.player_body.clone(), 1.5, 1.0),
+            Faction::Enemy => (BulletKind::Enemy, 4.0, 0, assets.enemy_body.clone(), 3.0, enemy_speed_mul),
         };
 
         let mut bullet = commands.spawn((
             Bullet { kind, damage: shot.damage, pierce },
-            Velocity(shot.dir * shot.speed),
+            Velocity(shot.dir * shot.speed * speed_mul),
             Collider { radius },
             shot.faction,
             Lifetime { seconds: life },

@@ -204,6 +204,15 @@ pub fn difficulty_points_mul(wave: u64) -> f32 {
     1.0 + t.powf(1.4) * 5.5
 }
 
+/// Campaign-wide enemy *bullet*-speed multiplier by wave (spec V.4 campaignMul
+/// `1.15 + t^1.4*1.9`), **normalized to W1 = 1.0** — the port's per-kind bullet
+/// speeds are already the W1-effective values, so only the relative ramp
+/// applies (W1 1.0× → W30 ≈2.65×).
+pub fn difficulty_bullet_speed_mul(wave: u64) -> f32 {
+    let t = difficulty_t(wave);
+    (1.15 + t.powf(1.4) * 1.9) / 1.15
+}
+
 /// What promotion (if any) an enemy spawns with.
 #[derive(Clone, Copy)]
 enum Promo {

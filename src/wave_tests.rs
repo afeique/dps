@@ -1393,6 +1393,25 @@ fn difficulty_curve_scales_hp_and_points() {
     assert!((hp - 5.0 * 15.5).abs() < 0.1, "W30 Hunter HP = 5×15.5 (got {hp})");
 }
 
+// ── 38. difficulty_bullet_speed_curve ─────────────────────────────────────────
+
+/// Enemy bullet-speed multiplier is normalized to 1.0 at W1 and ramps up
+/// (W30 ≈ 3.05/1.15) — spec V.4, relative to the port's W1-tuned base speeds.
+#[test]
+fn difficulty_bullet_speed_curve() {
+    use crate::systems::enemy::difficulty_bullet_speed_mul;
+
+    assert!((difficulty_bullet_speed_mul(1) - 1.0).abs() < 1e-4, "W1 normalized to 1.0");
+    assert!(
+        (difficulty_bullet_speed_mul(30) - (3.05 / 1.15)).abs() < 1e-3,
+        "W30 ramp ≈ 2.65×"
+    );
+    assert!(
+        difficulty_bullet_speed_mul(20) > difficulty_bullet_speed_mul(10),
+        "monotonic ramp"
+    );
+}
+
 // ── 20. explosive_bullet_splashes_nearby ──────────────────────────────────────
 
 /// An explosive player bullet damages the enemy it hits *and* splashes other
