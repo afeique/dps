@@ -4,21 +4,29 @@
 //! one. Each shot spends energy (built +4 per landed hit, cap 100 — see
 //! `EnergyMeter`) and starts a short anti-spam cooldown floor.
 //!
-//! Ported so far (both fire `Bullet`s, so the existing `bullet_hits_enemy`
-//! handles damage — no new collision systems):
+//! Ported so far:
 //!   * **MissileSalvo** — 3 homing missiles fanned ±25° (cost 55).
 //!   * **ChargeShot**   — one big fast piercing bolt (cost 20). The JS hold-to-
 //!                        charge timing is simplified to an instant heavy shot.
+//!   * **NovaBlast**    — expanding shockwave ring (cost 45).
+//!   * **MineLayer**    — proximity seeker mine + AoE detonation (cost 25).
+//!   * **LanceBeam**    — continuous forward ray, stops at the first enemy,
+//!                        ticks damage for 3 s (cost 60).
+//!   * **ArcLightning** — continuous tether to the enemy nearest the cursor,
+//!                        ticks damage for 3 s (cost 30).
 //!
-//! Still to port (need new entity types + collision passes): Nova Blast, Mine
-//! Layer, Lance Beam, Arc Lightning — subsequent commits.
+//! The beams are dt-DoT at the spec rate (`0.05 dmg/tick` ≈ 3 dmg/s at 60 Hz),
+//! `range 360`, `dur 3000 ms`. Deferred (status effects not yet modelled): the
+//! Lance 15%/tick burn and the Arc 25%/tick stun, plus the multi-stroke zig-zag
+//! visual (spec III.7) — beams render as a single HDR-emissive quad for now.
 //!
 //! Public surface for `app.rs`: resources `PowerWeapon`; systems
-//! `fire_power_weapon`, `cycle_power_weapon`, `homing_steer`, `reset_energy`.
+//! `fire_power_weapon`, `cycle_power_weapon`, `homing_steer`, `update_nova`,
+//! `update_mines`, `update_beams`, `reset_energy`.
 
 use crate::components::*;
 use crate::messages::Damage;
-use crate::resources::EnergyMeter;
+use crate::resources::{EnergyMeter, KillStreak};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -62,15 +70,17 @@ impl PowerWeaponKind {
         }
     }
 
-    /// Anti-spam cooldown floor (seconds).
+    /// Anti-spam cooldown floor (seconds). The two continuous beams use the
+    /// beam's own `BEAM_DURATION` so the cooldown lapses exactly as the beam
+    /// expires — refire is gated by energy, never overlaps the live beam.
     fn cooldown(self) -> f32 {
         match self {
             Self::ChargeShot => 0.30,
             Self::MissileSalvo => 0.80,
             Self::NovaBlast => 1.00,
             Self::MineLayer => 0.50,
-            Self::LanceBeam => 0.80,
-            Self::ArcLightning => 0.80,
+            Self::LanceBeam => BEAM_DURATION,
+            Self::ArcLightning => BEAM_DURATION,
         }
     }
 }
@@ -120,6 +130,47 @@ pub struct NovaRing {
     band: f32,
     /// Enemies already hit by this ring (no double-damage).
     hit: Vec<Entity>,
+}
+
+// ─── Continuous beams (Lance Beam / Arc Lightning) ───────────────────────────
+
+/// Beam duration (`dur 3000 ms`, spec III.3) — shared by both beam kinds.
+const BEAM_DURATION: f32 = 3.0;
+/// Damage per second to the beamed target. Spec is `0.05 dmg/tick`; at the JS
+/// 60 Hz tick that is `0.05 × 60 = 3.0` dmg/s. The dt-based update integrates it
+/// smoothly (HP is `f32`, so fractional per-tick damage accumulates exactly).
+const BEAM_DPS: f32 = 3.0;
+/// Beam reach (`range 360`, spec III.3) — shared by both beam kinds.
+const BEAM_RANGE: f32 = 360.0;
+/// Lance Beam full width (`width 6`, spec III.3); half is the ray hit-radius.
+const LANCE_WIDTH: f32 = 6.0;
+/// Arc Lightning render width (no spec width — the tether is thin).
+const ARC_WIDTH: f32 = 4.0;
+
+/// Which continuous beam an active `Beam` entity is.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum BeamKind {
+    /// Forward ray from the nose; stops at (and damages) the first enemy.
+    Lance,
+    /// Tether to the enemy nearest the cursor within range.
+    Arc,
+}
+
+/// An active continuous beam. Persists for `life` seconds while tracking the
+/// player each tick (origin = nose, direction from facing/cursor), applying
+/// `dps × dt` damage to its current target. Despawns at `life ≤ 0` or if the
+/// player is gone. (`update_beams`, in the FixedUpdate collision group.)
+#[derive(Component)]
+pub struct Beam {
+    pub kind: BeamKind,
+    /// Remaining seconds before the beam expires.
+    life: f32,
+    /// Damage per second to the current target.
+    dps: f32,
+    /// Max reach from the nose.
+    range: f32,
+    /// Visual + (for Lance) hit-test full width; half is the ray radius.
+    width: f32,
 }
 
 // ─── Shapes ───────────────────────────────────────────────────────────────────
@@ -222,6 +273,46 @@ pub fn nova_ring_shape() -> Shape {
         .build()
 }
 
+/// A unit beam quad — `x ∈ [0,1]`, `y ∈ [−0.5, 0.5]` — that `place_beam` scales
+/// to (length × width) and rotates/translates so its base sits at the nose and
+/// it stretches along the beam. Fill-only and HDR-emissive so bloom supplies the
+/// glow (a scaled stroke would smear); Lance is hot green, Arc hot violet.
+pub fn beam_shape(kind: BeamKind) -> Shape {
+    let fill = match kind {
+        // `#44ff44` (Lance) / `#a855ff` (Arc), pushed past 1.0 to feed the bloom.
+        BeamKind::Lance => Color::linear_rgb(0.4, 7.0, 0.4),
+        BeamKind::Arc => Color::linear_rgb(4.0, 1.2, 8.0),
+    };
+    let path = ShapePath::new()
+        .move_to(Vec2::new(0.0, -0.5))
+        .line_to(Vec2::new(1.0, -0.5))
+        .line_to(Vec2::new(1.0, 0.5))
+        .line_to(Vec2::new(0.0, 0.5))
+        .close();
+    ShapeBuilder::with(&path).fill(fill).build()
+}
+
+/// Spawn an active beam of `kind` anchored at `origin` (used by the fire path +
+/// tests). Lance carries the full `LANCE_WIDTH` (its half is the ray hit-radius);
+/// Arc the thinner tether width.
+pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
+    let width = match kind {
+        BeamKind::Lance => LANCE_WIDTH,
+        BeamKind::Arc => ARC_WIDTH,
+    };
+    commands.spawn((
+        Beam {
+            kind,
+            life: BEAM_DURATION,
+            dps: BEAM_DPS,
+            range: BEAM_RANGE,
+            width,
+        },
+        beam_shape(kind),
+        Transform::from_translation(origin.extend(0.7)),
+    ));
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 #[inline]
@@ -245,6 +336,37 @@ fn steer_toward(current: Vec2, desired_dir: Vec2, max_angle: f32) -> Vec2 {
         cross.atan2(dot)
     };
     rotate(cur_dir, angle.clamp(-max_angle, max_angle)) * speed
+}
+
+/// Stretch the unit beam quad so its base sits at `origin` and it runs `length`
+/// world-units along `dir` with the given full `width`. `dir` is assumed
+/// normalized.
+#[inline]
+fn place_beam(tf: &mut Transform, origin: Vec2, dir: Vec2, length: f32, width: f32) {
+    tf.translation = origin.extend(0.7);
+    tf.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));
+    tf.scale = Vec3::new(length.max(0.001), width, 1.0);
+}
+
+/// Does the ray `(origin, dir, range)` with half-width `half_w` strike an enemy
+/// disc at `enemy_pos` (radius `enemy_r`)? Returns the forward distance to the
+/// enemy's *center* along the ray when it does — the Lance beam picks the
+/// smallest such distance (its first hit) and stops there. `dir` is normalized.
+pub fn beam_ray_hit_dist(
+    origin: Vec2,
+    dir: Vec2,
+    range: f32,
+    half_w: f32,
+    enemy_pos: Vec2,
+    enemy_r: f32,
+) -> Option<f32> {
+    let to = enemy_pos - origin;
+    let t = to.dot(dir); // projection along the beam
+    if t < 0.0 || t > range {
+        return None; // behind the nose or past the reach
+    }
+    let perp = (to - dir * t).length(); // perpendicular offset from the beam axis
+    (perp <= half_w + enemy_r).then_some(t)
 }
 
 // ─── Systems ─────────────────────────────────────────────────────────────────
@@ -272,6 +394,7 @@ pub fn fire_power_weapon(
     mut energy: ResMut<EnergyMeter>,
     mut commands: Commands,
     player: Query<&Transform, With<Ship>>,
+    beams: Query<(), With<Beam>>,
 ) {
     pw.cooldown = (pw.cooldown - time.delta_secs()).max(0.0);
 
@@ -286,6 +409,17 @@ pub fn fire_power_weapon(
     let Ok(tf) = player.single() else {
         return;
     };
+
+    // One beam at a time — don't stack a second beam (or burn energy) while a
+    // live one is still firing. The cooldown == BEAM_DURATION makes this rare,
+    // but the guard is the hard invariant.
+    let is_beam = matches!(
+        pw.kind,
+        PowerWeaponKind::LanceBeam | PowerWeaponKind::ArcLightning
+    );
+    if is_beam && !beams.is_empty() {
+        return;
+    }
 
     let cost = pw.kind.energy_cost();
     if !energy.try_spend(cost) {
@@ -332,10 +466,11 @@ pub fn fire_power_weapon(
         PowerWeaponKind::MineLayer => {
             lay_mine(&mut commands, tf.translation.truncate());
         }
-        // ChargeShot (and, for now, Lance/Arc) fire one big fast piercing bolt
-        // so every power weapon does *something* while its bespoke mechanic is
-        // pending.
-        _ => {
+        PowerWeaponKind::LanceBeam => spawn_beam(&mut commands, BeamKind::Lance, nose),
+        PowerWeaponKind::ArcLightning => spawn_beam(&mut commands, BeamKind::Arc, nose),
+        // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
+        // ramp is simplified to an instant heavy shot).
+        PowerWeaponKind::ChargeShot => {
             commands.spawn((
                 Bullet { kind: BulletKind::Player, damage: 60.0, pierce: 3 },
                 Velocity(fwd * 1100.0),
@@ -449,5 +584,105 @@ pub fn homing_steer(
             continue;
         }
         vel.0 = steer_toward(vel.0, to_target, homing.turn_rate * dt);
+    }
+}
+
+/// Tick every active beam: track the player (origin = nose), pick a target,
+/// apply `dps × dt` damage, stretch the beam quad to that target, and despawn at
+/// end-of-life or if the player is gone. Damage is scaled by the live kill-streak
+/// multiplier (beams obey the same global damage rule as bullets) but takes no
+/// per-hit crit — a continuous DoT isn't a discrete "hit". Runs in the
+/// FixedUpdate collision group so its `Damage` reaches `apply_damage` this tick.
+pub fn update_beams(
+    time: Res<Time>,
+    streak: Res<KillStreak>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    player: Query<(&Transform, &Intent), With<Ship>>,
+    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    mut beams: Query<(Entity, &mut Beam, &mut Transform), (Without<Ship>, Without<Enemy>)>,
+) {
+    let dt = time.delta_secs();
+    let mult = streak.multiplier();
+
+    // Copy out the player's transform + intent (both `Copy`) so this immutable
+    // borrow doesn't conflict with the `&mut Transform` beam query below.
+    let player_data = player.single().ok().map(|(t, i)| (*t, *i));
+
+    for (be, mut beam, mut tf) in &mut beams {
+        beam.life -= dt;
+
+        let Some((ptf, intent)) = player_data else {
+            commands.entity(be).despawn(); // player gone — beam can't anchor
+            continue;
+        };
+        if beam.life <= 0.0 {
+            commands.entity(be).despawn();
+            continue;
+        }
+
+        let ppos = ptf.translation.truncate();
+        let fwd = (ptf.rotation * Vec3::Y).truncate().normalize_or_zero();
+        let origin = ppos + fwd * 22.0;
+        let tick_dmg = beam.dps * mult * dt;
+
+        match beam.kind {
+            BeamKind::Lance => {
+                // The first enemy along the forward ray (smallest distance).
+                let mut best: Option<(f32, Entity)> = None;
+                for (e, etf, ec) in &enemies {
+                    if let Some(t) = beam_ray_hit_dist(
+                        origin,
+                        fwd,
+                        beam.range,
+                        beam.width * 0.5,
+                        etf.translation.truncate(),
+                        ec.radius,
+                    ) {
+                        if best.is_none_or(|(bt, _)| t < bt) {
+                            best = Some((t, e));
+                        }
+                    }
+                }
+                let length = match best {
+                    Some((t, e)) => {
+                        dmg.write(Damage { target: e, amount: tick_dmg });
+                        t
+                    }
+                    None => beam.range,
+                };
+                place_beam(&mut tf, origin, fwd, length, beam.width);
+            }
+            BeamKind::Arc => {
+                // Aim point: the cursor while mouse-aiming, else straight ahead.
+                let aim = if intent.aim_active {
+                    intent.aim
+                } else {
+                    origin + fwd * beam.range
+                };
+                // The enemy nearest the cursor, within the player's reach.
+                let mut best: Option<(f32, Vec2, Entity)> = None;
+                for (e, etf, _) in &enemies {
+                    let epos = etf.translation.truncate();
+                    if epos.distance(ppos) > beam.range {
+                        continue;
+                    }
+                    let d2 = epos.distance_squared(aim);
+                    if best.is_none_or(|(bd, _, _)| d2 < bd) {
+                        best = Some((d2, epos, e));
+                    }
+                }
+                match best {
+                    Some((_, epos, e)) => {
+                        dmg.write(Damage { target: e, amount: tick_dmg });
+                        let to = epos - origin;
+                        let len = to.length();
+                        let dir = if len > 1e-6 { to / len } else { fwd };
+                        place_beam(&mut tf, origin, dir, len, beam.width);
+                    }
+                    None => place_beam(&mut tf, origin, fwd, beam.range, beam.width),
+                }
+            }
+        }
     }
 }

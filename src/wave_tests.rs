@@ -443,3 +443,105 @@ fn mine_detonates_on_nearby_enemy() {
     let mines_left = world.query::<&Mine>().iter(world).count();
     assert_eq!(mines_left, 0, "the mine should despawn after detonating");
 }
+
+// ── 10. beam_ray_first_hit ────────────────────────────────────────────────────
+
+/// `beam_ray_hit_dist` (the Lance ray test) reports the forward distance to an
+/// enemy the beam strikes — within `half_width + radius` of the axis — and
+/// `None` for enemies behind the nose, past the range, or off to the side.
+#[test]
+fn beam_ray_first_hit() {
+    use crate::systems::power_weapon::beam_ray_hit_dist;
+
+    let origin = Vec2::ZERO;
+    let dir = Vec2::new(0.0, 1.0); // straight up
+    let range = 360.0;
+    let half_w = 3.0;
+
+    // Dead ahead, in range → hit at the forward distance.
+    assert_eq!(
+        beam_ray_hit_dist(origin, dir, range, half_w, Vec2::new(0.0, 100.0), 16.0),
+        Some(100.0),
+        "on-axis enemy reports its forward distance"
+    );
+    // Behind the nose → miss.
+    assert_eq!(
+        beam_ray_hit_dist(origin, dir, range, half_w, Vec2::new(0.0, -50.0), 16.0),
+        None
+    );
+    // Past the 360 px reach → miss.
+    assert_eq!(
+        beam_ray_hit_dist(origin, dir, range, half_w, Vec2::new(0.0, 400.0), 16.0),
+        None
+    );
+    // Off-axis beyond half_w + radius (3 + 16 = 19) → miss.
+    assert_eq!(
+        beam_ray_hit_dist(origin, dir, range, half_w, Vec2::new(40.0, 100.0), 16.0),
+        None
+    );
+    // Just inside the perpendicular reach → hit.
+    assert!(beam_ray_hit_dist(origin, dir, range, half_w, Vec2::new(18.0, 100.0), 16.0).is_some());
+}
+
+// ── 11. lance_beam_damages_target_and_expires ─────────────────────────────────
+
+/// A live Lance beam ticks `dps × dt` damage into the enemy in front of the ship
+/// each step, then despawns once its 3 s life lapses (spec III.3).
+#[test]
+fn lance_beam_damages_target_and_expires() {
+    use crate::systems::power_weapon::{spawn_beam, update_beams, Beam, BeamKind};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Player ship at origin, facing +Y (identity rotation → fwd = +Y).
+    world.spawn((
+        Ship::default(),
+        Intent::default(),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    // Enemy 120 px straight ahead (on the +Y beam axis) with generous HP.
+    let enemy = world
+        .spawn((
+            Enemy { kind: EnemyKind::Titan },
+            Health::new(50.0),
+            Collider { radius: 20.0 },
+            Faction::Enemy,
+            Transform::from_xyz(0.0, 120.0, 0.0),
+        ))
+        .id();
+
+    // Lay a Lance beam at the nose (deferred spawn, applied by a setup step).
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_beam(&mut c, BeamKind::Lance, Vec2::new(0.0, 22.0)));
+    setup.run(world);
+
+    let mut step = Schedule::default();
+    step.add_systems((update_beams, apply_damage).chain());
+
+    // Step 1 (dt = 0.5 s): the beam ticks damage into the enemy in front.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.5));
+    world.insert_resource(time.clone());
+    step.run(world);
+
+    let hp = world.get::<Health>(enemy).expect("enemy alive").current;
+    assert!(hp < 50.0, "lance beam should damage the enemy in front (hp now {hp})");
+    assert_eq!(
+        world.query::<&Beam>().iter(world).count(),
+        1,
+        "beam still live mid-duration"
+    );
+
+    // Step 2 (dt = 3.0 s): total life now exceeds BEAM_DURATION → beam despawns.
+    time.advance_by(Duration::from_secs_f32(3.0));
+    world.insert_resource(time);
+    step.run(world);
+
+    assert_eq!(
+        world.query::<&Beam>().iter(world).count(),
+        0,
+        "beam despawns at end of life"
+    );
+}

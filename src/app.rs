@@ -145,6 +145,7 @@ impl Plugin for GamePlugin {
                         systems::asteroids::asteroid_hits,
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,
+                        systems::power_weapon::update_beams,
                     )
                         .chain(),
                     systems::damage::apply_damage,
