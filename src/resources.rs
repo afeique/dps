@@ -65,6 +65,33 @@ impl KillStreak {
     }
 }
 
+/// Power-weapon energy (spec III.3, 6.29.0): built by landing hits (+4 each,
+/// `ENERGY_PER_HIT`), capped at `ENERGY_MAX`, spent to fire power weapons,
+/// reset to 0 each run.
+#[derive(Resource, Default)]
+pub struct EnergyMeter {
+    pub current: f32,
+}
+
+pub const ENERGY_MAX: f32 = 100.0;
+pub const ENERGY_PER_HIT: f32 = 4.0;
+
+impl EnergyMeter {
+    /// Add energy (e.g. on a landed hit), clamped to the cap.
+    pub fn gain(&mut self, amount: f32) {
+        self.current = (self.current + amount).min(ENERGY_MAX);
+    }
+    /// Spend `cost` if affordable; returns whether the spend happened.
+    pub fn try_spend(&mut self, cost: f32) -> bool {
+        if self.current >= cost {
+            self.current -= cost;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Shared gameplay PRNG (xorshift32). The JS uses unseeded `Math.random`
 /// (spec I.3); we use a seeded resource so runs are reproducible — assert on
 /// ranges/invariants, not exact sequences. Used by crit rolls, drop rolls, and

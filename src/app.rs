@@ -33,10 +33,11 @@ impl Plugin for GamePlugin {
             .init_resource::<Score>()
             .init_resource::<crate::resources::KillStreak>()
             .init_resource::<crate::resources::GameRng>()
+            .init_resource::<crate::resources::EnergyMeter>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::asteroids::AsteroidSpawner>()
             .init_resource::<systems::weapons::CurrentWeapon>()
-            .init_resource::<systems::power_weapon::PowerWeaponCooldown>()
+            .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
@@ -72,7 +73,11 @@ impl Plugin for GamePlugin {
             // ── spawn the slice on entering Playing ─────────────────────
             .add_systems(
                 OnEnter(GameState::Playing),
-                (systems::spawn::spawn_player, systems::wave::reset),
+                (
+                    systems::spawn::spawn_player,
+                    systems::wave::reset,
+                    systems::power_weapon::reset_energy,
+                ),
             )
             // ── input: read devices every frame → Intent ────────────────
             .add_systems(
@@ -80,6 +85,7 @@ impl Plugin for GamePlugin {
                 (
                     (systems::input::gather_input, systems::input::update_aim).chain(),
                     systems::weapons::cycle_weapon,
+                    systems::power_weapon::cycle_power_weapon,
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,
                 )

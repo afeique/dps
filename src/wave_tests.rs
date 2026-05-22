@@ -37,6 +37,7 @@ fn test_app() -> App {
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
+        .init_resource::<crate::resources::EnergyMeter>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }
@@ -347,4 +348,27 @@ fn crit_roll_bounds() {
         (0.05..0.11).contains(&rate),
         "crit rate should sit near the 8% base (got {rate})"
     );
+}
+
+// ── 7. energy_meter_gain_and_spend ───────────────────────────────────────────
+
+/// The power-weapon energy meter charges +4 per hit (capped at 100) and a
+/// power-weapon fire only succeeds when its energy cost is affordable (spec III.3).
+#[test]
+fn energy_meter_gain_and_spend() {
+    use crate::resources::{EnergyMeter, ENERGY_MAX, ENERGY_PER_HIT};
+
+    let mut e = EnergyMeter::default();
+    assert_eq!(e.current, 0.0);
+    assert!(!e.try_spend(20.0), "can't fire with no energy");
+
+    // 25 hits → would be 100, capped at the max.
+    for _ in 0..25 {
+        e.gain(ENERGY_PER_HIT);
+    }
+    assert_eq!(e.current, ENERGY_MAX, "energy caps at {ENERGY_MAX}");
+
+    assert!(e.try_spend(55.0), "Missile Salvo (55) affordable at full");
+    assert!((e.current - 45.0).abs() < 0.01, "45 energy left after a 55 spend");
+    assert!(!e.try_spend(60.0), "Lance Beam (60) not affordable with 45");
 }

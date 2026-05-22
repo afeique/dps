@@ -11,7 +11,7 @@
 
 use crate::components::*;
 use crate::messages::Damage;
-use crate::resources::{roll_crit, GameRng, KillStreak};
+use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use bevy::prelude::*;
 
 pub fn bullet_hits_enemy(
@@ -19,6 +19,7 @@ pub fn bullet_hits_enemy(
     mut dmg: MessageWriter<Damage>,
     streak: Res<KillStreak>,
     mut rng: ResMut<GameRng>,
+    mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
 ) {
@@ -41,6 +42,8 @@ pub fn bullet_hits_enemy(
                     target: enemy_e,
                     amount,
                 });
+                // Landing a hit charges the power-weapon energy meter (spec III.3).
+                energy.gain(ENERGY_PER_HIT);
                 // Piercing bullets pass through; others die on the first hit.
                 // (One hit per frame — a fast bullet clears an enemy's radius
                 // before the next tick, so re-hits are rare. Tracking a hit-set

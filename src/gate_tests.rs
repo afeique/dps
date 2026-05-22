@@ -28,6 +28,7 @@ fn test_app() -> App {
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
+        .init_resource::<crate::resources::EnergyMeter>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
 }
