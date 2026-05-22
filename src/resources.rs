@@ -126,16 +126,22 @@ impl GameRng {
     }
 }
 
-/// Base crit chance (spec III.6: 8%, cap 60% with upgrades — caps are a later
-/// increment).
+/// Base crit chance (spec III.6: 8%).
 pub const BASE_CRIT_CHANCE: f32 = 0.08;
 
-/// Roll a crit: returns the damage multiplier — `1.0` on a normal hit, or a
-/// uniform `2.0..3.0×` on a crit (spec III.6: base crit damage is a random
-/// 2.0×–3.0×).
-pub fn roll_crit(rng: &mut GameRng) -> f32 {
-    if rng.next_f32() < BASE_CRIT_CHANCE {
-        2.0 + rng.next_f32() // 2.0 ..= ~3.0
+/// Effective crit chance with `CRIT_CHANCE` upgrade stacks: `min(60%, 8% +
+/// 7%×stacks)` (spec III.6).
+pub fn crit_chance(stacks: u32) -> f32 {
+    (BASE_CRIT_CHANCE + 0.07 * stacks as f32).min(0.60)
+}
+
+/// Roll a crit at the given `chance`: returns the damage multiplier — `1.0` on a
+/// normal hit, or a uniform `2.0 ..= (3.0 + 0.15×dmg_stacks)`× (capped at 5.5×)
+/// on a crit (spec III.6).
+pub fn roll_crit(rng: &mut GameRng, chance: f32, dmg_stacks: u32) -> f32 {
+    if rng.next_f32() < chance {
+        let max = (3.0 + 0.15 * dmg_stacks as f32).min(5.5);
+        2.0 + rng.next_f32() * (max - 2.0) // uniform [2.0, max]
     } else {
         1.0
     }

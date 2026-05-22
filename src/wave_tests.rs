@@ -330,16 +330,21 @@ fn kill_streak_multiplier_tiers() {
 /// 8% base rate over many rolls (spec III.6). Seeded RNG → deterministic.
 #[test]
 fn crit_roll_bounds() {
-    use crate::resources::{roll_crit, GameRng};
+    use crate::resources::{crit_chance, roll_crit, GameRng};
+
+    // Crit chance scales 8% → cap 60% (spec III.6).
+    assert!((crit_chance(0) - 0.08).abs() < 1e-6);
+    assert!((crit_chance(2) - 0.22).abs() < 1e-6);
+    assert_eq!(crit_chance(100), 0.60, "crit chance caps at 60%");
 
     let mut rng = GameRng::default();
     let mut crits = 0;
     let n = 20_000;
     for _ in 0..n {
-        let m = roll_crit(&mut rng);
+        let m = roll_crit(&mut rng, crit_chance(0), 0);
         assert!(
             m == 1.0 || (2.0..=3.0).contains(&m),
-            "crit multiplier must be 1.0 or in [2,3], got {m}"
+            "base crit multiplier must be 1.0 or in [2,3], got {m}"
         );
         if m > 1.0 {
             crits += 1;
@@ -350,6 +355,16 @@ fn crit_roll_bounds() {
         (0.05..0.11).contains(&rate),
         "crit rate should sit near the 8% base (got {rate})"
     );
+
+    // Crit-damage stacks raise the upper bound (uniform [2, 3+0.15*stacks], cap 5.5).
+    let mut rng2 = GameRng::default();
+    let mut max_seen = 0.0_f32;
+    for _ in 0..50_000 {
+        let m = roll_crit(&mut rng2, 1.0, 6); // always crit, 6 dmg stacks → max 3.9
+        assert!((2.0..=3.9 + 1e-3).contains(&m), "upgraded crit in [2, 3.9], got {m}");
+        max_seen = max_seen.max(m);
+    }
+    assert!(max_seen > 3.5, "with 6 crit-damage stacks the roll should reach toward 3.9");
 }
 
 // ── 7. energy_meter_gain_and_spend ───────────────────────────────────────────

@@ -11,7 +11,7 @@
 
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
-use crate::resources::{roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
+use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use crate::systems::shop::{
     explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId, Upgrades, KNOCK_PX,
 };
@@ -33,6 +33,9 @@ pub fn bullet_hits_enemy(
     let streak_mult = streak.multiplier();
     // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5).
     let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism));
+    // Crit chance/damage scale with their upgrade stacks (spec III.6).
+    let crit_p = crit_chance(upgrades.owned(UpgradeId::CritChance));
+    let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
@@ -51,7 +54,7 @@ pub fn bullet_hits_enemy(
                 .distance_squared(etf.translation.truncate());
             if d2 <= reach * reach {
                 // Streak multiplier × per-hit crit roll (spec III.6).
-                let amount = bullet.damage * streak_mult * roll_crit(&mut rng);
+                let amount = bullet.damage * streak_mult * roll_crit(&mut rng, crit_p, crit_dmg_stacks);
                 dmg.write(Damage {
                     target: enemy_e,
                     amount,

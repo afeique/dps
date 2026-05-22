@@ -36,12 +36,14 @@ pub enum UpgradeId {
     KnockShot,
     Vampirism,
     Dodge,
+    CritChance,
+    CritDamage,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 14] = [
+    pub const ALL: [UpgradeId; 16] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -56,6 +58,8 @@ impl UpgradeId {
         Self::KnockShot,
         Self::Vampirism,
         Self::Dodge,
+        Self::CritChance,
+        Self::CritDamage,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -77,6 +81,8 @@ impl UpgradeId {
             Self::KnockShot => 11,
             Self::Vampirism => 12,
             Self::Dodge => 13,
+            Self::CritChance => 14,
+            Self::CritDamage => 15,
         }
     }
 
@@ -96,6 +102,8 @@ impl UpgradeId {
             Self::KnockShot => "Knockback     (+15% shove)",
             Self::Vampirism => "Vampirism     (heal 5% dealt)",
             Self::Dodge => "Dodge         (+5% evade)",
+            Self::CritChance => "Crit Chance   (+7%)",
+            Self::CritDamage => "Crit Damage   (+15%)",
         }
     }
 
@@ -116,6 +124,8 @@ impl UpgradeId {
             Self::KnockShot => 1300,
             Self::Vampirism => 2500,
             Self::Dodge => 1800,
+            Self::CritChance => 2000,
+            Self::CritDamage => 2000,
         }
     }
 
@@ -135,6 +145,8 @@ impl UpgradeId {
             Self::KnockShot => 3,
             Self::Vampirism => 5,
             Self::Dodge => 10,
+            Self::CritChance => 6,
+            Self::CritDamage => 6,
         }
     }
 }
@@ -383,6 +395,8 @@ fn apply_upgrade(
         | UpgradeId::ExplodeShot
         | UpgradeId::KnockShot
         | UpgradeId::Vampirism
-        | UpgradeId::Dodge => {}
+        | UpgradeId::Dodge
+        | UpgradeId::CritChance
+        | UpgradeId::CritDamage => {}
     }
 }
