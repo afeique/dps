@@ -70,4 +70,9 @@ pub struct Fire {
     pub damage: f32,
     pub speed: f32,
     pub faction: Faction,
+    /// When a *raged* boss fires, its bullets curve toward the player
+    /// (spec IV.7 `enableHomingBullets` / IV.5 homing nudge). `spawn_bullets`
+    /// tags such enemy bullets with `RageHoming`. Always `false` for player
+    /// shots and normal (un-raged) enemy fire.
+    pub homing: bool,
 }

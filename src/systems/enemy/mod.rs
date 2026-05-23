@@ -100,7 +100,35 @@ fn activate_rage(
             damage: 3.0,
             speed: 280.0,
             faction: Faction::Enemy,
+            // Raged bosses fire homing bullets (spec IV.7 `enableHomingBullets`).
+            homing: true,
         });
+    }
+}
+
+/// Gentle turn rate (rad/sec) for raged-boss homing bullets — the bounded
+/// `steer_toward` equivalent of the JS per-tick `vel += dir*0.04` nudge
+/// (spec IV.5): a ~0.04 px/tick nudge on a ~5 px/tick bullet ≈ 0.008 rad/tick
+/// ≈ 0.48 rad/sec.
+pub const RAGE_HOMING_TURN: f32 = 0.5;
+
+/// Curve raged-boss bullets (`RageHoming`) toward the player, preserving speed
+/// (spec IV.7 / IV.5). Distinct from `power_weapon::homing_steer`, which targets
+/// the nearest enemy for *player* missiles.
+pub fn rage_homing_steer(
+    time: Res<Time>,
+    player: Query<&Transform, With<Ship>>,
+    mut bullets: Query<(&mut Velocity, &Transform, &RageHoming)>,
+) {
+    let Ok(player_tf) = player.single() else { return };
+    let player_pos = player_tf.translation.truncate();
+    let dt = time.delta_secs();
+    for (mut vel, tf, homing) in &mut bullets {
+        let to_player = (player_pos - tf.translation.truncate()).normalize_or_zero();
+        if to_player == Vec2::ZERO {
+            continue;
+        }
+        vel.0 = crate::systems::power_weapon::steer_toward(vel.0, to_player, homing.turn_rate * dt);
     }
 }
 

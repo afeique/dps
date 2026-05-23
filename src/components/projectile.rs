@@ -17,3 +17,12 @@ pub struct Bullet {
     /// enemy hit in `collision::bullet_hits_enemy`.
     pub pierce: u32,
 }
+
+/// Marks an enemy bullet fired by a *raged* boss (spec IV.7 `enableHomingBullets`).
+/// `enemy::rage_homing_steer` curves it toward the player at `turn_rate` rad/sec,
+/// preserving speed — the bounded equivalent of the JS per-tick `vel += dir*0.04`
+/// nudge (spec IV.5).
+#[derive(Component, Debug)]
+pub struct RageHoming {
+    pub turn_rate: f32,
+}

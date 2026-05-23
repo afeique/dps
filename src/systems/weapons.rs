@@ -211,6 +211,7 @@ pub fn player_fire(
                 damage: st.damage,
                 speed: st.speed,
                 faction: Faction::Player,
+                homing: false,
             });
         };
 
@@ -282,6 +283,11 @@ pub fn spawn_bullets(
             if player_homing > 0.0 {
                 bullet.insert(Homing { turn_rate: player_homing });
             }
+        } else if shot.homing {
+            // Raged-boss bullets curve toward the player (spec IV.7 / IV.5).
+            bullet.insert(RageHoming {
+                turn_rate: crate::systems::enemy::RAGE_HOMING_TURN,
+            });
         }
     }
 }

@@ -336,7 +336,7 @@ fn rotate(v: Vec2, angle: f32) -> Vec2 {
 /// Steer `current` velocity toward `desired_dir` by at most `max_angle` rad,
 /// preserving speed.
 #[inline]
-fn steer_toward(current: Vec2, desired_dir: Vec2, max_angle: f32) -> Vec2 {
+pub fn steer_toward(current: Vec2, desired_dir: Vec2, max_angle: f32) -> Vec2 {
     let speed = current.length();
     if speed < 1e-6 {
         return current;

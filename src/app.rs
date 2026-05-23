@@ -208,6 +208,8 @@ impl Plugin for GamePlugin {
                         systems::enemy::titan::ai,
                         systems::enemy::boss_rage,
                         systems::power_weapon::homing_steer,
+                        // Raged-boss bullets curve toward the player (IV.7).
+                        systems::enemy::rage_homing_steer,
                     )
                         .chain(),
                     // Spawner (enemies + the wave's asteroid budget).

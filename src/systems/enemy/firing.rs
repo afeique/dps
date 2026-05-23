@@ -30,7 +30,7 @@
 //! Sentinel 2; Stalker/Prowler/Titan 3; Tangerine 4. These are small by design —
 //! the player has only 40 HP (spec II.2), so a few hits matter.
 
-use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Ship, Stunned};
+use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Raged, Ship, Stunned};
 use crate::messages::Fire;
 use bevy::prelude::*;
 
@@ -54,14 +54,15 @@ pub fn enemy_firing(
     mut fire: MessageWriter<Fire>,
     player: Query<&Transform, With<Ship>>,
     // Stunned enemies can't fire (spec III.6) — their cooldown simply freezes.
-    mut q: Query<(&Enemy, &Transform, &mut FireCooldown), Without<Stunned>>,
+    // `Has<Raged>` makes a raged boss's bullets home toward the player (spec IV.7).
+    mut q: Query<(&Enemy, &Transform, &mut FireCooldown, Has<Raged>), Without<Stunned>>,
 ) {
     let Ok(player_tf) = player.single() else { return };
     let player_pos = player_tf.translation.truncate();
     let dt = time.delta_secs();
     let t = time.elapsed_secs();
 
-    for (enemy, tf, mut fc) in &mut q {
+    for (enemy, tf, mut fc, raged) in &mut q {
         // Tick cooldown.
         fc.timer = (fc.timer - dt).max(0.0);
         if fc.timer > 0.0 {
@@ -92,6 +93,7 @@ pub fn enemy_firing(
                     damage: 2.0, // shootBurst3 → default bullet dmg (spec IV.5)
                     speed: 340.0,
                     faction: Faction::Enemy,
+                    homing: raged,
                 });
             }
 
@@ -107,6 +109,7 @@ pub fn enemy_firing(
                         damage: 2.0, // guardian_spread → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
+                        homing: raged,
                     });
                 }
             }
@@ -124,6 +127,7 @@ pub fn enemy_firing(
                     damage: 1.0, // machinegun → LS(1) (spec IV.3)
                     speed: 360.0,
                     faction: Faction::Enemy,
+                    homing: raged,
                 });
             }
 
@@ -137,6 +141,7 @@ pub fn enemy_firing(
                     damage: 3.0, // chargedLaser → LS(3) (spec IV.3)
                     speed: 420.0,
                     faction: Faction::Enemy,
+                    homing: raged,
                 });
             }
 
@@ -157,6 +162,7 @@ pub fn enemy_firing(
                         damage: 2.0, // arcLightning → LS(2) (spec IV.3)
                         speed: 280.0,
                         faction: Faction::Enemy,
+                        homing: raged,
                     });
                 }
             }
@@ -172,6 +178,7 @@ pub fn enemy_firing(
                     damage: 3.0, // shootMissile → LS(3) (spec IV.3)
                     speed: 250.0,
                     faction: Faction::Enemy,
+                    homing: raged,
                 });
             }
 
@@ -194,6 +201,7 @@ pub fn enemy_firing(
                         damage: 2.0, // spiral_laser → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
+                        homing: raged,
                     });
                 }
             }
@@ -212,6 +220,7 @@ pub fn enemy_firing(
                         damage: 2.0, // sentinel_sweep → LS(2) (spec IV.3)
                         speed: 290.0,
                         faction: Faction::Enemy,
+                        homing: raged,
                     });
                 }
             }
@@ -226,6 +235,7 @@ pub fn enemy_firing(
                     damage: 4.0, // layMine → LS(4) (spec IV.3)
                     speed: 120.0,
                     faction: Faction::Enemy,
+                    homing: raged,
                 });
             }
 
@@ -247,6 +257,7 @@ pub fn enemy_firing(
                         damage: 3.0, // sweep_laser → LS(3) (spec IV.3)
                         speed: 310.0,
                         faction: Faction::Enemy,
+                        homing: raged,
                     });
                 }
             }

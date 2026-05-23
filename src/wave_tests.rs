@@ -1700,3 +1700,96 @@ fn explosive_bullet_splashes_nearby() {
         "distant enemy is outside the blast"
     );
 }
+
+// ── 51. raged_enemy_fire_is_flagged_homing ────────────────────────────────────
+
+/// A *raged* enemy's fired bullets carry `homing: true` (spec IV.7
+/// `enableHomingBullets`); a normal enemy's carry `homing: false`. `spawn_bullets`
+/// reads this flag to tag enemy bullets with `RageHoming`.
+#[test]
+fn raged_enemy_fire_is_flagged_homing() {
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Player below the enemies so aim_dir != ZERO.
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, -100.0, 0.0)));
+
+    // Two Hunters with ready cooldowns: one raged, one not.
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        FireCooldown { cooldown: 1.0, timer: 0.0 },
+        Raged,
+        Transform::from_xyz(50.0, 0.0, 0.0),
+    ));
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        FireCooldown { cooldown: 1.0, timer: 0.0 },
+        Transform::from_xyz(-50.0, 0.0, 0.0),
+    ));
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(16));
+    world.insert_resource(time);
+
+    #[derive(Resource, Default)]
+    struct Flags { homing: u32, plain: u32 }
+    world.insert_resource(Flags::default());
+    fn tally(mut reader: MessageReader<Fire>, mut flags: ResMut<Flags>) {
+        for f in reader.read() {
+            if f.homing { flags.homing += 1; } else { flags.plain += 1; }
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((enemy_firing, tally).chain());
+    step.run(world);
+
+    let flags = world.resource::<Flags>();
+    assert!(flags.homing >= 1, "the raged enemy fires at least one homing bullet");
+    assert!(flags.plain >= 1, "the un-raged enemy fires only non-homing bullets");
+}
+
+// ── 52. rage_homing_curves_toward_player ──────────────────────────────────────
+
+/// `rage_homing_steer` curves a `RageHoming` enemy bullet toward the player while
+/// preserving its speed (spec IV.7 / IV.5 — the bounded `vel += dir*0.04`
+/// equivalent).
+#[test]
+fn rage_homing_curves_toward_player() {
+    use crate::components::RageHoming;
+    use crate::systems::enemy::{rage_homing_steer, RAGE_HOMING_TURN};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Player directly above the bullet; the bullet flies straight along +X, so the
+    // player is 90° to the bullet's left — steering must rotate it toward +Y.
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 100.0, 0.0)));
+
+    let speed = 300.0_f32;
+    let bullet = world
+        .spawn((
+            Velocity(Vec2::new(speed, 0.0)),
+            RageHoming { turn_rate: RAGE_HOMING_TURN },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.5)); // 0.5 s → ~0.25 rad turn
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(rage_homing_steer);
+    step.run(world);
+
+    let v = world.get::<Velocity>(bullet).unwrap().0;
+    assert!(v.y > 0.0, "velocity should rotate toward the player (+Y); got {v:?}");
+    assert!(
+        (v.length() - speed).abs() < 0.5,
+        "steering preserves speed; got {} vs {speed}",
+        v.length()
+    );
+    // It only *curves*: ~0.25 rad in half a second, so +X stays dominant.
+    assert!(v.x > v.y, "a gentle nudge, not a snap turn; got {v:?}");
+}
