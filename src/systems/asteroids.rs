@@ -9,7 +9,6 @@ use crate::components::*;
 use crate::resources::PlayBounds;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
-use std::f32::consts::TAU;
 
 // ─── collider radii by tier ─────────────────────────────────────────────────
 
@@ -58,37 +57,150 @@ pub struct Asteroid {
     pub tier: u8,
 }
 
-// ─── Shape builder ──────────────────────────────────────────────────────────
+// ─── 3D tumbling icosahedron wireframe (spec VI.1) ───────────────────────────
 
-/// Build an irregular rocky polygon for the given tier.
-///
-/// 9 vertices with per-vertex radial jitter driven by a deterministic hash
-/// keyed on `(tier, vertex_index)`. Fill is near-black rock; stroke is a dim
-/// warm-grey HDR emissive so Bloom produces a faint rim glow.
-pub fn shape(tier: u8) -> Shape {
-    let base = shape_base_radius(tier);
-    const VERTS: usize = 9;
+/// Golden ratio — the icosahedron's defining constant.
+const PHI: f32 = 1.618_034;
+/// Circumradius of the canonical vertices below, `sqrt(1 + PHI²)`.
+pub const CIRCUMRADIUS: f32 = 1.902_113;
 
-    let mut path = ShapePath::new();
-    for i in 0usize..VERTS {
-        // Jitter: ±22 % of base radius, seeded by tier + vertex index.
-        let seed = wang((tier as u32).wrapping_mul(97).wrapping_add(i as u32));
-        let jitter = hash_range(seed, -0.22, 0.22);
-        let r = base * (1.0 + jitter);
+/// The 12 icosahedron vertices (cyclic permutations of `(0, ±1, ±φ)`) in the
+/// order that matches `ICO_EDGES` (spec VI.1).
+pub const ICO_VERTS: [Vec3; 12] = [
+    Vec3::new(-1.0, PHI, 0.0),  // 0
+    Vec3::new(1.0, PHI, 0.0),   // 1
+    Vec3::new(-1.0, -PHI, 0.0), // 2
+    Vec3::new(1.0, -PHI, 0.0),  // 3
+    Vec3::new(0.0, -1.0, PHI),  // 4
+    Vec3::new(0.0, 1.0, PHI),   // 5
+    Vec3::new(0.0, -1.0, -PHI), // 6
+    Vec3::new(0.0, 1.0, -PHI),  // 7
+    Vec3::new(PHI, 0.0, -1.0),  // 8
+    Vec3::new(PHI, 0.0, 1.0),   // 9
+    Vec3::new(-PHI, 0.0, -1.0), // 10
+    Vec3::new(-PHI, 0.0, 1.0),  // 11
+];
 
-        let angle = (i as f32 / VERTS as f32) * TAU;
-        let p = Vec2::new(angle.cos() * r, angle.sin() * r);
+/// The 30 icosahedron edges (vertex-index pairs, spec VI.1).
+pub const ICO_EDGES: [(usize, usize); 30] = [
+    (0, 1), (0, 5), (0, 7), (0, 10), (0, 11),
+    (1, 5), (1, 7), (1, 8), (1, 9),
+    (2, 3), (2, 4), (2, 6), (2, 10), (2, 11),
+    (3, 4), (3, 6), (3, 8), (3, 9),
+    (4, 5), (4, 9), (4, 11),
+    (5, 9), (5, 11),
+    (6, 7), (6, 8), (6, 10),
+    (7, 8), (7, 10),
+    (8, 9),
+    (10, 11),
+];
 
-        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+/// Perspective focal length for the wireframe projection (spec VI.1 `fov 300`).
+const FOV: f32 = 300.0;
+
+/// Per-asteroid 3D-tumble state. The 12 vertices (jittered ±25 %, scaled to the
+/// tier's pixel radius) tumble via `spin`; `tumble_asteroids` rotates + projects
+/// them each frame and rebuilds the lyon wireframe `Shape` with a cycling hue.
+#[derive(Component)]
+pub struct Tumbler {
+    verts: [Vec3; 12],
+    rot: Quat,
+    /// Angular velocity per axis (rad/sec).
+    spin: Vec3,
+    /// Base hue (degrees) + cycle rate (deg/sec).
+    hue: f32,
+    hue_speed: f32,
+    sat: f32,
+    light: f32,
+}
+
+/// Build the tumble state for a tier/seed: jittered + scaled vertices, random
+/// 3-axis spin, and a per-asteroid hue (20 % gold, else a teal→violet band).
+fn make_tumbler(tier: u8, seed: u32) -> Tumbler {
+    let scale = shape_base_radius(tier) / CIRCUMRADIUS;
+    let mut verts = [Vec3::ZERO; 12];
+    for (i, v) in ICO_VERTS.iter().enumerate() {
+        let j = hash_range(wang(seed ^ (i as u32).wrapping_mul(0x9E37)), -0.25, 0.25);
+        verts[i] = *v * (scale * (1.0 + j));
     }
-    let path = path.close();
+    let gold = hash_range(wang(seed ^ 0x60D), 0.0, 1.0) < 0.20;
+    let hue = if gold {
+        hash_range(wang(seed ^ 0x11), 40.0, 60.0)
+    } else {
+        hash_range(wang(seed ^ 0x22), 150.0, 280.0)
+    };
+    Tumbler {
+        verts,
+        rot: Quat::IDENTITY,
+        spin: Vec3::new(
+            hash_range(wang(seed ^ 0xA), -2.4, 2.4),
+            hash_range(wang(seed ^ 0xB), -2.4, 2.4),
+            hash_range(wang(seed ^ 0xC), -2.4, 2.4),
+        ),
+        hue,
+        hue_speed: hash_range(wang(seed ^ 0xD), 12.0, 36.0),
+        sat: 0.9,
+        light: 0.6,
+    }
+}
 
-    ShapeBuilder::with(&path)
-        // Dark rocky fill — near-black warm brown.
-        .fill(Color::linear_rgb(0.05, 0.04, 0.03))
-        // Dim warm-grey emissive: values > 1.0 drive Bloom but stay subtle.
-        .stroke((Color::linear_rgb(1.2, 1.0, 0.8), 1.5))
-        .build()
+/// Rotate + perspective-project the 12 vertices to 2D (spec VI.1: `scale =
+/// fov/(fov+z)`). Returns model-local screen offsets (the Transform positions it).
+pub fn project(verts: &[Vec3; 12], rot: Quat) -> [Vec2; 12] {
+    let mut out = [Vec2::ZERO; 12];
+    for (i, v) in verts.iter().enumerate() {
+        let p = rot * *v;
+        let s = FOV / (FOV + p.z);
+        out[i] = Vec2::new(p.x * s, p.y * s);
+    }
+    out
+}
+
+/// An over-bright (HDR) emissive color from HSL so the wireframe blooms (neon).
+fn hdr_hue(hue: f32, sat: f32, light: f32) -> Color {
+    let l = Color::hsl(hue, sat, light).to_linear();
+    const GAIN: f32 = 2.2;
+    Color::linear_rgba(l.red * GAIN, l.green * GAIN, l.blue * GAIN, 1.0)
+}
+
+/// Build the wireframe `Shape` (30 edges as disconnected stroked segments).
+fn wireframe_shape(screen: &[Vec2; 12], color: Color) -> Shape {
+    let mut path = ShapePath::new();
+    for &(a, b) in ICO_EDGES.iter() {
+        path = path.move_to(screen[a]).line_to(screen[b]);
+    }
+    ShapeBuilder::with(&path).stroke((color, 2.0)).build()
+}
+
+/// Spawn one asteroid of `tier` at `pos` with `vel` and a deterministic tumble
+/// seeded by `seed`. Shared by the wave spawner and the split path.
+fn spawn_asteroid(commands: &mut Commands, tier: u8, pos: Vec2, vel: Vec2, seed: u32) {
+    let tum = make_tumbler(tier, seed);
+    let screen = project(&tum.verts, tum.rot);
+    let color = hdr_hue(tum.hue, tum.sat, tum.light);
+    commands.spawn((
+        Asteroid { tier },
+        wireframe_shape(&screen, color),
+        tum,
+        Collider { radius: collider_radius(tier) },
+        Velocity(vel),
+        Transform::from_xyz(pos.x, pos.y, 0.0),
+    ));
+}
+
+/// Advance each asteroid's 3-axis tumble + hue cycle and rebuild its wireframe
+/// `Shape` (lyon re-tessellates on `Changed<Shape>`). Presentation only — the
+/// gameplay collider/velocity are untouched.
+pub fn tumble_asteroids(time: Res<Time>, mut q: Query<(&mut Tumbler, &mut Shape)>) {
+    let dt = time.delta_secs();
+    for (mut tum, mut shape) in &mut q {
+        let delta = Quat::from_scaled_axis(tum.spin * dt);
+        tum.rot = (delta * tum.rot).normalize();
+        tum.hue = (tum.hue + tum.hue_speed * dt).rem_euclid(360.0);
+        let screen = project(&tum.verts, tum.rot);
+        let color = hdr_hue(tum.hue, tum.sat, tum.light);
+        *shape = wireframe_shape(&screen, color);
+    }
 }
 
 // ─── Spawn ───────────────────────────────────────────────────────────────────
@@ -119,14 +231,7 @@ pub fn spawn_one_asteroid(commands: &mut Commands, bounds: &PlayBounds, seed: u3
     let perp = Vec2::new(-to_center.y, to_center.x);
     let vel = to_center * speed + perp * lateral;
 
-    let tier: u8 = 2;
-    commands.spawn((
-        Asteroid { tier },
-        shape(tier),
-        Collider { radius: collider_radius(tier) },
-        Velocity(vel),
-        Transform::from_xyz(sx, sy, 0.0),
-    ));
+    spawn_asteroid(commands, 2, Vec2::new(sx, sy), vel, seed);
 }
 
 // ─── Collision / split system ────────────────────────────────────────────────
@@ -179,13 +284,7 @@ pub fn asteroid_hits(
                     let jitter = hash_range(jitter_seed, -8.0, 8.0);
                     let vel = dir * (child_speed + jitter);
 
-                    commands.spawn((
-                        Asteroid { tier: child_tier },
-                        shape(child_tier),
-                        Collider { radius: collider_radius(child_tier) },
-                        Velocity(vel),
-                        Transform::from_xyz(pos.x, pos.y, 0.0),
-                    ));
+                    spawn_asteroid(&mut commands, child_tier, pos, vel, jitter_seed);
                 }
             }
             // tier 0: just despawned above, no children.

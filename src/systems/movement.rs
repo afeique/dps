@@ -5,19 +5,32 @@ use crate::components::{Intent, Ship, Velocity};
 use crate::resources::PlayBounds;
 use bevy::prelude::*;
 
-/// Turn the ship's `Intent` into acceleration + rotation.
+/// Velocity response rate per unit of `Ship.thrust` (1/sec). Tuned so the base
+/// thrust (1100) yields a tight ~22/s tracking: the ship reaches — and, when
+/// WASD is released, sheds — speed in ~30 ms, so control is precise and almost
+/// momentum-free. The Afterburner upgrade (+thrust) makes it snappier still.
+const RESPONSE_K: f32 = 0.02;
+
+/// Track `current` velocity toward `target` with framerate-independent
+/// exponential smoothing at `response` (1/sec). Higher response = tighter,
+/// lower-momentum control; the result never overshoots `target`.
+#[inline]
+pub fn tracked_velocity(current: Vec2, target: Vec2, response: f32, dt: f32) -> Vec2 {
+    let t = 1.0 - (-response * dt).exp();
+    current.lerp(target, t)
+}
+
+/// Turn the ship's `Intent` into movement + rotation.
 pub fn ship_control(time: Res<Time>, mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>) {
     let dt = time.delta_secs();
     for (ship, intent, mut vel, mut tf) in &mut q {
-        // Move: accelerate in the WASD / left-stick screen-space direction,
-        // independent of facing (twin-stick).
-        vel.0 += intent.move_dir * (ship.thrust * dt);
-
-        // Mild drag + hard speed cap.
-        vel.0 *= 0.985;
-        if vel.0.length() > ship.max_speed {
-            vel.0 = vel.0.normalize() * ship.max_speed;
-        }
+        // Tight twin-stick control (WASD / left-stick, screen-space, independent
+        // of facing): track velocity toward the input target rather than
+        // accelerating + coasting. `move_dir` is clamped to len ≤1, so the target
+        // tops out at `max_speed`; releasing input sheds speed just as fast, so
+        // there's almost no glide — precise, low-momentum control.
+        let target = intent.move_dir * ship.max_speed;
+        vel.0 = tracked_velocity(vel.0, target, ship.thrust * RESPONSE_K, dt);
 
         // Face the mouse aim point instantly. Forward is +Y, so rotate by
         // (aim_angle - PI/2); the player then fires along this facing.

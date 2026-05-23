@@ -1947,3 +1947,68 @@ fn rage_triggers_screen_flash() {
         "no rage → no flash"
     );
 }
+
+// ── 57. tight_controls_track_input ────────────────────────────────────────────
+
+/// The tightened control model: velocity tracks the input target with no
+/// overshoot, reaches it under sustained input, and sheds it fast on release
+/// (low momentum).
+#[test]
+fn tight_controls_track_input() {
+    use crate::systems::movement::tracked_velocity;
+
+    let dt = 1.0 / 64.0;
+    let resp = 1100.0 * 0.02; // base ship: thrust × RESPONSE_K ≈ 22/s
+    let target = Vec2::new(520.0, 0.0);
+
+    // A single step moves toward the target but never past it.
+    let one = tracked_velocity(Vec2::ZERO, target, resp, dt);
+    assert!(one.x > 0.0 && one.x < target.x, "one step: toward target, no overshoot ({one:?})");
+
+    // Sustained input reaches (≈) the target speed.
+    let mut v = Vec2::ZERO;
+    for _ in 0..90 {
+        v = tracked_velocity(v, target, resp, dt);
+    }
+    assert!(v.x > 505.0 && v.x <= target.x + 1e-3, "approaches target speed ({v:?})");
+
+    // Releasing input (target 0) sheds speed quickly — low momentum.
+    for _ in 0..20 {
+        v = tracked_velocity(v, Vec2::ZERO, resp, dt);
+    }
+    assert!(v.length() < 40.0, "stops fast when input released ({v:?})");
+}
+
+// ── 58. asteroid_icosahedron_geometry ─────────────────────────────────────────
+
+/// The asteroid wireframe is a valid icosahedron (spec VI.1): 30 edges, every
+/// vertex used with degree 5, and the perspective projection stays finite + near
+/// the circumradius.
+#[test]
+fn asteroid_icosahedron_geometry() {
+    use crate::systems::asteroids::{project, CIRCUMRADIUS, ICO_EDGES, ICO_VERTS};
+
+    // 30 edges, all indices valid, every vertex of degree 5 (icosahedron).
+    assert_eq!(ICO_EDGES.len(), 30);
+    let mut degree = [0u32; 12];
+    for &(a, b) in ICO_EDGES.iter() {
+        assert!(a < 12 && b < 12 && a != b, "edge ({a},{b}) out of range");
+        degree[a] += 1;
+        degree[b] += 1;
+    }
+    assert!(degree.iter().all(|&d| d == 5), "every vertex has 5 edges: {degree:?}");
+
+    // CIRCUMRADIUS matches the canonical vertex magnitude.
+    let mag = ICO_VERTS[0].length();
+    assert!((mag - CIRCUMRADIUS).abs() < 1e-3, "circumradius {CIRCUMRADIUS} vs {mag}");
+
+    // Projection (identity rotation) is finite and bounded by ~circumradius.
+    let screen = project(&ICO_VERTS, Quat::IDENTITY);
+    for p in screen {
+        assert!(p.is_finite(), "projected point is finite: {p:?}");
+        assert!(p.length() <= CIRCUMRADIUS * 2.0, "projected point stays bounded: {p:?}");
+    }
+    // A rotation changes the projection (the wireframe actually tumbles).
+    let rotated = project(&ICO_VERTS, Quat::from_rotation_y(0.7));
+    assert!(screen != rotated, "rotation changes the projected wireframe");
+}

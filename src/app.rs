@@ -84,6 +84,8 @@ impl Plugin for GamePlugin {
                     render::damage_numbers::float_damage_numbers,
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
+                    // 3D-tumble + rebuild the asteroid wireframes (spec VI.1).
+                    systems::asteroids::tumble_asteroids,
                     // Camera screen shake on deaths / player hits (spec I.2).
                     (
                         render::shake::trigger_screen_shake,
