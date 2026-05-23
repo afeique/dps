@@ -38,6 +38,16 @@ pub struct Boss {
 #[derive(Component, Debug)]
 pub struct Raged;
 
+/// A boss that has crossed its HP-threshold but is in the **rage telegraph**
+/// window (spec IV.7, `TELEGRAPH_FRAMES = 24` ≈ 0.4 s): a red warning ring shows
+/// before the rage burst fires, giving the player a counterplay beat.
+/// `tick_rage_telegraph` counts `timer` down → `activate_rage`. The HP-threshold
+/// path telegraphs; the tier-2 pair-link rages immediately (no telegraph).
+#[derive(Component, Debug)]
+pub struct RageTelegraph {
+    pub timer: f32,
+}
+
 /// Marks a mid-wave **mini-boss** promotion (spec V.6) — a regular enemy buffed
 /// to HP×1.7 / radius×1.25, awarding 2× points on death.
 #[derive(Component, Debug)]

@@ -23,7 +23,7 @@ use crate::components::*;
 use crate::messages::{Death, Fire};
 use crate::render::shapes;
 use bevy::prelude::*;
-use bevy_prototype_lyon::prelude::Shape;
+use bevy_prototype_lyon::prelude::*;
 
 /// Base stats for an enemy kind (mapped from `enemy-data.js`). `speed` is in
 /// world-units/second; `fire_cooldown` is `Some(seconds)` if the kind fires.
@@ -132,21 +132,76 @@ pub fn rage_homing_steer(
     }
 }
 
-/// HP-threshold boss rage (spec IV.7, one-shot): a boss rages when it drops to
-/// ≤33% of its max HP. (Deferred from the spec: the 24-frame telegraph, homing
-/// bullets, screen flash/shake, the red aura, and tier-3+ formations.)
+/// Rage telegraph duration (`TELEGRAPH_FRAMES = 24` @60 Hz ≈ 0.4 s, spec IV.7).
+pub const TELEGRAPH_SECS: f32 = 24.0 / 60.0;
+
+/// A red HDR warning ring (lyon stroke) at `radius`, emissive so bloom makes it
+/// glow — the rage telegraph aura (`radius*1.35`, spec IV.7).
+fn telegraph_ring(radius: f32) -> Shape {
+    let mut path = ShapePath::new();
+    for i in 0..32 {
+        let a = i as f32 / 32.0 * std::f32::consts::TAU;
+        let p = Vec2::new(a.cos() * radius, a.sin() * radius);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close())
+        .stroke((Color::linear_rgb(9.0, 0.5, 0.6), 3.0))
+        .build()
+}
+
+/// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% HP it
+/// enters the **telegraph** window — a red warning ring + a `RageTelegraph` timer
+/// — rather than raging instantly. `tick_rage_telegraph` fires `activate_rage`
+/// when the timer lapses. (Deferred: screen flash/shake, ember particles,
+/// tier-3+ formations.)
 pub fn boss_rage(
     mut commands: Commands,
-    mut fire: MessageWriter<Fire>,
-    mut bosses: Query<
-        (Entity, &Transform, &Health, Option<&mut FireCooldown>),
-        (With<Boss>, Without<Raged>),
+    bosses: Query<
+        (Entity, &Transform, &Health, Option<&Collider>),
+        (With<Boss>, Without<Raged>, Without<RageTelegraph>),
     >,
 ) {
-    for (e, tf, hp, fc) in &mut bosses {
+    for (e, tf, hp, collider) in &bosses {
         if hp.current > hp.max * 0.33 {
             continue;
         }
+        commands.entity(e).insert(RageTelegraph {
+            timer: TELEGRAPH_SECS,
+        });
+        // Warning ring at radius*1.35 (spec IV.7 aura). Top-level entity so it
+        // ignores the boss's Transform scale; self-despawns when the telegraph
+        // lapses (`Lifetime == TELEGRAPH_SECS`). Bosses barely move in 0.4 s.
+        let radius = collider.map_or(40.0, |c| c.radius) * 1.35;
+        let pos = tf.translation.truncate();
+        commands.spawn((
+            telegraph_ring(radius),
+            Transform::from_translation(pos.extend(0.3)),
+            Lifetime {
+                seconds: TELEGRAPH_SECS,
+            },
+        ));
+    }
+}
+
+/// Tick the rage telegraph; when it lapses, fire the actual rage (spec IV.7).
+/// Skips bosses already `Raged` (e.g. a pair-link rage that pre-empted the
+/// telegraph) so the tantrum never double-fires.
+pub fn tick_rage_telegraph(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut fire: MessageWriter<Fire>,
+    mut bosses: Query<
+        (Entity, &Transform, &mut RageTelegraph, Option<&mut FireCooldown>),
+        Without<Raged>,
+    >,
+) {
+    let dt = time.delta_secs();
+    for (e, tf, mut tel, fc) in &mut bosses {
+        tel.timer -= dt;
+        if tel.timer > 0.0 {
+            continue;
+        }
+        commands.entity(e).remove::<RageTelegraph>();
         activate_rage(&mut commands, &mut fire, e, tf.translation.truncate(), fc);
     }
 }

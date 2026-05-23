@@ -653,14 +653,16 @@ fn health_orb_rate_and_heal() {
     assert!(health_orb_heal(10, 0.5) > health_orb_heal(1, 0.5));
 }
 
-// ── 16. boss_rages_at_one_third_hp ────────────────────────────────────────────
+// ── 16. boss_telegraphs_then_rages ────────────────────────────────────────────
 
-/// A boss at ≤33% HP rages once (spec IV.7): gains the `Raged` marker + an
-/// invuln window, has its fire cooldown cut ×0.66, and fires a 16-bullet tantrum.
+/// A boss at ≤33% HP telegraphs first, then rages (spec IV.7). `boss_rage` adds
+/// `RageTelegraph` (no tantrum yet); after the ~0.4 s window, `tick_rage_telegraph`
+/// fires the actual rage: the `Raged` marker + invuln window, fire cooldown cut
+/// ×0.66, and a 16-bullet tantrum.
 #[test]
-fn boss_rages_at_one_third_hp() {
-    use crate::components::{Boss, Raged};
-    use crate::systems::enemy::boss_rage;
+fn boss_telegraphs_then_rages() {
+    use crate::components::{Boss, RageTelegraph, Raged};
+    use crate::systems::enemy::{boss_rage, tick_rage_telegraph, TELEGRAPH_SECS};
 
     let mut app = test_app();
     let world = app.world_mut();
@@ -671,6 +673,7 @@ fn boss_rages_at_one_third_hp() {
             Boss { tier: 1 },
             Health { current: 24.0, max: 80.0 }, // 30% < 33% → rage
             FireCooldown { cooldown: 2.0, timer: 1.0 },
+            Collider { radius: 40.0 },
             Transform::from_xyz(0.0, 0.0, 0.0),
         ))
         .id();
@@ -684,11 +687,39 @@ fn boss_rages_at_one_third_hp() {
         }
     }
 
-    let mut step = Schedule::default();
-    step.add_systems((boss_rage, count).chain());
-    step.run(world);
+    // Stage 1: boss_rage starts the telegraph — no rage, no tantrum yet.
+    world.insert_resource(Time::<()>::default());
+    let mut s1 = Schedule::default();
+    s1.add_systems((boss_rage, count).chain());
+    s1.run(world);
 
-    assert!(world.get::<Raged>(boss).is_some(), "boss should rage at ≤33% HP");
+    assert!(
+        world.get::<RageTelegraph>(boss).is_some(),
+        "≤33% HP starts the telegraph"
+    );
+    assert!(
+        world.get::<Raged>(boss).is_none(),
+        "the boss does not rage during the telegraph"
+    );
+    assert_eq!(
+        world.resource::<FireCount>().0,
+        0,
+        "no tantrum during the telegraph"
+    );
+
+    // Stage 2: after the telegraph window, tick_rage_telegraph fires the rage.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(TELEGRAPH_SECS + 0.05));
+    world.insert_resource(time);
+    let mut s2 = Schedule::default();
+    s2.add_systems((tick_rage_telegraph, count).chain());
+    s2.run(world);
+
+    assert!(world.get::<Raged>(boss).is_some(), "telegraph lapses → rage");
+    assert!(
+        world.get::<RageTelegraph>(boss).is_none(),
+        "telegraph marker is cleared on rage"
+    );
     assert!(
         world.get::<Invulnerable>(boss).is_some(),
         "rage grants an invuln window"

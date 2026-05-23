@@ -207,6 +207,8 @@ impl Plugin for GamePlugin {
                         systems::enemy::tangerine::ai,
                         systems::enemy::titan::ai,
                         systems::enemy::boss_rage,
+                        // Rage telegraph window → activate_rage when it lapses (IV.7).
+                        systems::enemy::tick_rage_telegraph,
                         systems::power_weapon::homing_steer,
                         // Raged-boss bullets curve toward the player (IV.7).
                         systems::enemy::rage_homing_steer,
