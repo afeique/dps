@@ -44,6 +44,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::shop::ShopSel>()
             .init_resource::<systems::drops::HealthDropTimer>()
             .init_resource::<systems::survivor::SurvivorChoice>()
+            .init_resource::<render::shake::ScreenShake>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -81,6 +82,12 @@ impl Plugin for GamePlugin {
                     render::damage_numbers::float_damage_numbers,
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
+                    // Camera screen shake on deaths / player hits (spec I.2).
+                    (
+                        render::shake::trigger_screen_shake,
+                        render::shake::apply_screen_shake,
+                    )
+                        .chain(),
                     audio::play_shoot,
                     audio::play_explosion,
                     audio::play_player_hit,

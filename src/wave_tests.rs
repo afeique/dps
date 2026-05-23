@@ -1824,3 +1824,76 @@ fn rage_homing_curves_toward_player() {
     // It only *curves*: ~0.25 rad in half a second, so +X stays dominant.
     assert!(v.x > v.y, "a gentle nudge, not a snap turn; got {v:?}");
 }
+
+// ── 53. screen_shake_helpers ──────────────────────────────────────────────────
+
+/// The pure screen-shake math (spec I.2): zero intensity → no offset; a positive
+/// intensity gives a bounded non-zero offset; per-death magnitude orders
+/// boss > mini-boss > regular; `add` keeps the stronger trigger (clamped).
+#[test]
+fn screen_shake_helpers() {
+    use crate::render::shake::{death_shake, shake_offset, ScreenShake, HURT_SHAKE};
+
+    assert_eq!(shake_offset(0.0, 1.234), Vec2::ZERO, "no shake at rest");
+
+    // Each axis is bounded by intensity (0.25 sin/cos + 0.75 jitter = 1.0 max).
+    for t in [0.0_f32, 0.3, 1.7, 9.9] {
+        let o = shake_offset(20.0, t);
+        assert!(o.x.abs() <= 20.0 + 1e-3 && o.y.abs() <= 20.0 + 1e-3, "bounded at t={t}: {o:?}");
+    }
+    // Some sampled time produces a real (non-zero) offset.
+    assert!(shake_offset(20.0, 0.3).length() > 0.0, "active shake displaces the camera");
+
+    // Boss shakes hardest, then mini-boss, then a regular enemy.
+    assert!(death_shake(1, false) > death_shake(0, true));
+    assert!(death_shake(0, true) > death_shake(0, false));
+    assert!(death_shake(4, false) >= death_shake(1, false), "higher tiers shake at least as hard");
+
+    // `add` keeps the stronger magnitude and clamps to the cap.
+    let mut s = ScreenShake::default();
+    s.add(HURT_SHAKE);
+    s.add(3.0);
+    assert_eq!(s.intensity, HURT_SHAKE, "the weaker trigger does not lower the shake");
+    s.add(1000.0);
+    assert!(s.intensity <= 26.0 && s.intensity > HURT_SHAKE, "clamped to the max");
+}
+
+// ── 54. death_and_hurt_trigger_shake ──────────────────────────────────────────
+
+/// `trigger_screen_shake` bumps `ScreenShake` from `Death` (scaled by boss tier)
+/// and from `PlayerHurt` (spec I.2).
+#[test]
+fn death_and_hurt_trigger_shake() {
+    use crate::messages::PlayerHurt;
+    use crate::render::shake::{death_shake, trigger_screen_shake, ScreenShake};
+
+    // A boss death.
+    let mut app = test_app();
+    app.world_mut().init_resource::<ScreenShake>();
+    app.world_mut().write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Titan),
+        boss_tier: 2,
+        mini_boss: false,
+    });
+    let mut step = Schedule::default();
+    step.add_systems(trigger_screen_shake);
+    step.run(app.world_mut());
+    assert!(
+        (app.world().resource::<ScreenShake>().intensity - death_shake(2, false)).abs() < 1e-3,
+        "boss death sets the tier-scaled shake"
+    );
+
+    // A player hit also shakes.
+    let mut app2 = test_app();
+    app2.world_mut().init_resource::<ScreenShake>();
+    app2.world_mut().write_message(PlayerHurt { amount: 10.0 });
+    let mut step2 = Schedule::default();
+    step2.add_systems(trigger_screen_shake);
+    step2.run(app2.world_mut());
+    assert!(
+        app2.world().resource::<ScreenShake>().intensity > 0.0,
+        "a player hit triggers shake"
+    );
+}
