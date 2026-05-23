@@ -1897,3 +1897,53 @@ fn death_and_hurt_trigger_shake() {
         "a player hit triggers shake"
     );
 }
+
+// ── 55. screen_flash_add_keeps_max ────────────────────────────────────────────
+
+/// `ScreenFlash::add` keeps the stronger trigger and clamps the alpha to 1.0.
+#[test]
+fn screen_flash_add_keeps_max() {
+    use crate::render::flash::ScreenFlash;
+
+    let mut f = ScreenFlash::default();
+    assert_eq!(f.intensity, 0.0);
+    f.add(0.42);
+    f.add(0.1);
+    assert_eq!(f.intensity, 0.42, "a weaker trigger does not lower the flash");
+    f.add(5.0);
+    assert_eq!(f.intensity, 1.0, "alpha is clamped to 1.0");
+}
+
+// ── 56. rage_triggers_screen_flash ────────────────────────────────────────────
+
+/// `trigger_screen_flash` flashes when a boss newly enters rage (`Added<Raged>`,
+/// spec IV.7); an un-raged world leaves the flash at rest.
+#[test]
+fn rage_triggers_screen_flash() {
+    use crate::render::flash::{trigger_screen_flash, ScreenFlash, RAGE_FLASH};
+
+    // A freshly-`Raged` entity triggers the flash.
+    let mut app = test_app();
+    app.world_mut().init_resource::<ScreenFlash>();
+    app.world_mut().spawn(Raged);
+    let mut step = Schedule::default();
+    step.add_systems(trigger_screen_flash);
+    step.run(app.world_mut());
+    assert!(
+        (app.world().resource::<ScreenFlash>().intensity - RAGE_FLASH).abs() < 1e-3,
+        "newly-raged boss triggers a rage flash"
+    );
+
+    // No raged entity → no flash.
+    let mut app2 = test_app();
+    app2.world_mut().init_resource::<ScreenFlash>();
+    app2.world_mut().spawn_empty();
+    let mut step2 = Schedule::default();
+    step2.add_systems(trigger_screen_flash);
+    step2.run(app2.world_mut());
+    assert_eq!(
+        app2.world().resource::<ScreenFlash>().intensity,
+        0.0,
+        "no rage → no flash"
+    );
+}

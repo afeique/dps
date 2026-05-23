@@ -45,6 +45,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::drops::HealthDropTimer>()
             .init_resource::<systems::survivor::SurvivorChoice>()
             .init_resource::<render::shake::ScreenShake>()
+            .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
             .add_message::<Collision>()
@@ -65,6 +66,7 @@ impl Plugin for GamePlugin {
                     render::hud::setup_hud,
                     render::minimap::setup_minimap,
                     render::cursor::spawn_crosshair,
+                    render::flash::setup_screen_flash.after(render::spawn_camera),
                     audio::setup_sfx,
                 ),
             )
@@ -86,6 +88,12 @@ impl Plugin for GamePlugin {
                     (
                         render::shake::trigger_screen_shake,
                         render::shake::apply_screen_shake,
+                    )
+                        .chain(),
+                    // Screen flash on boss rage (spec I.2 / IV.7).
+                    (
+                        render::flash::trigger_screen_flash,
+                        render::flash::apply_screen_flash,
                     )
                         .chain(),
                     audio::play_shoot,
