@@ -185,5 +185,9 @@ pub fn survivor_input(
         .saturating_add(stage_bonus(wave.number() as u64));
 
     wave.advance_after_reward();
-    next.set(GameState::Playing);
+    // Chain into the shop (spec V.6): a stage-clear pick flows into a "spend your
+    // gold" break before the next wave. Closing the shop (Esc/B) resumes Playing →
+    // the next wave. (The spec's curated 3-cheapest-suggest is shown as the full
+    // shop here; the curation is a refinement.)
+    next.set(GameState::Shop);
 }

@@ -2611,3 +2611,58 @@ fn status_aura_lifecycle() {
         assert_eq!(q.iter(app.world()).count(), 0, "aura despawns when Burning ends");
     }
 }
+
+// ── 75. survivor_pick_chains_into_shop ────────────────────────────────────────
+
+/// A stage-clear survivor-card pick applies the card and chains into the Shop
+/// (spec V.6 shop-suggest flow) rather than straight to Playing.
+#[test]
+fn survivor_pick_chains_into_shop() {
+    use crate::systems::shop::{UpgradeId, Upgrades};
+    use crate::systems::survivor::{survivor_input, SurvivorChoice};
+    use crate::systems::wave::Wave;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Wave::default());
+    world.insert_resource(SurvivorChoice {
+        cards: [Some(UpgradeId::HealthBoost), None, None],
+    });
+    let mut input = ButtonInput::<KeyCode>::default();
+    input.press(KeyCode::Digit1); // pick the first card
+    world.insert_resource(input);
+
+    // Player — survivor_input applies the picked upgrade to it.
+    world.spawn((
+        Ship::default(),
+        Health {
+            current: 40.0,
+            max: 40.0,
+        },
+        Shield { reduction: 0.15 },
+        Lives {
+            count: 1,
+            progress: 0.0,
+        },
+        Transform::default(),
+    ));
+
+    let gold_before = world.resource::<Score>().gold;
+    let mut step = Schedule::default();
+    step.add_systems(survivor_input);
+    step.run(world);
+
+    assert_eq!(
+        world.resource::<Upgrades>().owned(UpgradeId::HealthBoost),
+        1,
+        "the picked card is granted"
+    );
+    assert!(world.resource::<Score>().gold > gold_before, "stage-clear gold bonus");
+    assert!(
+        matches!(
+            world.resource::<NextState<GameState>>(),
+            NextState::Pending(GameState::Shop)
+        ),
+        "survivor pick chains into the Shop"
+    );
+}
