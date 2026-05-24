@@ -46,12 +46,13 @@ pub enum UpgradeId {
     Overcharge,
     StaticDischarge,
     CombatMedic,
+    Momentum,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 24] = [
+    pub const ALL: [UpgradeId; 25] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -76,6 +77,7 @@ impl UpgradeId {
         Self::Overcharge,
         Self::StaticDischarge,
         Self::CombatMedic,
+        Self::Momentum,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -107,6 +109,7 @@ impl UpgradeId {
             Self::Overcharge => 21,
             Self::StaticDischarge => 22,
             Self::CombatMedic => 23,
+            Self::Momentum => 24,
         }
     }
 
@@ -136,6 +139,7 @@ impl UpgradeId {
             Self::Overcharge => "Overcharge    (every Nth shot ×3)",
             Self::StaticDischarge => "Static Disch. (periodic AoE)",
             Self::CombatMedic => "Combat Medic  (kill heals on hurt)",
+            Self::Momentum => "Momentum      (+speed while moving)",
         }
     }
 
@@ -166,6 +170,7 @@ impl UpgradeId {
             Self::Overcharge => 1900,
             Self::StaticDischarge => 2300,
             Self::CombatMedic => 3000,
+            Self::Momentum => 2000,
         }
     }
 
@@ -195,6 +200,7 @@ impl UpgradeId {
             Self::Overcharge => 4,
             Self::StaticDischarge => 5,
             Self::CombatMedic => 1,
+            Self::Momentum => 4,
         }
     }
 }
@@ -285,6 +291,17 @@ pub fn static_discharge_interval(stacks: u32) -> f32 {
 /// STATIC DISCHARGE damage per pulse: `4.0 × stacks` (0 = off).
 pub fn static_discharge_damage(stacks: u32) -> f32 {
     4.0 * stacks as f32
+}
+
+/// MOMENTUM passive (spec VI.3): a speed bonus that ramps with `sustained`
+/// seconds of continuous movement — `+5%/s × stacks`, capped at `+15% × stacks`.
+/// Returns the *fraction* added to top speed (0 when unowned or at rest).
+pub fn momentum_bonus(sustained: f32, stacks: u32) -> f32 {
+    if stacks == 0 {
+        return 0.0;
+    }
+    let s = stacks as f32;
+    (0.05 * s * sustained).min(0.15 * s)
 }
 
 /// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
@@ -507,6 +524,7 @@ pub fn apply_upgrade(
         | UpgradeId::PhaseEcho
         | UpgradeId::Overcharge
         | UpgradeId::StaticDischarge
-        | UpgradeId::CombatMedic => {}
+        | UpgradeId::CombatMedic
+        | UpgradeId::Momentum => {}
     }
 }

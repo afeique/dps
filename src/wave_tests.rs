@@ -2474,6 +2474,24 @@ fn combat_medic_heals_kill_after_hit() {
     );
 }
 
+// ── 73. momentum_ramps_and_caps ───────────────────────────────────────────────
+
+/// Momentum adds no bonus unowned or at rest, ramps with sustained movement, and
+/// caps at +15%/stack (spec VI.3).
+#[test]
+fn momentum_ramps_and_caps() {
+    use crate::systems::shop::momentum_bonus;
+
+    assert_eq!(momentum_bonus(5.0, 0), 0.0, "unowned → no bonus");
+    assert_eq!(momentum_bonus(0.0, 4), 0.0, "at rest → no bonus");
+    // 1 stack: +5%/s, capped at +15%.
+    assert!((momentum_bonus(1.0, 1) - 0.05).abs() < 1e-6, "ramps 5%/s");
+    assert!((momentum_bonus(10.0, 1) - 0.15).abs() < 1e-6, "caps at +15%/stack");
+    // More sustained → more bonus (until the cap); more stacks → higher cap.
+    assert!(momentum_bonus(1.0, 4) > momentum_bonus(1.0, 1));
+    assert!(momentum_bonus(100.0, 4) > momentum_bonus(100.0, 1), "cap scales with stacks");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

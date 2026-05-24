@@ -3,6 +3,7 @@
 
 use crate::components::{Intent, Ship, Velocity};
 use crate::resources::PlayBounds;
+use crate::systems::shop::{momentum_bonus, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
 /// Velocity response rate per unit of `Ship.thrust` (1/sec). Tuned so the base
@@ -21,15 +22,30 @@ pub fn tracked_velocity(current: Vec2, target: Vec2, response: f32, dt: f32) -> 
 }
 
 /// Turn the ship's `Intent` into movement + rotation.
-pub fn ship_control(time: Res<Time>, mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>) {
+pub fn ship_control(
+    time: Res<Time>,
+    upgrades: Res<Upgrades>,
+    // Seconds of continuous movement, for the Momentum speed ramp.
+    mut sustained: Local<f32>,
+    mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>,
+) {
     let dt = time.delta_secs();
+    let momentum = upgrades.owned(UpgradeId::Momentum);
     for (ship, intent, mut vel, mut tf) in &mut q {
+        // Momentum passive: top speed ramps with sustained movement (spec VI.3).
+        if intent.move_dir.length_squared() > 0.01 {
+            *sustained += dt;
+        } else {
+            *sustained = 0.0;
+        }
+        let top_speed = ship.max_speed * (1.0 + momentum_bonus(*sustained, momentum));
+
         // Tight twin-stick control (WASD / left-stick, screen-space, independent
         // of facing): track velocity toward the input target rather than
         // accelerating + coasting. `move_dir` is clamped to len ≤1, so the target
-        // tops out at `max_speed`; releasing input sheds speed just as fast, so
+        // tops out at `top_speed`; releasing input sheds speed just as fast, so
         // there's almost no glide — precise, low-momentum control.
-        let target = intent.move_dir * ship.max_speed;
+        let target = intent.move_dir * top_speed;
         vel.0 = tracked_velocity(vel.0, target, ship.thrust * RESPONSE_K, dt);
 
         // Face the mouse aim point instantly. Forward is +Y, so rotate by
