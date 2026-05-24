@@ -31,8 +31,23 @@ pub enum HudText {
 #[derive(Component)]
 pub struct HealthBarFill;
 
+/// One of the three triforce spare-tank glyphs (spec VIII.1); `0` is the first
+/// spare. Lit gold when `index < lives.count`, else dimmed.
+#[derive(Component, Clone, Copy)]
+pub struct TankGlyph(pub u8);
+
 const BAR_W: f32 = 220.0;
 const BAR_H: f32 = 24.0;
+
+/// Spare-tank glyph color: gold `#FFD700` when that spare is filled, else a dim
+/// gold so the empty slots still read as a 3-tank track (spec VIII.1).
+pub fn tank_glyph_color(index: u8, tanks: u32) -> Color {
+    if (index as u32) < tanks {
+        Color::srgb(1.0, 0.843, 0.0) // #FFD700
+    } else {
+        Color::srgb(0.28, 0.24, 0.08) // dim gold
+    }
+}
 
 /// Spawn the HUD tree once at startup.
 pub fn setup_hud(mut commands: Commands) {
@@ -64,6 +79,29 @@ pub fn setup_hud(mut commands: Commands) {
                 },
                 BackgroundColor(Color::srgb(0.2, 0.6, 1.0)),
             ));
+        });
+
+    // Triforce spare-tank glyphs — a row of 3 just right of the health bar.
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(8.0),
+            left: Val::Px(BAR_W + 24.0),
+            column_gap: Val::Px(4.0),
+            ..default()
+        })
+        .with_children(|row| {
+            for i in 0..3u8 {
+                row.spawn((
+                    TankGlyph(i),
+                    Text::new("▲"),
+                    TextFont {
+                        font_size: 22.0,
+                        ..default()
+                    },
+                    TextColor(tank_glyph_color(i, 0)),
+                ));
+            }
         });
 
     // HP text, overlaid on the bar.
@@ -140,8 +178,15 @@ pub fn update_hud(
     wave: Res<Wave>,
     mut texts: Query<(&mut Text, &HudText)>,
     mut bar: Query<(&mut Node, &mut BackgroundColor), With<HealthBarFill>>,
+    mut tank_glyphs: Query<(&TankGlyph, &mut TextColor)>,
 ) {
     let player = player.single().ok();
+
+    // Triforce spare-tank glyphs.
+    let tanks = player.and_then(|(_, _, l)| l).map(|l| l.count).unwrap_or(0);
+    for (glyph, mut color) in &mut tank_glyphs {
+        color.0 = tank_glyph_color(glyph.0, tanks);
+    }
 
     // Health fraction + bar.
     let frac = player
@@ -172,9 +217,9 @@ pub fn update_hud(
                     .and_then(|(_, sh, _)| sh)
                     .map(|s| (s.reduction * 100.0).round() as i32)
                     .unwrap_or(0);
-                let tanks = player.and_then(|(_, _, l)| l).map(|l| l.count).unwrap_or(0);
+                // Spare tanks are now shown by the triforce glyphs (above).
                 format!(
-                    "SHIELD {shield_pct}%   TANKS x{tanks}\n\
+                    "SHIELD {shield_pct}%\n\
                      ENERGY {}/{}  [{}]{}\n\
                      WEAPON {}",
                     energy.current.round() as i32,

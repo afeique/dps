@@ -2082,3 +2082,22 @@ fn lightning_bolt_points() {
     // A different seed re-rolls the jag (the bolt crackles).
     assert_ne!(pts, bolt_points(length, 9.99), "seed changes the jag");
 }
+
+// ── 61. triforce_tank_glyphs ──────────────────────────────────────────────────
+
+/// The HUD triforce lights one gold glyph per spare tank, dims the rest
+/// (spec VIII.1): glyph `i` is gold iff `i < tanks`.
+#[test]
+fn triforce_tank_glyphs() {
+    use crate::render::hud::tank_glyph_color;
+
+    let gold = Color::srgb(1.0, 0.843, 0.0);
+    // 0 tanks → all three dim.
+    assert_ne!(tank_glyph_color(0, 0), gold);
+    // 2 tanks → glyphs 0,1 gold, glyph 2 dim.
+    assert_eq!(tank_glyph_color(0, 2), gold);
+    assert_eq!(tank_glyph_color(1, 2), gold);
+    assert_ne!(tank_glyph_color(2, 2), gold);
+    // Full 3 tanks → all gold.
+    assert_eq!(tank_glyph_color(2, 3), gold);
+}
