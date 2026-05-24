@@ -41,12 +41,13 @@ pub enum UpgradeId {
     Thorns,
     Regen,
     LastStand,
+    Executioner,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 19] = [
+    pub const ALL: [UpgradeId; 20] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -66,6 +67,7 @@ impl UpgradeId {
         Self::Thorns,
         Self::Regen,
         Self::LastStand,
+        Self::Executioner,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -92,6 +94,7 @@ impl UpgradeId {
             Self::Thorns => 16,
             Self::Regen => 17,
             Self::LastStand => 18,
+            Self::Executioner => 19,
         }
     }
 
@@ -116,6 +119,7 @@ impl UpgradeId {
             Self::Thorns => "Thorns        (reflect 25%)",
             Self::Regen => "Repair Field  (+0.5 HP/s)",
             Self::LastStand => "Last Stand    (cheat death 1x)",
+            Self::Executioner => "Executioner   (+20% vs <25% HP)",
         }
     }
 
@@ -141,6 +145,7 @@ impl UpgradeId {
             Self::Thorns => 2200,
             Self::Regen => 2400,
             Self::LastStand => 8000,
+            Self::Executioner => 2600,
         }
     }
 
@@ -165,6 +170,7 @@ impl UpgradeId {
             Self::Thorns => 4,
             Self::Regen => 6,
             Self::LastStand => 1,
+            Self::Executioner => 5,
         }
     }
 }
@@ -218,6 +224,15 @@ pub fn dodge_chance(stacks: u32) -> f32 {
 pub fn thorns_frac(stacks: u32) -> f32 {
     0.25 * stacks as f32
 }
+
+/// EXECUTIONER passive (spec VI.3): bonus *damage multiplier* added vs an enemy
+/// below the execute threshold — `0.20 × stacks` (so a hit deals `×(1 + bonus)`).
+pub fn executioner_bonus(stacks: u32) -> f32 {
+    0.20 * stacks as f32
+}
+
+/// HP fraction below which `executioner_bonus` applies (spec VI.3: <25%).
+pub const EXECUTE_THRESHOLD: f32 = 0.25;
 
 /// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
 pub fn regen_rate(stacks: u32) -> f32 {
@@ -434,6 +449,7 @@ pub fn apply_upgrade(
         | UpgradeId::CritDamage
         | UpgradeId::Thorns
         | UpgradeId::Regen
-        | UpgradeId::LastStand => {}
+        | UpgradeId::LastStand
+        | UpgradeId::Executioner => {}
     }
 }

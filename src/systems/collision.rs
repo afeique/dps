@@ -13,7 +13,8 @@ use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use crate::systems::shop::{
-    explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId, Upgrades, KNOCK_PX,
+    executioner_bonus, explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId,
+    Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
 };
 use bevy::prelude::*;
 
@@ -27,7 +28,8 @@ pub fn bullet_hits_enemy(
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
-    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    // `Without<Ship>` keeps this immut `&Health` disjoint from `player_hp`'s mut.
+    enemies: Query<(Entity, &Transform, &Collider, &Health), (With<Enemy>, Without<Ship>)>,
     mut player_hp: Query<&mut Health, With<Ship>>,
 ) {
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
@@ -43,11 +45,13 @@ pub fn bullet_hits_enemy(
     let explode_r = explosion_radius(upgrades.owned(UpgradeId::ExplodeShot));
     // `_KNOCK` bullet trait: chance to shove the enemy on hit.
     let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
+    // EXECUTIONER passive: bonus damage vs enemies below the execute threshold.
+    let exec_bonus = executioner_bonus(upgrades.owned(UpgradeId::Executioner));
     for (bullet_e, btf, bc, mut bullet) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
-        for (enemy_e, etf, ec) in &enemies {
+        for (enemy_e, etf, ec, ehp) in &enemies {
             let reach = bc.radius + ec.radius;
             let d2 = btf
                 .translation
@@ -59,7 +63,13 @@ pub fn bullet_hits_enemy(
                 if crit_mult > 1.0 {
                     crits.write(crate::messages::Crit); // feeds the precision mission
                 }
-                let amount = bullet.damage * streak_mult * crit_mult;
+                // EXECUTIONER: extra damage vs an enemy already below 25% HP.
+                let exec = if exec_bonus > 0.0 && ehp.current < ehp.max * EXECUTE_THRESHOLD {
+                    1.0 + exec_bonus
+                } else {
+                    1.0
+                };
+                let amount = bullet.damage * streak_mult * crit_mult * exec;
                 dmg.write(Damage {
                     target: enemy_e,
                     amount,
@@ -93,7 +103,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2) in &enemies {
+                    for (e2, etf2, ec2, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

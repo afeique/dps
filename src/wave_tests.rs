@@ -2240,6 +2240,71 @@ fn pulse_toast_trigger() {
     assert!(!should_toast_pulse(3, 2), "counter reset (wave change) → silent");
 }
 
+// ── 68. executioner_hits_low_hp_harder ────────────────────────────────────────
+
+/// The Executioner passive (spec VI.3) adds damage only vs enemies below the
+/// execute threshold (<25% HP). With 5 stacks (+100%), a sub-threshold enemy
+/// takes exactly 2× what a full-HP enemy takes for the same shot.
+#[test]
+fn executioner_hits_low_hp_harder() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{executioner_bonus, Upgrades, UpgradeId, EXECUTE_THRESHOLD};
+
+    // Pure helper.
+    assert_eq!(executioner_bonus(0), 0.0);
+    assert!((executioner_bonus(1) - 0.20).abs() < 1e-6);
+    assert_eq!(EXECUTE_THRESHOLD, 0.25);
+
+    #[derive(Resource, Default)]
+    struct DmgSum(f32);
+    fn capture(mut r: MessageReader<Damage>, mut s: ResMut<DmgSum>) {
+        for d in r.read() {
+            s.0 += d.amount;
+        }
+    }
+
+    // One bullet vs one enemy at (cur/max) HP with 5 Executioner stacks. A fresh
+    // (seeded) RNG each call → identical crit roll, so executioner is the only
+    // difference between the two runs.
+    let run = |cur: f32, max: f32| -> f32 {
+        let mut app = test_app();
+        let world = app.world_mut();
+        world.resource_mut::<Upgrades>().set(UpgradeId::Executioner, 5);
+        world.init_resource::<DmgSum>();
+        world.spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Health { current: cur, max },
+            Collider { radius: 20.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        world.spawn((
+            Bullet {
+                kind: BulletKind::Player,
+                damage: 10.0,
+                pierce: 0,
+            },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, capture).chain());
+        step.run(world);
+        world.resource::<DmgSum>().0
+    };
+
+    let low = run(1000.0, 5000.0); // 20% < 25% → executioner applies
+    let full = run(5000.0, 5000.0); // 100% → no executioner
+    assert!(full > 0.0, "control deals damage");
+    // 5 stacks → +100% → exactly 2× (same crit roll via the shared seed).
+    assert!(
+        (low - full * 2.0).abs() < 1e-3,
+        "executioner doubles sub-threshold damage (low={low}, full={full})"
+    );
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and
