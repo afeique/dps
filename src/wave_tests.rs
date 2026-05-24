@@ -2102,6 +2102,25 @@ fn triforce_tank_glyphs() {
     assert_eq!(tank_glyph_color(2, 3), gold);
 }
 
+// ── 63. energy_orb_color_states ───────────────────────────────────────────────
+
+/// The energy-sphere color (spec VIII.1): teal that brightens with charge, and a
+/// gold pulse (high red+green) when ready.
+#[test]
+fn energy_orb_color_states() {
+    use crate::render::hud::energy_orb_color;
+
+    let dim = energy_orb_color(0.0, false, 0.0).to_srgba();
+    let full = energy_orb_color(1.0, false, 0.0).to_srgba();
+    // Charging brightens the (blue-dominant) teal.
+    assert!(full.blue > dim.blue, "more charge → brighter ({} vs {})", full.blue, dim.blue);
+    assert!(full.blue > full.red, "charging orb is teal (blue-dominant)");
+
+    // Ready → gold: red & green dominate blue.
+    let ready = energy_orb_color(1.0, true, 0.3).to_srgba();
+    assert!(ready.red > ready.blue && ready.green > ready.blue, "ready orb is gold ({ready:?})");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

@@ -49,6 +49,25 @@ pub fn tank_glyph_color(index: u8, tanks: u32) -> Color {
     }
 }
 
+/// Marks the power-weapon **energy sphere** (spec VIII.1) — a circular node that
+/// fills (brightens, teal) toward the active power weapon's cost and pulses gold
+/// when it's chargeable.
+#[derive(Component)]
+pub struct EnergyOrb;
+
+/// Energy-sphere color: a gold pulse when `ready` (energy ≥ cost & off cooldown),
+/// else teal whose brightness tracks `frac` (energy / cost, 0..1). `t` drives the
+/// ready-pulse.
+pub fn energy_orb_color(frac: f32, ready: bool, t: f32) -> Color {
+    if ready {
+        let p = 0.7 + 0.3 * (t * 6.0).sin().abs(); // 0.7..1.0 gold throb
+        Color::srgb(1.0 * p, 0.84 * p, 0.2 * p)
+    } else {
+        let b = 0.18 + 0.62 * frac.clamp(0.0, 1.0); // dim → bright as it charges
+        Color::srgb(0.12 * b, 0.62 * b, 0.92 * b) // teal
+    }
+}
+
 /// Spawn the HUD tree once at startup.
 pub fn setup_hud(mut commands: Commands) {
     let font = TextFont {
@@ -103,6 +122,21 @@ pub fn setup_hud(mut commands: Commands) {
                 ));
             }
         });
+
+    // Power-weapon energy sphere — a circle (border-radius 50%) right of the triforce.
+    commands.spawn((
+        EnergyOrb,
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(6.0),
+            left: Val::Px(BAR_W + 96.0),
+            width: Val::Px(28.0),
+            height: Val::Px(28.0),
+            border_radius: BorderRadius::all(Val::Percent(50.0)),
+            ..default()
+        },
+        BackgroundColor(energy_orb_color(0.0, false, 0.0)),
+    ));
 
     // HP text, overlaid on the bar.
     commands.spawn((
@@ -176,9 +210,11 @@ pub fn update_hud(
     score: Res<Score>,
     streak: Res<KillStreak>,
     wave: Res<Wave>,
+    time: Res<Time>,
     mut texts: Query<(&mut Text, &HudText)>,
     mut bar: Query<(&mut Node, &mut BackgroundColor), With<HealthBarFill>>,
     mut tank_glyphs: Query<(&TankGlyph, &mut TextColor)>,
+    mut energy_orb: Query<&mut BackgroundColor, (With<EnergyOrb>, Without<HealthBarFill>)>,
 ) {
     let player = player.single().ok();
 
@@ -205,6 +241,12 @@ pub fn update_hud(
 
     let cost = pw.kind.energy_cost();
     let ready = pw.cooldown <= 0.0 && energy.current >= cost;
+
+    // Energy sphere: fills (brightens) toward the cost, gold-pulses when ready.
+    if let Ok(mut orb) = energy_orb.single_mut() {
+        let frac = if cost > 0.0 { energy.current / cost } else { 1.0 };
+        orb.0 = energy_orb_color(frac, ready, time.elapsed_secs());
+    }
 
     for (mut text, kind) in &mut texts {
         let s = match kind {
