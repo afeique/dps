@@ -345,7 +345,7 @@ fn crit_roll_bounds() {
     let mut crits = 0;
     let n = 20_000;
     for _ in 0..n {
-        let m = roll_crit(&mut rng, crit_chance(0), 0);
+        let m = roll_crit(&mut rng, crit_chance(0), 0, 0.0);
         assert!(
             m == 1.0 || (2.0..=3.0).contains(&m),
             "base crit multiplier must be 1.0 or in [2,3], got {m}"
@@ -364,7 +364,7 @@ fn crit_roll_bounds() {
     let mut rng2 = GameRng::default();
     let mut max_seen = 0.0_f32;
     for _ in 0..50_000 {
-        let m = roll_crit(&mut rng2, 1.0, 6); // always crit, 6 dmg stacks → max 3.9
+        let m = roll_crit(&mut rng2, 1.0, 6, 0.0); // always crit, 6 dmg stacks → max 3.9
         assert!((2.0..=3.9 + 1e-3).contains(&m), "upgraded crit in [2, 3.9], got {m}");
         max_seen = max_seen.max(m);
     }
@@ -2971,4 +2971,121 @@ fn equipment_toughness_reduces_player_damage() {
     // 20 × (1 − 0.50) = 10 → HP 100 − 10 = 90 (vs 80 with no gear).
     let hp = world.get::<Health>(player).unwrap().current;
     assert!((hp - 90.0).abs() < 1e-3, "toughness gear halves the hit (got {hp})");
+}
+
+// ── 84. item_crit_damage_raises_cap ───────────────────────────────────────────
+
+/// An equipped CRIT-DAMAGE affix (passed as `dmg_bonus`) lifts the crit
+/// multiplier's upper bound, still clamped at 5.5× (spec III.6 / VI.5).
+#[test]
+fn item_crit_damage_raises_cap() {
+    use crate::resources::{roll_crit, GameRng};
+
+    // +100% crit-damage bonus → upper bound rises from 3.0 to 4.0.
+    let mut rng = GameRng::default();
+    let mut max_seen = 0.0_f32;
+    for _ in 0..50_000 {
+        let m = roll_crit(&mut rng, 1.0, 0, 1.0); // always crit, +1.0 bonus
+        assert!((2.0..=4.0 + 1e-3).contains(&m), "crit in [2,4] with bonus, got {m}");
+        max_seen = max_seen.max(m);
+    }
+    assert!(max_seen > 3.5, "the +100% bonus pushes the cap past 3.5 (got {max_seen})");
+
+    // The 5.5× hard cap holds even with an absurd bonus.
+    let mut rng2 = GameRng::default();
+    for _ in 0..5_000 {
+        let m = roll_crit(&mut rng2, 1.0, 20, 99.0);
+        assert!(m <= 5.5 + 1e-3, "crit multiplier clamps at 5.5 (got {m})");
+    }
+}
+
+// ── 85. item_vampirism_heals ──────────────────────────────────────────────────
+
+/// An equipped VAMPIRISM affix heals the player on a bullet hit, same as the
+/// shop passive (spec VI.5 affix→stat).
+#[test]
+fn item_vampirism_heals() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::items::{Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.resource_mut::<Equipment>().try_equip(Item {
+        slot: ItemSlot::Nanites,
+        level: 1,
+        rarity: Rarity::Epic,
+        affixes: vec![Affix { kind: AffixKind::Vampirism, value: 100.0 }], // 100% lifesteal
+        name: "Bloodlet Core".to_string(),
+    });
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 10.0, max: 100.0 },
+            Collider { radius: 16.0 },
+            Transform::from_xyz(500.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(1000.0), // survives the hit
+        Collider { radius: 16.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+        Collider { radius: 3.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((bullet_hits_enemy, apply_damage).chain());
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!(hp >= 20.0, "100% item lifesteal heals ≥ the 10 damage dealt (hp now {hp})");
+}
+
+// ── 86. item_speed_raises_top_speed ───────────────────────────────────────────
+
+/// An equipped SPEED affix lifts the ship's top speed by a flat fraction,
+/// capped by the affix total (spec VI.5).
+#[test]
+fn item_speed_raises_top_speed() {
+    use crate::systems::items::{Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+    use crate::systems::movement::ship_control;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.resource_mut::<Equipment>().try_equip(Item {
+        slot: ItemSlot::Nanites,
+        level: 1,
+        rarity: Rarity::Epic,
+        affixes: vec![Affix { kind: AffixKind::Speed, value: 50.0 }], // +50% top speed
+        name: "Quickening Reactor".to_string(),
+    });
+
+    let base = Ship::default().max_speed;
+    let ship = world
+        .spawn((
+            Ship::default(),
+            Intent { move_dir: Vec2::X, aim: Vec2::ZERO, aim_active: false, firing: false },
+            Velocity(Vec2::ZERO),
+            Transform::default(),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(ship_control);
+    for _ in 0..50 {
+        step.run(world);
+    }
+
+    let speed = world.get::<Velocity>(ship).unwrap().0.length();
+    assert!(speed > base * 1.2, "speed gear lifts top speed above base (base {base}, got {speed})");
+    assert!(speed <= base * 1.5 + 1.0, "but not beyond the equipped +50% (got {speed})");
 }

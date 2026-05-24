@@ -3,6 +3,7 @@
 
 use crate::components::{Intent, Ship, Velocity};
 use crate::resources::PlayBounds;
+use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{momentum_bonus, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
@@ -25,12 +26,15 @@ pub fn tracked_velocity(current: Vec2, target: Vec2, response: f32, dt: f32) -> 
 pub fn ship_control(
     time: Res<Time>,
     upgrades: Res<Upgrades>,
+    equipment: Res<Equipment>,
     // Seconds of continuous movement, for the Momentum speed ramp.
     mut sustained: Local<f32>,
     mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>,
 ) {
     let dt = time.delta_secs();
     let momentum = upgrades.owned(UpgradeId::Momentum);
+    // Equipped SPEED affixes raise top speed by a flat fraction (spec VI.5).
+    let item_speed = equipment.affix_total(AffixKind::Speed) / 100.0;
     for (ship, intent, mut vel, mut tf) in &mut q {
         // Momentum passive: top speed ramps with sustained movement (spec VI.3).
         if intent.move_dir.length_squared() > 0.01 {
@@ -38,7 +42,8 @@ pub fn ship_control(
         } else {
             *sustained = 0.0;
         }
-        let top_speed = ship.max_speed * (1.0 + momentum_bonus(*sustained, momentum));
+        let top_speed =
+            ship.max_speed * (1.0 + momentum_bonus(*sustained, momentum) + item_speed);
 
         // Tight twin-stick control (WASD / left-stick, screen-space, independent
         // of facing): track velocity toward the input target rather than

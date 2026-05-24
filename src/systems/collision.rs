@@ -12,6 +12,7 @@
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
+use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     executioner_bonus, explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId,
     Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
@@ -25,6 +26,7 @@ pub fn bullet_hits_enemy(
     mut crits: MessageWriter<crate::messages::Crit>,
     streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
+    equipment: Res<Equipment>,
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
@@ -34,11 +36,16 @@ pub fn bullet_hits_enemy(
 ) {
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
     let streak_mult = streak.multiplier();
-    // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5).
-    let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism));
-    // Crit chance/damage scale with their upgrade stacks (spec III.6).
-    let crit_p = crit_chance(upgrades.owned(UpgradeId::CritChance));
+    // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5) — shop
+    // stacks + equipped item affixes.
+    let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism))
+        + equipment.affix_total(AffixKind::Vampirism) / 100.0;
+    // Crit chance/damage scale with their upgrade stacks (spec III.6) + equipped
+    // item affixes (chance as a fraction; damage as an additive bonus on the cap).
+    let crit_p =
+        crit_chance(upgrades.owned(UpgradeId::CritChance)) + equipment.affix_total(AffixKind::CritChance) / 100.0;
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
+    let crit_dmg_bonus = equipment.affix_total(AffixKind::CritDamage) / 100.0;
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
@@ -59,7 +66,7 @@ pub fn bullet_hits_enemy(
                 .distance_squared(etf.translation.truncate());
             if d2 <= reach * reach {
                 // Streak multiplier × per-hit crit roll (spec III.6).
-                let crit_mult = roll_crit(&mut rng, crit_p, crit_dmg_stacks);
+                let crit_mult = roll_crit(&mut rng, crit_p, crit_dmg_stacks, crit_dmg_bonus);
                 if crit_mult > 1.0 {
                     crits.write(crate::messages::Crit); // feeds the precision mission
                 }

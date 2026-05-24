@@ -145,11 +145,12 @@ pub fn crit_chance(stacks: u32) -> f32 {
 }
 
 /// Roll a crit at the given `chance`: returns the damage multiplier — `1.0` on a
-/// normal hit, or a uniform `2.0 ..= (3.0 + 0.15×dmg_stacks)`× (capped at 5.5×)
-/// on a crit (spec III.6).
-pub fn roll_crit(rng: &mut GameRng, chance: f32, dmg_stacks: u32) -> f32 {
+/// normal hit, or a uniform `2.0 ..= (3.0 + 0.15×dmg_stacks + dmg_bonus)`×
+/// (capped at 5.5×) on a crit (spec III.6). `dmg_bonus` is an extra additive
+/// term on the upper bound (equipped CRIT-DAMAGE affixes, as a fraction).
+pub fn roll_crit(rng: &mut GameRng, chance: f32, dmg_stacks: u32, dmg_bonus: f32) -> f32 {
     if rng.next_f32() < chance {
-        let max = (3.0 + 0.15 * dmg_stacks as f32).min(5.5);
+        let max = (3.0 + 0.15 * dmg_stacks as f32 + dmg_bonus).min(5.5);
         2.0 + rng.next_f32() * (max - 2.0) // uniform [2.0, max]
     } else {
         1.0
