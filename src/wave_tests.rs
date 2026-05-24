@@ -2320,6 +2320,28 @@ fn phase_echo_extends_dash_invuln() {
     assert!((0.3 + phase_echo_secs(2) - 4.3).abs() < 1e-6, "2 stacks → 4.3 s dash i-frames");
 }
 
+// ── 70. overcharge_cadence ────────────────────────────────────────────────────
+
+/// Overcharge is off at 0 stacks, fires more frequently with more stacks, and
+/// triples exactly every Nth bullet (spec VI.3).
+#[test]
+fn overcharge_cadence() {
+    use crate::systems::shop::overcharge_interval;
+    use crate::systems::weapons::is_overcharged;
+
+    assert_eq!(overcharge_interval(0), 0, "off with no stacks");
+    assert_eq!(overcharge_interval(1), 7);
+    assert_eq!(overcharge_interval(4), 4, "max stacks → most frequent");
+    assert!(overcharge_interval(4) < overcharge_interval(1), "more stacks → smaller interval");
+
+    // Off interval never overcharges.
+    assert!(!is_overcharged(7, 0));
+    // With interval 4, exactly every 4th bullet is overcharged.
+    let n = overcharge_interval(4); // 4
+    let hot: Vec<u32> = (1..=12).filter(|&t| is_overcharged(t, n)).collect();
+    assert_eq!(hot, vec![4, 8, 12], "every 4th bullet (got {hot:?})");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

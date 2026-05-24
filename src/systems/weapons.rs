@@ -26,7 +26,7 @@ use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
 use crate::systems::power_weapon::Homing;
-use crate::systems::shop::{homing_turn_rate, UpgradeId, Upgrades};
+use crate::systems::shop::{homing_turn_rate, overcharge_interval, UpgradeId, Upgrades};
 use bevy::prelude::*;
 use bevy_hanabi::prelude::ParticleEffect;
 
@@ -146,6 +146,16 @@ pub fn rapid_cooldown_mult(stacks: u32) -> f32 {
     0.88_f32.powi(stacks as i32)
 }
 
+/// Damage multiplier on an Overcharge bullet (spec VI.3: ×3).
+pub const OVERCHARGE_MULT: f32 = 3.0;
+
+/// Whether the `tally`-th player bullet is overcharged: true when `interval > 0`
+/// and `tally` is a multiple of it (every Nth bullet, spec VI.3).
+#[inline]
+pub fn is_overcharged(tally: u32, interval: u32) -> bool {
+    interval > 0 && tally % interval == 0
+}
+
 /// `_MULTI` trait fan width for a total projectile `count`: `min(0.8,
 /// 0.12*(count−1))` rad (spec III.2); 0 for a single shot.
 #[inline]
@@ -241,6 +251,8 @@ pub fn spawn_bullets(
     cur: Res<CurrentWeapon>,
     upgrades: Res<Upgrades>,
     wave: Res<crate::systems::wave::Wave>,
+    // Running count of player bullets fired — drives the Overcharge cadence.
+    mut shot_tally: Local<u32>,
     mut fire: MessageReader<Fire>,
 ) {
     let pst = stats(cur.0);
@@ -249,6 +261,8 @@ pub fn spawn_bullets(
     let player_pierce = pst.pierce + upgrades.owned(UpgradeId::Piercing);
     let player_radius = pst.radius + 2.2 * upgrades.owned(UpgradeId::BigShot) as f32;
     let player_homing = homing_turn_rate(upgrades.owned(UpgradeId::HomingShot));
+    // OVERCHARGE ROUNDS: every Nth player bullet deals ×3 (spec VI.3).
+    let oc_interval = overcharge_interval(upgrades.owned(UpgradeId::Overcharge));
     // Enemy bullets speed up across the campaign (spec V.4, normalized to W1=1.0).
     let enemy_speed_mul = crate::systems::enemy::difficulty_bullet_speed_mul(wave.number() as u64);
     for shot in fire.read() {
@@ -257,8 +271,17 @@ pub fn spawn_bullets(
             Faction::Enemy => (BulletKind::Enemy, 4.0, 0, assets.enemy_body.clone(), 3.0, enemy_speed_mul),
         };
 
+        // Overcharge: count player bullets and triple every Nth.
+        let mut damage = shot.damage;
+        if shot.faction == Faction::Player {
+            *shot_tally += 1;
+            if is_overcharged(*shot_tally, oc_interval) {
+                damage *= OVERCHARGE_MULT;
+            }
+        }
+
         let mut bullet = commands.spawn((
-            Bullet { kind, damage: shot.damage, pierce },
+            Bullet { kind, damage, pierce },
             Velocity(shot.dir * shot.speed * speed_mul),
             Collider { radius },
             shot.faction,

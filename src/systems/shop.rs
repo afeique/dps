@@ -43,12 +43,13 @@ pub enum UpgradeId {
     LastStand,
     Executioner,
     PhaseEcho,
+    Overcharge,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 21] = [
+    pub const ALL: [UpgradeId; 22] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -70,6 +71,7 @@ impl UpgradeId {
         Self::LastStand,
         Self::Executioner,
         Self::PhaseEcho,
+        Self::Overcharge,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -98,6 +100,7 @@ impl UpgradeId {
             Self::LastStand => 18,
             Self::Executioner => 19,
             Self::PhaseEcho => 20,
+            Self::Overcharge => 21,
         }
     }
 
@@ -124,6 +127,7 @@ impl UpgradeId {
             Self::LastStand => "Last Stand    (cheat death 1x)",
             Self::Executioner => "Executioner   (+20% vs <25% HP)",
             Self::PhaseEcho => "Phase Echo    (+2s dash invuln)",
+            Self::Overcharge => "Overcharge    (every Nth shot ×3)",
         }
     }
 
@@ -151,6 +155,7 @@ impl UpgradeId {
             Self::LastStand => 8000,
             Self::Executioner => 2600,
             Self::PhaseEcho => 2000,
+            Self::Overcharge => 1900,
         }
     }
 
@@ -177,6 +182,7 @@ impl UpgradeId {
             Self::LastStand => 1,
             Self::Executioner => 5,
             Self::PhaseEcho => 2,
+            Self::Overcharge => 4,
         }
     }
 }
@@ -244,6 +250,18 @@ pub const EXECUTE_THRESHOLD: f32 = 0.25;
 /// stacks` seconds added on top of the dash's base i-frames.
 pub fn phase_echo_secs(stacks: u32) -> f32 {
     2.0 * stacks as f32
+}
+
+/// OVERCHARGE ROUNDS passive (spec VI.3): every Nth bullet deals ×3. Returns the
+/// interval N, smaller (more frequent) with more stacks; `0` = off (no stacks).
+/// (Spec gives "every Nth bullet ×3"; the exact N is interpreted as `8 − stacks`,
+/// i.e. 1→7th … 4→4th.)
+pub fn overcharge_interval(stacks: u32) -> u32 {
+    if stacks == 0 {
+        0
+    } else {
+        8 - stacks.min(4)
+    }
 }
 
 /// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
@@ -463,6 +481,7 @@ pub fn apply_upgrade(
         | UpgradeId::Regen
         | UpgradeId::LastStand
         | UpgradeId::Executioner
-        | UpgradeId::PhaseEcho => {}
+        | UpgradeId::PhaseEcho
+        | UpgradeId::Overcharge => {}
     }
 }
