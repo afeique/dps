@@ -19,6 +19,7 @@
 //! epic 1.35–1.85); probabilities + affix counts + the affix pool are the
 //! spec VI.5 numbers verbatim.
 
+use crate::components::{Health, ItemHpBonus, Ship};
 use crate::messages::Death;
 use crate::resources::GameRng;
 use crate::systems::wave::Wave;
@@ -521,6 +522,32 @@ pub fn roll_item_drops_on_death(
             feed.push(item);
         }
     }
+}
+
+/// Reconcile the player's `Health.max` against the equipped MAX-HP affix total
+/// (spec VI.5). Unlike the read-live affixes, HP is a *capacity* baked into
+/// `Health.max`, so this applies only the **delta** since the last reconcile
+/// (tracked per-player by `ItemHpBonus`, which resets with each new ship).
+/// Gaining HP gear heals by the gained amount; losing it clamps `current`.
+pub fn apply_item_hp(
+    equipment: Res<Equipment>,
+    mut player: Query<(&mut Health, &mut ItemHpBonus), With<Ship>>,
+) {
+    let target = equipment.affix_total(AffixKind::Hp);
+    let Ok((mut hp, mut bonus)) = player.single_mut() else {
+        return; // no player (between runs) — reconcile once it spawns
+    };
+    let delta = target - bonus.0;
+    if delta == 0.0 {
+        return;
+    }
+    hp.max = (hp.max + delta).max(1.0);
+    if delta > 0.0 {
+        hp.current += delta; // equipping HP gear heals by the gained amount
+    } else {
+        hp.current = hp.current.min(hp.max);
+    }
+    bonus.0 = target;
 }
 
 // ─── Small formatting helper ─────────────────────────────────────────────────

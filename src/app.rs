@@ -316,6 +316,8 @@ impl Plugin for GamePlugin {
                         systems::skills::tick_tractor,
                         // Passive regen (after 4 s no-damage) then overheal → tanks.
                         systems::damage::passive_regen,
+                        // Reconcile MAX HP against equipped HP affixes (spec VI.5).
+                        systems::items::apply_item_hp,
                         systems::damage::overheal_to_tanks,
                     )
                         .chain(),

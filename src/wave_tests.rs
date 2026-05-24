@@ -3089,3 +3089,48 @@ fn item_speed_raises_top_speed() {
     assert!(speed > base * 1.2, "speed gear lifts top speed above base (base {base}, got {speed})");
     assert!(speed <= base * 1.5 + 1.0, "but not beyond the equipped +50% (got {speed})");
 }
+
+// ── 87. item_hp_raises_max ────────────────────────────────────────────────────
+
+/// An equipped MAX-HP affix raises the player's `Health.max` by its delta (and
+/// heals by the gained amount); a stronger HP item applies only the difference
+/// (spec VI.5, equip-time bookkeeping via `ItemHpBonus`).
+#[test]
+fn item_hp_raises_max() {
+    use crate::systems::items::{apply_item_hp, Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+
+    let hp_item = |value: f32| Item {
+        slot: ItemSlot::Cockpit,
+        level: 1,
+        rarity: Rarity::Common,
+        affixes: vec![Affix { kind: AffixKind::Hp, value }],
+        name: "Plate".to_string(),
+    };
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let player = world
+        .spawn((Ship::default(), Health { current: 40.0, max: 40.0 }, ItemHpBonus::default()))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_item_hp);
+
+    // Equip +20 HP → max 60, healed to 60.
+    world.resource_mut::<Equipment>().try_equip(hp_item(20.0));
+    step.run(world);
+    {
+        let hp = world.get::<Health>(player).unwrap();
+        assert_eq!(hp.max, 60.0, "max += item HP");
+        assert_eq!(hp.current, 60.0, "gaining HP gear heals by the gain");
+    }
+
+    // Re-running with no change is a no-op (delta 0).
+    step.run(world);
+    assert_eq!(world.get::<Health>(player).unwrap().max, 60.0, "stable when gear unchanged");
+
+    // A stronger HP item replaces it; only the +30 delta applies → max 90.
+    world.resource_mut::<Equipment>().try_equip(hp_item(50.0));
+    step.run(world);
+    assert_eq!(world.get::<Health>(player).unwrap().max, 90.0, "delta of the better item applies");
+}

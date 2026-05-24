@@ -34,6 +34,13 @@ impl Health {
     }
 }
 
+/// How much equipped-item MAX-HP is currently baked into the player's `Health.max`
+/// (spec VI.5). Lives on the ship entity so it resets with each fresh run; the
+/// `systems::items::apply_item_hp` system reconciles `Health.max` against the
+/// equipped HP affix total by applying the delta whenever gear changes.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ItemHpBonus(pub f32);
+
 /// Which side an entity is on — gates which collision pairs matter.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Faction {
