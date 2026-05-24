@@ -13,6 +13,7 @@ pub mod enemy;
 pub mod enemy_ai;
 pub mod flow;
 pub mod input;
+pub mod items;
 pub mod missions;
 pub mod movement;
 pub mod passives;

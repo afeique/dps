@@ -45,6 +45,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::drops::HealthDropTimer>()
             .init_resource::<systems::survivor::SurvivorChoice>()
             .init_resource::<systems::missions::Mission>()
+            .init_resource::<systems::items::LootFeed>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
@@ -66,6 +67,7 @@ impl Plugin for GamePlugin {
                     render::starfield::spawn_starfield,
                     render::nebula::spawn_nebula,
                     render::hud::setup_hud,
+                    render::loot_feed::setup_loot_feed,
                     render::minimap::setup_minimap,
                     render::cursor::spawn_crosshair,
                     render::flash::setup_screen_flash.after(render::spawn_camera),
@@ -85,6 +87,14 @@ impl Plugin for GamePlugin {
                     render::cursor::update_crosshair,
                     render::damage_numbers::spawn_damage_numbers,
                     render::damage_numbers::float_damage_numbers,
+                    // Left-edge loot feed: drain newly-minted items → cards, age
+                    // out. Nested as one element so the outer Update tuple stays
+                    // within Bevy's 20-element limit.
+                    (
+                        render::loot_feed::drain_loot_feed,
+                        render::loot_feed::age_loot_cards,
+                    )
+                        .chain(),
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
                     render::wave_title::tick_pulse_toast,
@@ -286,6 +296,8 @@ impl Plugin for GamePlugin {
                     // Drops — runs after apply_damage so `Death` is available.
                     (
                         systems::drops::spawn_drops,
+                        // Item-affix rolls on kill → loot feed (spec VI.5).
+                        systems::items::roll_item_drops_on_death,
                         systems::powerups::spawn_powerups,
                         systems::drops::attract_orbs,
                         systems::drops::collect_orbs,

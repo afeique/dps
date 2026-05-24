@@ -11,6 +11,7 @@ pub mod damage_numbers;
 pub mod explosion;
 pub mod flash;
 pub mod hud;
+pub mod loot_feed;
 pub mod minimap;
 pub mod nebula;
 pub mod screenshot;

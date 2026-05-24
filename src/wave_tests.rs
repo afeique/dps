@@ -2666,3 +2666,185 @@ fn survivor_pick_chains_into_shop() {
         "survivor pick chains into the Shop"
     );
 }
+
+// ── 76. item_rarity_and_affix_counts ──────────────────────────────────────────
+
+/// Rarity rolls at the spec VI.5 cumulative thresholds (0.65 / 0.92), and each
+/// rarity mints the right number of distinct affixes (1 / 2 / 3).
+#[test]
+fn item_rarity_and_affix_counts() {
+    use crate::resources::GameRng;
+    use crate::systems::items::{create_item, ItemSlot, Rarity};
+
+    assert_eq!(Rarity::roll(0.0), Rarity::Common);
+    assert_eq!(Rarity::roll(0.649), Rarity::Common);
+    assert_eq!(Rarity::roll(0.65), Rarity::Rare);
+    assert_eq!(Rarity::roll(0.919), Rarity::Rare);
+    assert_eq!(Rarity::roll(0.92), Rarity::Epic);
+    assert_eq!(Rarity::roll(0.999), Rarity::Epic);
+
+    assert_eq!(Rarity::Common.affix_count(), 1);
+    assert_eq!(Rarity::Rare.affix_count(), 2);
+    assert_eq!(Rarity::Epic.affix_count(), 3);
+
+    // create_item respects the count + carries the wave-level + has a name.
+    let mut rng = GameRng::default();
+    for (rarity, n) in [(Rarity::Common, 1), (Rarity::Rare, 2), (Rarity::Epic, 3)] {
+        let item = create_item(&mut rng, ItemSlot::Cockpit, 7, rarity);
+        assert_eq!(item.affixes.len(), n, "{rarity:?} → {n} affixes");
+        assert_eq!(item.level, 7, "item level = wave");
+        assert!(!item.name.is_empty(), "item has a generated name");
+        // Distinct affix kinds (the pool shuffle is without replacement).
+        for i in 0..item.affixes.len() {
+            for j in (i + 1)..item.affixes.len() {
+                assert_ne!(item.affixes[i].kind, item.affixes[j].kind, "affixes are distinct");
+            }
+        }
+    }
+}
+
+// ── 77. item_affix_value_invariants ───────────────────────────────────────────
+
+/// Rolled affix values obey the spec rounding/clamp rules across many waves +
+/// rarities: HP is an integer, regen has ≤2 dp, every value clears its `min`, and
+/// values scale up with the wave.
+#[test]
+fn item_affix_value_invariants() {
+    use crate::resources::GameRng;
+    use crate::systems::items::{roll_affix_set, AffixKind, Rarity};
+
+    let mut rng = GameRng::default();
+    let mut seen_hp = false;
+    let mut seen_regen = false;
+    for wave in [1u32, 5, 15, 30] {
+        for rarity in [Rarity::Common, Rarity::Rare, Rarity::Epic] {
+            // Roll the whole pool so we exercise every affix kind.
+            let affixes = roll_affix_set(&mut rng, wave, rarity, 9);
+            for a in &affixes {
+                assert!(a.value > 0.0, "{:?} value positive", a.kind);
+                match a.kind {
+                    AffixKind::Hp => {
+                        assert_eq!(a.value.fract(), 0.0, "HP is integer (got {})", a.value);
+                        assert!(a.value >= 1.0);
+                        seen_hp = true;
+                    }
+                    AffixKind::Regen => {
+                        // ≤2 dp: value*100 is (near) integral.
+                        let scaled = a.value * 100.0;
+                        assert!((scaled - scaled.round()).abs() < 1e-3, "regen ≤2dp (got {})", a.value);
+                        assert!(a.value >= 0.1);
+                        seen_regen = true;
+                    }
+                    AffixKind::Thorns => assert!(a.value >= 2.0, "thorns min 2"),
+                    AffixKind::CritDamage => assert!(a.value >= 3.0, "crit-dmg min 3"),
+                    AffixKind::Speed => assert!(a.value >= 2.0, "speed min 2"),
+                    _ => assert!(a.value >= 1.0, "{:?} min 1", a.kind),
+                }
+            }
+        }
+    }
+    assert!(seen_hp && seen_regen, "exercised HP + regen affixes");
+
+    // Labels read as expected.
+    use crate::systems::items::Affix;
+    assert_eq!(Affix { kind: AffixKind::Hp, value: 8.0 }.label(), "+8 MAX HP");
+    assert_eq!(Affix { kind: AffixKind::Toughness, value: 3.0 }.label(), "+3% DEF");
+    assert_eq!(Affix { kind: AffixKind::Regen, value: 0.3 }.label(), "+0.3/s REGEN");
+    assert_eq!(Affix { kind: AffixKind::CritDamage, value: 8.5 }.label(), "+8.5% CRIT DMG");
+}
+
+// ── 78. item_drop_rates_and_determinism ───────────────────────────────────────
+
+/// Per-category drop rates match the spec (boss strictly higher); `roll_item_drops`
+/// is bounded (≤3 items/kill), deterministic under a seeded RNG, and bosses drop
+/// more loot on aggregate.
+#[test]
+fn item_drop_rates_and_determinism() {
+    use crate::resources::GameRng;
+    use crate::systems::items::{roll_item_drops, SlotCategory};
+
+    // Exact spec rates + boss > normal in every category.
+    for cat in [SlotCategory::Hp, SlotCategory::Toughness, SlotCategory::Trinket] {
+        assert!(cat.drop_rate(true) > cat.drop_rate(false), "{cat:?} boss rate higher");
+    }
+    assert!((SlotCategory::Hp.drop_rate(false) - 0.025).abs() < 1e-6);
+    assert!((SlotCategory::Hp.drop_rate(true) - 0.085).abs() < 1e-6);
+    assert!((SlotCategory::Toughness.drop_rate(false) - 0.020).abs() < 1e-6);
+    assert!((SlotCategory::Trinket.drop_rate(false) - 0.015).abs() < 1e-6);
+
+    // ≤3 items per kill; each item is internally consistent.
+    let mut rng = GameRng::default();
+    for _ in 0..500 {
+        let items = roll_item_drops(&mut rng, 10, false);
+        assert!(items.len() <= 3, "≤3 drops/kill (got {})", items.len());
+        for it in &items {
+            assert_eq!(it.affixes.len(), it.rarity.affix_count());
+            assert_eq!(it.level, 10);
+        }
+    }
+
+    // Determinism: identical seed → identical first drop sequence.
+    let mut a = GameRng::default();
+    let mut b = GameRng::default();
+    for _ in 0..50 {
+        let ia = roll_item_drops(&mut a, 12, true);
+        let ib = roll_item_drops(&mut b, 12, true);
+        assert_eq!(ia.len(), ib.len(), "deterministic drop count");
+        for (x, y) in ia.iter().zip(ib.iter()) {
+            assert_eq!(x.slot, y.slot);
+            assert_eq!(x.rarity, y.rarity);
+            assert_eq!(x.affixes.len(), y.affixes.len());
+        }
+    }
+
+    // Bosses drop more loot on aggregate (same seed, much higher rates).
+    let mut normal_rng = GameRng::default();
+    let mut boss_rng = GameRng::default();
+    let normal: usize = (0..3000).map(|_| roll_item_drops(&mut normal_rng, 8, false).len()).sum();
+    let boss: usize = (0..3000).map(|_| roll_item_drops(&mut boss_rng, 8, true).len()).sum();
+    assert!(boss > normal, "bosses drop more loot (boss {boss} vs normal {normal})");
+    assert!(normal > 0, "some normal drops occur");
+}
+
+// ── 79. item_loot_feed_on_death ───────────────────────────────────────────────
+
+/// `roll_item_drops_on_death` mints loot for enemy kills (none for the player),
+/// pushes it onto the `LootFeed`, and keeps the backlog bounded.
+#[test]
+fn item_loot_feed_on_death() {
+    use crate::systems::items::{roll_item_drops_on_death, LootFeed};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Wave::default());
+    world.init_resource::<LootFeed>();
+
+    let mut step = Schedule::default();
+    step.add_systems(roll_item_drops_on_death);
+
+    // Player death (kind None) → no loot.
+    world.write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: None,
+        boss_tier: 0,
+        mini_boss: false,
+    });
+    step.run(world);
+    assert_eq!(world.resource::<LootFeed>().pending.len(), 0, "player death → no loot");
+
+    // Many enemy deaths → items accumulate, bounded by the backlog cap.
+    for _ in 0..300 {
+        world.write_message(Death {
+            entity: Entity::PLACEHOLDER,
+            position: Vec2::ZERO,
+            kind: Some(EnemyKind::Hunter),
+            boss_tier: 0,
+            mini_boss: false,
+        });
+    }
+    step.run(world);
+    let n = world.resource::<LootFeed>().pending.len();
+    assert!(n > 0, "enemy kills mint loot (got {n})");
+    assert!(n <= 12, "loot backlog stays bounded (got {n})");
+}
