@@ -2848,3 +2848,22 @@ fn item_loot_feed_on_death() {
     assert!(n > 0, "enemy kills mint loot (got {n})");
     assert!(n <= 12, "loot backlog stays bounded (got {n})");
 }
+
+// ── 80. loot_card_fade_curve ──────────────────────────────────────────────────
+
+/// A loot card holds full opacity until its final fade window, then ramps
+/// linearly to zero (spec VI.5 loot feed polish).
+#[test]
+fn loot_card_fade_curve() {
+    use crate::render::loot_feed::card_alpha;
+
+    // Full opacity well before the fade window + at its start.
+    assert_eq!(card_alpha(6.0), 1.0, "fresh card is opaque");
+    assert_eq!(card_alpha(1.2), 1.0, "still opaque at the fade boundary");
+    // Linear fade inside the window.
+    assert!((card_alpha(0.6) - 0.5).abs() < 1e-6, "half-faded mid-window");
+    assert!((card_alpha(0.3) - 0.25).abs() < 1e-6, "quarter opacity near the end");
+    assert_eq!(card_alpha(0.0), 0.0, "fully transparent at end of life");
+    // Monotonic: less life → less (or equal) opacity.
+    assert!(card_alpha(0.4) < card_alpha(0.8));
+}

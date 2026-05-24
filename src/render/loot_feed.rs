@@ -15,17 +15,31 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct LootFeedRoot;
 
-/// A live loot card; despawns (with its text children) when `life` hits zero.
+/// A live loot card; fades over its last `FADE_SECS` then despawns (with its
+/// text children) when `life` hits zero. Stores its rarity `glow` + slot
+/// `accent` so the fade can re-tint the border + text each frame.
 #[derive(Component)]
 pub struct LootCard {
     life: f32,
+    glow: Color,
+    accent: Color,
 }
 
 /// Seconds a card stays on screen before it despawns.
 const CARD_LIFE: f32 = 6.0;
+/// The card fades to transparent over its final `FADE_SECS`.
+const FADE_SECS: f32 = 1.2;
+/// Card-panel background base alpha (scaled by the fade).
+const BG_ALPHA: f32 = 0.72;
 /// Cap on simultaneous cards — excess oldest cards are retired early so a kill
 /// spree can't bury the screen.
 const MAX_CARDS: usize = 6;
+
+/// Opacity (0..1) for a card with `life` seconds left: full until the last
+/// `FADE_SECS`, then a linear fade to 0.
+pub fn card_alpha(life: f32) -> f32 {
+    (life / FADE_SECS).clamp(0.0, 1.0)
+}
 
 /// Spawn the empty left-edge column once at startup.
 pub fn setup_loot_feed(mut commands: Commands) {
@@ -64,7 +78,7 @@ pub fn drain_loot_feed(
             let glow = item.rarity.color();
             let accent = item.slot.accent();
             col.spawn((
-                LootCard { life: CARD_LIFE },
+                LootCard { life: CARD_LIFE, glow, accent },
                 Node {
                     flex_direction: FlexDirection::Column,
                     padding: UiRect::all(Val::Px(6.0)),
@@ -91,26 +105,41 @@ pub fn drain_loot_feed(
     });
 }
 
-/// Age cards and despawn the expired; also retire the oldest if we exceed the
-/// on-screen cap (the lowest `life` is the oldest, since all start at `CARD_LIFE`).
+/// Age cards: tick life, fade the panel + border + text over the last
+/// `FADE_SECS`, despawn the expired, and retire the oldest beyond the on-screen
+/// cap (lowest `life` is oldest, since all start at `CARD_LIFE`).
 pub fn age_loot_cards(
     time: Res<Time>,
     mut commands: Commands,
-    mut q: Query<(Entity, &mut LootCard)>,
+    mut cards: Query<(
+        Entity,
+        &mut LootCard,
+        &Children,
+        &mut BackgroundColor,
+        &mut BorderColor,
+    )>,
+    mut texts: Query<&mut TextColor>,
 ) {
     let dt = time.delta_secs();
-    for (_, mut card) in &mut q {
-        card.life -= dt;
-    }
-
-    // Collect surviving cards (entity, life), retire any past end-of-life.
     let mut alive: Vec<(Entity, f32)> = Vec::new();
-    for (e, card) in &q {
+
+    for (e, mut card, children, mut bg, mut border) in &mut cards {
+        card.life -= dt;
         if card.life <= 0.0 {
             commands.entity(e).despawn();
-        } else {
-            alive.push((e, card.life));
+            continue;
         }
+        let a = card_alpha(card.life);
+        bg.0.set_alpha(BG_ALPHA * a);
+        *border = BorderColor::all(card.glow.with_alpha(a));
+        // Children, in spawn order: [0] name (glow), [1] affixes (accent).
+        for (k, child) in children.iter().enumerate() {
+            if let Ok(mut tc) = texts.get_mut(child) {
+                let base = if k == 0 { card.glow } else { card.accent };
+                tc.0 = base.with_alpha(a);
+            }
+        }
+        alive.push((e, card.life));
     }
 
     // Enforce the cap: drop the oldest (smallest life) beyond MAX_CARDS.
