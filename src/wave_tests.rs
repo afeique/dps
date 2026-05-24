@@ -2101,3 +2101,56 @@ fn triforce_tank_glyphs() {
     // Full 3 tanks → all gold.
     assert_eq!(tank_glyph_color(2, 3), gold);
 }
+
+// ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
+
+/// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and
+/// despawns when `Burning` is removed (spec enemy status FX).
+#[test]
+fn status_aura_lifecycle() {
+    use crate::render::status_fx::{spawn_status_auras, update_status_auras, StatusAura};
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(Time::<()>::default());
+
+    // Burning enemy at (100, 0).
+    let enemy = app
+        .world_mut()
+        .spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Collider { radius: 18.0 },
+            Burning { dps: 3.0, secs: 2.0 },
+            Transform::from_xyz(100.0, 0.0, 0.0),
+        ))
+        .id();
+
+    // Spawn the aura (Added<Burning> fires on first sight).
+    let mut spawn = Schedule::default();
+    spawn.add_systems(spawn_status_auras);
+    spawn.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 1, "aura spawns for a burning enemy");
+        assert_eq!(q.iter(app.world()).next().unwrap().target, enemy);
+    }
+
+    // It follows the target.
+    let mut update = Schedule::default();
+    update.add_systems(update_status_auras);
+    update.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query_filtered::<&Transform, With<StatusAura>>();
+        let pos = q.iter(app.world()).next().unwrap().translation;
+        assert!((pos.x - 100.0).abs() < 1e-3, "aura follows the enemy ({pos:?})");
+    }
+
+    // Remove Burning → the aura despawns on the next update.
+    app.world_mut().entity_mut(enemy).remove::<Burning>();
+    update.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 0, "aura despawns when Burning ends");
+    }
+}

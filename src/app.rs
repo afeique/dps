@@ -85,6 +85,9 @@ impl Plugin for GamePlugin {
                     render::damage_numbers::float_damage_numbers,
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
+                    // Enemy burn/stun status auras.
+                    render::status_fx::spawn_status_auras,
+                    render::status_fx::update_status_auras,
                     // 3D-tumble + rebuild the asteroid wireframes (spec VI.1).
                     systems::asteroids::tumble_asteroids,
                     // Camera screen shake on deaths / player hits (spec I.2).

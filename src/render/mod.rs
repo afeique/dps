@@ -16,6 +16,7 @@ pub mod nebula;
 pub mod screenshot;
 pub mod shake;
 pub mod shapes;
+pub mod status_fx;
 pub mod starfield;
 pub mod wave_title;
 
