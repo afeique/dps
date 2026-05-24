@@ -10,6 +10,7 @@ pub mod cursor;
 pub mod damage_numbers;
 pub mod explosion;
 pub mod flash;
+pub mod gear_panel;
 pub mod hud;
 pub mod loot_feed;
 pub mod minimap;

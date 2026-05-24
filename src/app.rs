@@ -69,6 +69,7 @@ impl Plugin for GamePlugin {
                     render::nebula::spawn_nebula,
                     render::hud::setup_hud,
                     render::loot_feed::setup_loot_feed,
+                    render::gear_panel::setup_gear_panel,
                     render::minimap::setup_minimap,
                     render::cursor::spawn_crosshair,
                     render::flash::setup_screen_flash.after(render::spawn_camera),
@@ -88,12 +89,13 @@ impl Plugin for GamePlugin {
                     render::cursor::update_crosshair,
                     render::damage_numbers::spawn_damage_numbers,
                     render::damage_numbers::float_damage_numbers,
-                    // Left-edge loot feed: drain newly-minted items → cards, age
-                    // out. Nested as one element so the outer Update tuple stays
-                    // within Bevy's 20-element limit.
+                    // Item UI: left-edge loot feed (drain → cards, age out) +
+                    // the right-edge equipped-gear panel. Nested as one element
+                    // so the outer Update tuple stays within Bevy's 20 limit.
                     (
                         render::loot_feed::drain_loot_feed,
                         render::loot_feed::age_loot_cards,
+                        render::gear_panel::update_gear_panel,
                     )
                         .chain(),
                     render::minimap::update_minimap,

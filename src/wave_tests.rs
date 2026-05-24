@@ -3134,3 +3134,30 @@ fn item_hp_raises_max() {
     step.run(world);
     assert_eq!(world.get::<Health>(player).unwrap().max, 90.0, "delta of the better item applies");
 }
+
+// ── 88. gear_panel_row_text ───────────────────────────────────────────────────
+
+/// The gear-panel row shows the slot label + equipped item name, or a dash when
+/// the slot is empty (spec VI.5 / VIII.1 build view).
+#[test]
+fn gear_panel_row_text() {
+    use crate::render::gear_panel::gear_row_text;
+    use crate::systems::items::{Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    // Empty slot → label + dash.
+    let empty = gear_row_text(ItemSlot::Cockpit, None);
+    assert!(empty.starts_with("COCKPIT"), "row leads with the slot label");
+    assert!(empty.trim_end().ends_with('—'), "empty slot shows a dash");
+
+    // Equipped slot → label + item name.
+    let item = Item {
+        slot: ItemSlot::Shielding,
+        level: 5,
+        rarity: Rarity::Rare,
+        affixes: vec![Affix { kind: AffixKind::Toughness, value: 6.0 }],
+        name: "Refined Quantum Aegis".to_string(),
+    };
+    let row = gear_row_text(ItemSlot::Shielding, Some(&item));
+    assert!(row.starts_with("SHIELDING"), "row leads with the slot label");
+    assert!(row.contains("Refined Quantum Aegis"), "row shows the equipped item name");
+}

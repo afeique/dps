@@ -223,6 +223,17 @@ impl ItemSlot {
         ItemSlot::Nanites,
     ];
 
+    /// Short uppercase slot label (`SLOT_LABEL`) for the gear panel.
+    pub fn label(self) -> &'static str {
+        match self {
+            ItemSlot::Cockpit => "COCKPIT",
+            ItemSlot::Hull => "HULL",
+            ItemSlot::Shielding => "SHIELDING",
+            ItemSlot::Chassis => "CHASSIS",
+            ItemSlot::Nanites => "NANITES",
+        }
+    }
+
     /// Index into the `Equipment` slot array.
     pub fn idx(self) -> usize {
         match self {
