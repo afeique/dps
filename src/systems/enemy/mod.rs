@@ -174,6 +174,7 @@ pub fn boss_rage(
         let radius = collider.map_or(40.0, |c| c.radius) * 1.35;
         let pos = tf.translation.truncate();
         commands.spawn((
+            TelegraphRing,
             telegraph_ring(radius),
             Transform::from_translation(pos.extend(0.3)),
             Lifetime {

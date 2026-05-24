@@ -48,6 +48,12 @@ pub struct RageTelegraph {
     pub timer: f32,
 }
 
+/// The red HDR warning-ring entity spawned for a rage telegraph (spec IV.7). A
+/// top-level lyon ring with a `Lifetime == TELEGRAPH_SECS`; `render::telegraph_fx`
+/// pulses its Transform scale over that window so it throbs as the rage charges.
+#[derive(Component, Debug)]
+pub struct TelegraphRing;
+
 /// Marks a mid-wave **mini-boss** promotion (spec V.6) — a regular enemy buffed
 /// to HP×1.7 / radius×1.25, awarding 2× points on death.
 #[derive(Component, Debug)]

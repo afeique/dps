@@ -101,9 +101,15 @@ impl Plugin for GamePlugin {
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
                     render::wave_title::tick_pulse_toast,
-                    // Enemy burn/stun status auras.
-                    render::status_fx::spawn_status_auras,
-                    render::status_fx::update_status_auras,
+                    // Enemy-state visuals: burn/stun auras + the boss-rage
+                    // telegraph ring pulse. Nested as one element so the outer
+                    // Update tuple stays within Bevy's 20-element limit.
+                    (
+                        render::status_fx::spawn_status_auras,
+                        render::status_fx::update_status_auras,
+                        render::telegraph_fx::pulse_telegraph_rings,
+                    )
+                        .chain(),
                     // 3D-tumble + rebuild the asteroid wireframes (spec VI.1).
                     systems::asteroids::tumble_asteroids,
                     // Camera screen shake on deaths / player hits (spec I.2).

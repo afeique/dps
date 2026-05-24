@@ -3178,3 +3178,25 @@ fn loot_card_equipped_marker() {
     assert_eq!(sidegrade, "Refined Quantum Aegis", "sidegrade shows the plain name");
     assert!(!sidegrade.starts_with('▲'), "sidegrade has no marker");
 }
+
+// ── 90. telegraph_pulse_scale_curve ───────────────────────────────────────────
+
+/// The rage-telegraph ring grows as the rage charges and throbs, staying within
+/// a sane scale band the whole window (spec IV.7 polish).
+#[test]
+fn telegraph_pulse_scale_curve() {
+    use crate::render::telegraph_fx::telegraph_pulse_scale;
+
+    // Starts at 1.0 (no grow, sin(0)=0), swells toward activation.
+    assert!((telegraph_pulse_scale(0.0) - 1.0).abs() < 1e-5, "starts at base scale");
+    assert!(telegraph_pulse_scale(1.0) > 1.1, "swelled near activation");
+    assert!(telegraph_pulse_scale(1.0) > telegraph_pulse_scale(0.0), "grows overall");
+
+    // Stays within a sane band across the whole window (and clamps out-of-range).
+    for i in 0..=40 {
+        let s = telegraph_pulse_scale(i as f32 / 40.0);
+        assert!((0.9..=1.35).contains(&s), "scale stays bounded (got {s})");
+    }
+    assert_eq!(telegraph_pulse_scale(-1.0), telegraph_pulse_scale(0.0), "clamps below 0");
+    assert_eq!(telegraph_pulse_scale(2.0), telegraph_pulse_scale(1.0), "clamps above 1");
+}

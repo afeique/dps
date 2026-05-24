@@ -20,6 +20,7 @@ pub mod shake;
 pub mod shapes;
 pub mod status_fx;
 pub mod starfield;
+pub mod telegraph_fx;
 pub mod wave_title;
 
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};
