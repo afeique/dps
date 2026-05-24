@@ -42,6 +42,7 @@ fn test_app() -> App {
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
+        .init_resource::<crate::systems::items::Equipment>()
         .init_resource::<crate::resources::LastStandUsed>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
@@ -2866,4 +2867,108 @@ fn loot_card_fade_curve() {
     assert_eq!(card_alpha(0.0), 0.0, "fully transparent at end of life");
     // Monotonic: less life → less (or equal) opacity.
     assert!(card_alpha(0.4) < card_alpha(0.8));
+}
+
+// ── 81. item_score_and_upgrade ────────────────────────────────────────────────
+
+/// `score_item` weights each affix to an effective-HP scale, and `is_upgrade` is
+/// strict-dominant (empty slot always wins; ties don't replace).
+#[test]
+fn item_score_and_upgrade() {
+    use crate::systems::items::{is_upgrade, score_item, Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    let mk = |kind, value| Item {
+        slot: ItemSlot::Cockpit,
+        level: 1,
+        rarity: Rarity::Common,
+        affixes: vec![Affix { kind, value }],
+        name: "x".to_string(),
+    };
+
+    // Weights: HP×1, Toughness×8, Regen×16.
+    assert!((score_item(&mk(AffixKind::Hp, 10.0)) - 10.0).abs() < 1e-6);
+    assert!((score_item(&mk(AffixKind::Toughness, 5.0)) - 40.0).abs() < 1e-6);
+    assert!((score_item(&mk(AffixKind::Regen, 2.0)) - 32.0).abs() < 1e-6);
+
+    let weak = mk(AffixKind::Hp, 10.0); // score 10
+    let strong = mk(AffixKind::Toughness, 5.0); // score 40
+
+    assert!(is_upgrade(None, &weak), "empty slot takes anything");
+    assert!(is_upgrade(Some(&weak), &strong), "higher score replaces");
+    assert!(!is_upgrade(Some(&strong), &weak), "lower score is kept");
+    assert!(!is_upgrade(Some(&strong), &strong), "a tie does not replace (strict)");
+}
+
+// ── 82. equipment_autoequip_and_affix_total ───────────────────────────────────
+
+/// Equipment auto-equips better drops per slot and sums affixes across slots.
+#[test]
+fn equipment_autoequip_and_affix_total() {
+    use crate::systems::items::{Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+
+    let mk = |slot, kind, value| Item {
+        slot,
+        level: 1,
+        rarity: Rarity::Common,
+        affixes: vec![Affix { kind, value }],
+        name: "x".to_string(),
+    };
+
+    let mut eq = Equipment::default();
+    assert_eq!(eq.affix_total(AffixKind::Toughness), 0.0, "empty");
+
+    // First HP-slot drop equips; a stronger one replaces; a weaker one doesn't.
+    assert!(eq.try_equip(mk(ItemSlot::Cockpit, AffixKind::Hp, 5.0)));
+    assert!(eq.try_equip(mk(ItemSlot::Cockpit, AffixKind::Hp, 12.0)), "better replaces");
+    assert!(!eq.try_equip(mk(ItemSlot::Cockpit, AffixKind::Hp, 3.0)), "worse kept out");
+
+    // A different slot equips independently and its affix sums in.
+    assert!(eq.try_equip(mk(ItemSlot::Shielding, AffixKind::Toughness, 6.0)));
+    assert!(eq.try_equip(mk(ItemSlot::Chassis, AffixKind::Toughness, 4.0)));
+    assert!((eq.affix_total(AffixKind::Toughness) - 10.0).abs() < 1e-6, "toughness sums across slots");
+    assert!((eq.affix_total(AffixKind::Hp) - 12.0).abs() < 1e-6, "best HP item only");
+
+    eq.reset();
+    assert_eq!(eq.affix_total(AffixKind::Toughness), 0.0, "reset clears slots");
+}
+
+// ── 83. equipment_toughness_reduces_player_damage ─────────────────────────────
+
+/// An equipped TOUGHNESS affix folds into the player's %DR, so a hit lands for
+/// less (spec VI.5 affix→stat).
+#[test]
+fn equipment_toughness_reduces_player_damage() {
+    use crate::systems::damage::apply_damage;
+    use crate::systems::items::{Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    // Equip a +50% DEF trinket (base shield reduction 0 → effective 50%).
+    world.resource_mut::<Equipment>().try_equip(Item {
+        slot: ItemSlot::Shielding,
+        level: 1,
+        rarity: Rarity::Epic,
+        affixes: vec![Affix { kind: AffixKind::Toughness, value: 50.0 }],
+        name: "Test Aegis".to_string(),
+    });
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 100.0, max: 100.0 },
+            Shield { reduction: 0.0 },
+            Transform::default(),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+
+    world.write_message(Damage { target: player, amount: 20.0 });
+    step.run(world);
+
+    // 20 × (1 − 0.50) = 10 → HP 100 − 10 = 90 (vs 80 with no gear).
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!((hp - 90.0).abs() < 1e-3, "toughness gear halves the hit (got {hp})");
 }

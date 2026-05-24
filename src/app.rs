@@ -46,6 +46,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::survivor::SurvivorChoice>()
             .init_resource::<systems::missions::Mission>()
             .init_resource::<systems::items::LootFeed>()
+            .init_resource::<systems::items::Equipment>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))

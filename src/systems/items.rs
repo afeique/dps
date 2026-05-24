@@ -137,6 +137,23 @@ const AFFIX_POOL: [AffixDef; 9] = [
 ];
 
 impl AffixKind {
+    /// Cross-affix comparison weight (`AFFIX_SCORE_WEIGHT`), normalizing each
+    /// stat to an "effective HP" scale so `score_item` can rank items across
+    /// slots + rarities for the auto-equip-if-better check.
+    pub fn score_weight(self) -> f32 {
+        match self {
+            AffixKind::Hp => 1.0,
+            AffixKind::Toughness => 8.0,
+            AffixKind::Vampirism => 8.0,
+            AffixKind::Thorns => 4.0,
+            AffixKind::CritChance => 6.0,
+            AffixKind::CritDamage => 3.0,
+            AffixKind::Dodge => 8.0,
+            AffixKind::Speed => 3.0,
+            AffixKind::Regen => 16.0,
+        }
+    }
+
     /// Human-readable label for a rolled value (mirrors the JS `label(v)`).
     pub fn label(self, value: f32) -> String {
         let n = trim_num(value);
@@ -196,6 +213,26 @@ pub enum ItemSlot {
 }
 
 impl ItemSlot {
+    /// All five slots, in inventory order (`SLOT_ORDER`).
+    pub const ALL: [ItemSlot; 5] = [
+        ItemSlot::Cockpit,
+        ItemSlot::Hull,
+        ItemSlot::Shielding,
+        ItemSlot::Chassis,
+        ItemSlot::Nanites,
+    ];
+
+    /// Index into the `Equipment` slot array.
+    pub fn idx(self) -> usize {
+        match self {
+            ItemSlot::Cockpit => 0,
+            ItemSlot::Hull => 1,
+            ItemSlot::Shielding => 2,
+            ItemSlot::Chassis => 3,
+            ItemSlot::Nanites => 4,
+        }
+    }
+
     /// Pickup accent color (`SLOT_ACCENT`): HP slots cyan, Toughness amber,
     /// regen green.
     pub fn accent(self) -> Color {
@@ -274,6 +311,73 @@ impl Item {
             .map(|a| a.label())
             .collect::<Vec<_>>()
             .join(" · ")
+    }
+}
+
+/// Unified item score for cross-slot / cross-rarity comparison (JS `scoreItem`):
+/// each affix's value weighted to an "effective HP" scale (`AFFIX_SCORE_WEIGHT`).
+pub fn score_item(item: &Item) -> f32 {
+    item.affixes
+        .iter()
+        .map(|a| a.value * a.kind.score_weight())
+        .sum()
+}
+
+/// Strict-dominant upgrade check (JS `isUpgrade`): a candidate replaces the
+/// current slot item only if it strictly out-scores it; an empty slot always
+/// takes the candidate.
+pub fn is_upgrade(current: Option<&Item>, candidate: &Item) -> bool {
+    match current {
+        None => true,
+        Some(cur) => score_item(candidate) > score_item(cur),
+    }
+}
+
+// ─── Equipment ───────────────────────────────────────────────────────────────
+
+/// The player's equipped gear — one slot per `ItemSlot`. A dropped item
+/// **auto-equips** into its slot if it out-scores the current occupant (JS
+/// auto-equip-if-better). Combat reads `affix_total(kind)` to fold equipped
+/// affixes into the matching stat (additive with the shop `Upgrades`). Run-scoped.
+#[derive(Resource, Default)]
+pub struct Equipment {
+    slots: [Option<Item>; 5],
+}
+
+impl Equipment {
+    /// The item currently in `slot`, if any.
+    pub fn get(&self, slot: ItemSlot) -> Option<&Item> {
+        self.slots[slot.idx()].as_ref()
+    }
+
+    /// Auto-equip `item` into its slot if it out-scores the current occupant.
+    /// Returns whether it was equipped.
+    pub fn try_equip(&mut self, item: Item) -> bool {
+        let i = item.slot.idx();
+        if is_upgrade(self.slots[i].as_ref(), &item) {
+            self.slots[i] = Some(item);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Sum a given affix's value across all equipped items (its contribution to
+    /// the matching player stat). pct affixes are summed as raw percentages
+    /// (callers divide by 100); HP/regen are summed in their native units.
+    pub fn affix_total(&self, kind: AffixKind) -> f32 {
+        self.slots
+            .iter()
+            .flatten()
+            .flat_map(|it| it.affixes.iter())
+            .filter(|a| a.kind == kind)
+            .map(|a| a.value)
+            .sum()
+    }
+
+    /// Clear all slots (called at the start of a fresh run).
+    pub fn reset(&mut self) {
+        self.slots = Default::default();
     }
 }
 
@@ -402,6 +506,7 @@ pub fn roll_item_drops_on_death(
     wave: Res<Wave>,
     mut rng: ResMut<GameRng>,
     mut feed: ResMut<LootFeed>,
+    mut equipment: ResMut<Equipment>,
 ) {
     let level = wave.number() as u32;
     for death in deaths.read() {
@@ -410,6 +515,9 @@ pub fn roll_item_drops_on_death(
         }
         let boss = death.boss_tier > 0;
         for item in roll_item_drops(&mut rng, level, boss) {
+            // Auto-equip if it out-scores the current slot item (JS model); the
+            // feed still shows every drop.
+            equipment.try_equip(item.clone());
             feed.push(item);
         }
     }

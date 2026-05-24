@@ -108,6 +108,7 @@ pub fn reset_run(
     mut score: ResMut<Score>,
     mut streak: ResMut<KillStreak>,
     mut upgrades: ResMut<crate::systems::shop::Upgrades>,
+    mut equipment: ResMut<crate::systems::items::Equipment>,
     mut health_cd: ResMut<crate::systems::drops::HealthDropTimer>,
     mut dmg_clock: ResMut<crate::resources::DamageClock>,
     mut last_stand: ResMut<crate::resources::LastStandUsed>,
@@ -115,6 +116,7 @@ pub fn reset_run(
     *score = Score::default();
     streak.break_streak();
     upgrades.reset();
+    equipment.reset();
     health_cd.timer = 0.0;
     dmg_clock.0 = 0.0;
     last_stand.0 = false;

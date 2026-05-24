@@ -14,11 +14,12 @@
 
 use crate::components::{
     Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, BULWARK_RESIST,
-    MAX_TANKS, TANK_OVERFLOW_HP,
+    MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
 use crate::states::GameState;
+use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{dodge_chance, regen_rate, thorns_frac, UpgradeId, Upgrades, REGEN_DELAY};
 use bevy::prelude::*;
 
@@ -31,6 +32,7 @@ pub fn apply_damage(
     mut streak: ResMut<KillStreak>,
     mut rng: ResMut<GameRng>,
     upgrades: Res<Upgrades>,
+    equipment: Res<Equipment>,
     mut last_stand: ResMut<LastStandUsed>,
     mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
@@ -68,8 +70,11 @@ pub fn apply_damage(
 
         if is_player {
             // DODGE: chance to ignore the hit entirely — no damage, no streak
-            // break (spec II.2 step 3 / III.5).
-            let dodge = dodge_chance(upgrades.owned(UpgradeId::Dodge));
+            // break (spec II.2 step 3 / III.5). Shop stacks + equipped item dodge
+            // affixes, capped at 50 %.
+            let dodge = (dodge_chance(upgrades.owned(UpgradeId::Dodge))
+                + equipment.affix_total(AffixKind::Dodge) / 100.0)
+                .min(0.5);
             if dodge > 0.0 && rng.next_f32() < dodge {
                 continue;
             }
@@ -82,7 +87,13 @@ pub fn apply_damage(
         // (beams) accumulate exactly across ticks.
         let mut amount = ev.amount;
         if let Some(s) = shield {
-            amount *= 1.0 - s.reduction;
+            // Player shield = base %DR + equipped TOUGHNESS affixes, capped.
+            let mut reduction = s.reduction;
+            if is_player {
+                reduction = (reduction + equipment.affix_total(AffixKind::Toughness) / 100.0)
+                    .min(SHIELD_REDUCTION_CAP);
+            }
+            amount *= 1.0 - reduction;
         }
         // BULWARK halves what's left (spec II.2 step 7); player-only component.
         if bulwark.is_some() {
@@ -176,6 +187,7 @@ pub fn passive_regen(
     mut clock: ResMut<DamageClock>,
     mut hurt: MessageReader<PlayerHurt>,
     upgrades: Res<Upgrades>,
+    equipment: Res<Equipment>,
     mut player: Query<&mut Health, With<Ship>>,
 ) {
     let dt = time.delta_secs();
@@ -184,7 +196,8 @@ pub fn passive_regen(
     } else {
         clock.0 += dt;
     }
-    let rate = regen_rate(upgrades.owned(UpgradeId::Regen));
+    // Shop Repair Field + equipped REGEN affixes (flat HP/s).
+    let rate = regen_rate(upgrades.owned(UpgradeId::Regen)) + equipment.affix_total(AffixKind::Regen);
     if clock.0 >= REGEN_DELAY && rate > 0.0 {
         if let Ok(mut hp) = player.single_mut() {
             hp.current = (hp.current + rate * dt).min(hp.max);
@@ -224,10 +237,13 @@ pub fn apply_thorns(
     mut hurt: MessageReader<PlayerHurt>,
     mut dmg: MessageWriter<Damage>,
     upgrades: Res<Upgrades>,
+    equipment: Res<Equipment>,
     player: Query<&Transform, With<Ship>>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
 ) {
-    let thorns = thorns_frac(upgrades.owned(UpgradeId::Thorns));
+    // Shop Thorns + equipped THORNS affixes (% of taken damage reflected).
+    let thorns =
+        thorns_frac(upgrades.owned(UpgradeId::Thorns)) + equipment.affix_total(AffixKind::Thorns) / 100.0;
     let ppos = player.single().ok().map(|t| t.translation.truncate());
     for h in hurt.read() {
         if thorns <= 0.0 {
