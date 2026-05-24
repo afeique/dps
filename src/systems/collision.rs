@@ -21,6 +21,7 @@ pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     mut knock: MessageWriter<Knockback>,
+    mut crits: MessageWriter<crate::messages::Crit>,
     streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
     mut rng: ResMut<GameRng>,
@@ -54,7 +55,11 @@ pub fn bullet_hits_enemy(
                 .distance_squared(etf.translation.truncate());
             if d2 <= reach * reach {
                 // Streak multiplier × per-hit crit roll (spec III.6).
-                let amount = bullet.damage * streak_mult * roll_crit(&mut rng, crit_p, crit_dmg_stacks);
+                let crit_mult = roll_crit(&mut rng, crit_p, crit_dmg_stacks);
+                if crit_mult > 1.0 {
+                    crits.write(crate::messages::Crit); // feeds the precision mission
+                }
+                let amount = bullet.damage * streak_mult * crit_mult;
                 dmg.write(Damage {
                     target: enemy_e,
                     amount,

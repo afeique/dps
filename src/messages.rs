@@ -52,6 +52,12 @@ pub struct PlayerHurt {
     pub amount: f32,
 }
 
+/// A player bullet landed a critical hit. Emitted by `collision::bullet_hits_enemy`
+/// when `roll_crit` returns a >1× multiplier; consumed by the `precision` mission
+/// (spec V.6) to count crits this wave.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Crit;
+
 /// Shove `target` by `impulse` world-units (the `_KNOCK` bullet trait, spec
 /// III.2/III.6 — a flat 16 px positional shove). Applied by
 /// `collision::apply_knockback` so the producer needn't hold a mutable handle.

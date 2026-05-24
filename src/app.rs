@@ -55,6 +55,7 @@ impl Plugin for GamePlugin {
             .add_message::<Fire>()
             .add_message::<Knockback>()
             .add_message::<PlayerHurt>()
+            .add_message::<crate::messages::Crit>()
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,

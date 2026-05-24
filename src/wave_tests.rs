@@ -36,6 +36,7 @@ fn test_app() -> App {
         .add_message::<Fire>()
         .add_message::<crate::messages::Knockback>()
         .add_message::<crate::messages::PlayerHurt>()
+        .add_message::<crate::messages::Crit>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -2146,6 +2147,7 @@ fn mission_assignment() {
                     | MissionKind::FastKill
                     | MissionKind::Asteroid
                     | MissionKind::Streak
+                    | MissionKind::Precision
             ));
         }
     }
@@ -2183,6 +2185,43 @@ fn mission_streak_completion() {
     step.run(world);
     assert!(world.resource::<Mission>().done, "streak ≥ 12 completes the mission");
     assert!(world.resource::<Score>().gold > gold_before, "completion pays a gold bonus");
+}
+
+// ── 66. mission_precision_counts_crits ────────────────────────────────────────
+
+/// The Precision mission completes after 25 `Crit` messages accumulate in a wave
+/// (spec V.6); fewer leaves it incomplete.
+#[test]
+fn mission_precision_counts_crits() {
+    use crate::messages::Crit;
+    use crate::systems::missions::{update_missions, Mission, MissionKind};
+    use crate::systems::wave::Wave;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Time::<()>::default());
+    world.init_resource::<Mission>();
+    world.insert_resource(Wave::default());
+
+    let mut step = Schedule::default();
+    step.add_systems(update_missions);
+    step.run(world); // assign wave 1's mission
+
+    // Force a Precision objective.
+    world.resource_mut::<Mission>().kind = MissionKind::Precision;
+    world.resource_mut::<Mission>().done = false;
+
+    // 24 crits → still incomplete.
+    for _ in 0..24 {
+        world.write_message(Crit);
+    }
+    step.run(world);
+    assert!(!world.resource::<Mission>().done, "24 crits is not enough");
+
+    // One more (25 total) → complete.
+    world.write_message(Crit);
+    step.run(world);
+    assert!(world.resource::<Mission>().done, "25 crits completes Precision");
 }
 
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
