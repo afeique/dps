@@ -2492,6 +2492,73 @@ fn momentum_ramps_and_caps() {
     assert!(momentum_bonus(100.0, 4) > momentum_bonus(100.0, 1), "cap scales with stacks");
 }
 
+// ── 74. whirlwind_damages_orbit_zone ──────────────────────────────────────────
+
+/// Whirlwind damages enemies inside its orbiting zone and spares distant ones,
+/// and spawns its visual blade (spec VI.3).
+#[test]
+fn whirlwind_damages_orbit_zone() {
+    use crate::systems::passives::{
+        tick_whirlwind, WhirlwindBlade, WHIRL_OMEGA, WHIRL_ORBIT_R,
+    };
+    use crate::systems::shop::{whirlwind_dps, UpgradeId, Upgrades};
+
+    assert_eq!(whirlwind_dps(0), 0.0);
+    assert!(whirlwind_dps(4) > whirlwind_dps(1));
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.resource_mut::<Upgrades>().set(UpgradeId::Whirlwind, 4);
+
+    // Advance time, then place the near enemy at the resulting orbit centre.
+    let dt = 0.1_f32;
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(dt));
+    world.insert_resource(time);
+    let ang = dt * WHIRL_OMEGA;
+    let center = Vec2::new(ang.cos(), ang.sin()) * WHIRL_ORBIT_R; // player at origin
+
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let near = world
+        .spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Collider { radius: 18.0 },
+            Transform::from_translation(center.extend(0.0)),
+        ))
+        .id();
+    let far = world
+        .spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Collider { radius: 18.0 },
+            Transform::from_xyz(5000.0, 0.0, 0.0),
+        ))
+        .id();
+
+    #[derive(Resource, Default)]
+    struct Dmg(Vec<Entity>);
+    world.init_resource::<Dmg>();
+    fn collect(mut r: MessageReader<Damage>, mut d: ResMut<Dmg>) {
+        for ev in r.read() {
+            d.0.push(ev.target);
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_whirlwind, collect).chain());
+    step.run(world);
+
+    let hit = &world.resource::<Dmg>().0;
+    assert!(hit.contains(&near), "whirlwind damages the enemy in its zone");
+    assert!(!hit.contains(&far), "whirlwind spares the distant enemy");
+    // The visual blade was spawned.
+    let mut blades = world.query::<&WhirlwindBlade>();
+    assert_eq!(blades.iter(world).count(), 1, "blade visual spawned while owned");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

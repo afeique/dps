@@ -47,12 +47,13 @@ pub enum UpgradeId {
     StaticDischarge,
     CombatMedic,
     Momentum,
+    Whirlwind,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 25] = [
+    pub const ALL: [UpgradeId; 26] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -78,6 +79,7 @@ impl UpgradeId {
         Self::StaticDischarge,
         Self::CombatMedic,
         Self::Momentum,
+        Self::Whirlwind,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -110,6 +112,7 @@ impl UpgradeId {
             Self::StaticDischarge => 22,
             Self::CombatMedic => 23,
             Self::Momentum => 24,
+            Self::Whirlwind => 25,
         }
     }
 
@@ -140,6 +143,7 @@ impl UpgradeId {
             Self::StaticDischarge => "Static Disch. (periodic AoE)",
             Self::CombatMedic => "Combat Medic  (kill heals on hurt)",
             Self::Momentum => "Momentum      (+speed while moving)",
+            Self::Whirlwind => "Whirlwind     (orbiting blade)",
         }
     }
 
@@ -171,6 +175,7 @@ impl UpgradeId {
             Self::StaticDischarge => 2300,
             Self::CombatMedic => 3000,
             Self::Momentum => 2000,
+            Self::Whirlwind => 2500,
         }
     }
 
@@ -201,6 +206,7 @@ impl UpgradeId {
             Self::StaticDischarge => 5,
             Self::CombatMedic => 1,
             Self::Momentum => 4,
+            Self::Whirlwind => 4,
         }
     }
 }
@@ -291,6 +297,12 @@ pub fn static_discharge_interval(stacks: u32) -> f32 {
 /// STATIC DISCHARGE damage per pulse: `4.0 × stacks` (0 = off).
 pub fn static_discharge_damage(stacks: u32) -> f32 {
     4.0 * stacks as f32
+}
+
+/// WHIRLWIND passive (spec VI.3): the orbiting damage zone's DPS, `8.0 × stacks`
+/// (0 = off). Applied continuously (`dps × dt`) to enemies in the zone.
+pub fn whirlwind_dps(stacks: u32) -> f32 {
+    8.0 * stacks as f32
 }
 
 /// MOMENTUM passive (spec VI.3): a speed bonus that ramps with `sustained`
@@ -525,6 +537,7 @@ pub fn apply_upgrade(
         | UpgradeId::Overcharge
         | UpgradeId::StaticDischarge
         | UpgradeId::CombatMedic
-        | UpgradeId::Momentum => {}
+        | UpgradeId::Momentum
+        | UpgradeId::Whirlwind => {}
     }
 }

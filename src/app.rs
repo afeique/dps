@@ -269,6 +269,8 @@ impl Plugin for GamePlugin {
                         systems::status::tick_burning,
                         // Static Discharge: periodic AoE pulse around the player.
                         systems::passives::tick_static_discharge,
+                        // Whirlwind: orbiting damage zone.
+                        systems::passives::tick_whirlwind,
                         // Apply all queued shoves last (bullet _KNOCK + Nova/Mine
                         // knockback) so they land the same tick.
                         systems::collision::apply_knockback,
