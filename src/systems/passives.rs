@@ -4,8 +4,8 @@
 //! the existing floating-damage-number FX gives the visual feedback. (A dedicated
 //! discharge ring is deferred.)
 
-use crate::components::{Collider, Enemy, Ship};
-use crate::messages::Damage;
+use crate::components::{Collider, Enemy, Health, Ship};
+use crate::messages::{Damage, Death, PlayerHurt};
 use crate::systems::shop::{
     static_discharge_damage, static_discharge_interval, UpgradeId, Upgrades,
 };
@@ -45,5 +45,42 @@ pub fn tick_static_discharge(
         if etf.translation.truncate().distance(ppos) <= DISCHARGE_RADIUS + ec.radius {
             dmg.write(Damage { target: e, amount });
         }
+    }
+}
+
+/// HP restored by a Combat Medic proc (spec VI.3).
+pub const COMBAT_MEDIC_HEAL: f32 = 10.0;
+/// Cooldown (s) between Combat Medic procs (spec VI.3: 8 s).
+const COMBAT_MEDIC_CD: f32 = 8.0;
+
+/// Combat Medic: taking a hit *arms* the heal; the next enemy kill while armed and
+/// off cooldown restores `COMBAT_MEDIC_HEAL` (capped at max) and starts the 8 s
+/// cooldown (spec VI.3, maxStacks 1). State is `Local` (armed flag + cooldown).
+pub fn tick_combat_medic(
+    time: Res<Time>,
+    upgrades: Res<Upgrades>,
+    mut armed: Local<bool>,
+    mut cooldown: Local<f32>,
+    mut hurt: MessageReader<PlayerHurt>,
+    mut deaths: MessageReader<Death>,
+    mut player: Query<&mut Health, With<Ship>>,
+) {
+    *cooldown = (*cooldown - time.delta_secs()).max(0.0);
+    if upgrades.owned(UpgradeId::CombatMedic) == 0 {
+        *armed = false;
+        return;
+    }
+    // Taking a hit arms the heal.
+    if hurt.read().count() > 0 {
+        *armed = true;
+    }
+    // An enemy kill while armed + ready triggers the heal.
+    let killed = deaths.read().any(|d| d.kind.is_some());
+    if *armed && *cooldown <= 0.0 && killed {
+        if let Ok(mut hp) = player.single_mut() {
+            hp.current = (hp.current + COMBAT_MEDIC_HEAL).min(hp.max);
+        }
+        *armed = false;
+        *cooldown = COMBAT_MEDIC_CD;
     }
 }

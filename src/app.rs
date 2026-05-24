@@ -279,6 +279,8 @@ impl Plugin for GamePlugin {
                     systems::damage::apply_thorns,
                     // Boss-pair link: a boss death rages surviving bosses (IV.7).
                     systems::enemy::boss_pair_rage,
+                    // Combat Medic: a kill after taking a hit heals the player.
+                    systems::passives::tick_combat_medic,
                     // Drops — runs after apply_damage so `Death` is available.
                     (
                         systems::drops::spawn_drops,

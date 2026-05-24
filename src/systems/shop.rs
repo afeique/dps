@@ -45,12 +45,13 @@ pub enum UpgradeId {
     PhaseEcho,
     Overcharge,
     StaticDischarge,
+    CombatMedic,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 23] = [
+    pub const ALL: [UpgradeId; 24] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -74,6 +75,7 @@ impl UpgradeId {
         Self::PhaseEcho,
         Self::Overcharge,
         Self::StaticDischarge,
+        Self::CombatMedic,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -104,6 +106,7 @@ impl UpgradeId {
             Self::PhaseEcho => 20,
             Self::Overcharge => 21,
             Self::StaticDischarge => 22,
+            Self::CombatMedic => 23,
         }
     }
 
@@ -132,6 +135,7 @@ impl UpgradeId {
             Self::PhaseEcho => "Phase Echo    (+2s dash invuln)",
             Self::Overcharge => "Overcharge    (every Nth shot ×3)",
             Self::StaticDischarge => "Static Disch. (periodic AoE)",
+            Self::CombatMedic => "Combat Medic  (kill heals on hurt)",
         }
     }
 
@@ -161,6 +165,7 @@ impl UpgradeId {
             Self::PhaseEcho => 2000,
             Self::Overcharge => 1900,
             Self::StaticDischarge => 2300,
+            Self::CombatMedic => 3000,
         }
     }
 
@@ -189,6 +194,7 @@ impl UpgradeId {
             Self::PhaseEcho => 2,
             Self::Overcharge => 4,
             Self::StaticDischarge => 5,
+            Self::CombatMedic => 1,
         }
     }
 }
@@ -500,6 +506,7 @@ pub fn apply_upgrade(
         | UpgradeId::Executioner
         | UpgradeId::PhaseEcho
         | UpgradeId::Overcharge
-        | UpgradeId::StaticDischarge => {}
+        | UpgradeId::StaticDischarge
+        | UpgradeId::CombatMedic => {}
     }
 }

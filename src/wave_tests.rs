@@ -2414,6 +2414,66 @@ fn static_discharge_hits_nearby() {
     assert!(!hit.contains(&far), "discharge spares the far enemy");
 }
 
+// ── 72. combat_medic_heals_kill_after_hit ─────────────────────────────────────
+
+/// Combat Medic heals on the first enemy kill after taking a hit, then goes on
+/// cooldown so a second kill (still on CD) doesn't heal again (spec VI.3).
+#[test]
+fn combat_medic_heals_kill_after_hit() {
+    use crate::messages::PlayerHurt;
+    use crate::systems::passives::{tick_combat_medic, COMBAT_MEDIC_HEAL};
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Time::<()>::default());
+    world.resource_mut::<Upgrades>().set(UpgradeId::CombatMedic, 1);
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health {
+                current: 20.0,
+                max: 40.0,
+            },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_combat_medic);
+
+    // Hit (arm) + a kill in the same tick → heal.
+    world.write_message(PlayerHurt { amount: 5.0 });
+    world.write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Hunter),
+        boss_tier: 0,
+        mini_boss: false,
+    });
+    step.run(world);
+    let after_first = world.get::<Health>(player).unwrap().current;
+    assert!(
+        (after_first - (20.0 + COMBAT_MEDIC_HEAL)).abs() < 1e-3,
+        "kill-after-hit heals (got {after_first})"
+    );
+
+    // Another kill while on cooldown (and not freshly hit) → no further heal.
+    world.write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Hunter),
+        boss_tier: 0,
+        mini_boss: false,
+    });
+    step.run(world);
+    assert!(
+        (world.get::<Health>(player).unwrap().current - after_first).abs() < 1e-3,
+        "still on cooldown → no second heal"
+    );
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and
