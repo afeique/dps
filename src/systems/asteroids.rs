@@ -7,8 +7,9 @@
 
 use crate::components::*;
 use crate::resources::PlayBounds;
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 
 // ─── collider radii by tier ─────────────────────────────────────────────────
 
@@ -107,17 +108,32 @@ pub struct Tumbler {
     rot: Quat,
     /// Angular velocity per axis (rad/sec).
     spin: Vec3,
-    /// Base hue (degrees) + cycle rate (deg/sec).
+    /// Moving base hue (degrees); advances at `hue_speed` (deg/sec).
     hue: f32,
     hue_speed: f32,
+    /// Hue spread across the 12 vertices → the rainbow gradient (degrees).
+    hue_spread: f32,
     sat: f32,
     light: f32,
+    /// Circumradius (px) for the depth-fade normalisation.
+    radius: f32,
+    /// Phase offset (rad) for the per-asteroid brightness pulse.
+    pulse_phase: f32,
 }
 
+/// Edge half-width (px) of the wireframe struts.
+const EDGE_HALF_W: f32 = 1.6;
+/// Brightness-pulse rate (rad/sec).
+const PULSE_RATE: f32 = 2.5;
+/// HDR gain on the wireframe color so Bloom turns it neon.
+const HDR_GAIN: f32 = 2.6;
+
 /// Build the tumble state for a tier/seed: jittered + scaled vertices, random
-/// 3-axis spin, and a per-asteroid hue (20 % gold, else a teal→violet band).
+/// 3-axis spin, a moving base hue (20 % gold, else a teal→violet band), a hue
+/// spread for the rainbow gradient, and a pulse phase.
 fn make_tumbler(tier: u8, seed: u32) -> Tumbler {
-    let scale = shape_base_radius(tier) / CIRCUMRADIUS;
+    let radius = shape_base_radius(tier);
+    let scale = radius / CIRCUMRADIUS;
     let mut verts = [Vec3::ZERO; 12];
     for (i, v) in ICO_VERTS.iter().enumerate() {
         let j = hash_range(wang(seed ^ (i as u32).wrapping_mul(0x9E37)), -0.25, 0.25);
@@ -138,9 +154,12 @@ fn make_tumbler(tier: u8, seed: u32) -> Tumbler {
             hash_range(wang(seed ^ 0xC), -2.4, 2.4),
         ),
         hue,
-        hue_speed: hash_range(wang(seed ^ 0xD), 12.0, 36.0),
-        sat: 0.9,
-        light: 0.6,
+        hue_speed: hash_range(wang(seed ^ 0xD), 14.0, 40.0),
+        hue_spread: hash_range(wang(seed ^ 0x5E), 60.0, 180.0),
+        sat: 0.95,
+        light: 0.58,
+        radius,
+        pulse_phase: hash_range(wang(seed ^ 0x7F), 0.0, std::f32::consts::TAU),
     }
 }
 
@@ -156,50 +175,121 @@ pub fn project(verts: &[Vec3; 12], rot: Quat) -> [Vec2; 12] {
     out
 }
 
-/// An over-bright (HDR) emissive color from HSL so the wireframe blooms (neon).
-fn hdr_hue(hue: f32, sat: f32, light: f32) -> Color {
-    let l = Color::hsl(hue, sat, light).to_linear();
-    const GAIN: f32 = 2.2;
-    Color::linear_rgba(l.red * GAIN, l.green * GAIN, l.blue * GAIN, 1.0)
+/// Per-vertex HDR colors (spec VI.1): a rainbow hue gradient across the vertices
+/// (edges interpolate between endpoints), a brightness pulse, and a depth fade
+/// (near vertices brighter). `t` is the elapsed time for the pulse.
+fn vertex_colors(tum: &Tumbler, depth: &[f32; 12], t: f32) -> [[f32; 4]; 12] {
+    let pulse = 0.78 + 0.22 * (t * PULSE_RATE + tum.pulse_phase).sin();
+    let zmax = tum.radius.max(1.0);
+    let mut out = [[0.0; 4]; 12];
+    for i in 0..12 {
+        let hue = (tum.hue + (i as f32 / 12.0) * tum.hue_spread).rem_euclid(360.0);
+        // Near (z<0 under `fov/(fov+z)`) is brighter; far (z>0) dimmer.
+        let fade = (0.4 + 0.6 * ((zmax - depth[i]) / (2.0 * zmax))).clamp(0.4, 1.0);
+        let b = pulse * fade * HDR_GAIN;
+        let l = Color::hsl(hue, tum.sat, tum.light).to_linear();
+        out[i] = [l.red * b, l.green * b, l.blue * b, 1.0];
+    }
+    out
 }
 
-/// Build the wireframe `Shape` (30 edges as disconnected stroked segments).
-fn wireframe_shape(screen: &[Vec2; 12], color: Color) -> Shape {
-    let mut path = ShapePath::new();
-    for &(a, b) in ICO_EDGES.iter() {
-        path = path.move_to(screen[a]).line_to(screen[b]);
+/// Build the 30-edge wireframe geometry (each edge = a thin quad, endpoints
+/// colored by their vertex so the GPU interpolates the rainbow along each strut).
+pub fn wireframe_geometry(
+    screen: &[Vec2; 12],
+    colors: &[[f32; 4]; 12],
+) -> (Vec<[f32; 3]>, Vec<[f32; 4]>, Vec<u32>) {
+    let mut pos = Vec::with_capacity(ICO_EDGES.len() * 4);
+    let mut col = Vec::with_capacity(ICO_EDGES.len() * 4);
+    let mut idx = Vec::with_capacity(ICO_EDGES.len() * 6);
+    for (k, &(a, b)) in ICO_EDGES.iter().enumerate() {
+        let (pa, pb) = (screen[a], screen[b]);
+        let dir = (pb - pa).normalize_or_zero();
+        let perp = Vec2::new(-dir.y, dir.x) * EDGE_HALF_W;
+        let base = (k * 4) as u32;
+        for p in [pa + perp, pa - perp, pb - perp, pb + perp] {
+            pos.push([p.x, p.y, 0.0]);
+        }
+        col.extend_from_slice(&[colors[a], colors[a], colors[b], colors[b]]);
+        idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
-    ShapeBuilder::with(&path).stroke((color, 2.0)).build()
+    (pos, col, idx)
 }
 
 /// Spawn one asteroid of `tier` at `pos` with `vel` and a deterministic tumble
-/// seeded by `seed`. Shared by the wave spawner and the split path.
+/// seeded by `seed`. Shared by the wave spawner and the split path. The
+/// renderable `Mesh2d` is attached lazily by `tumble_asteroids` (needs `Assets`),
+/// so this stays free of asset plumbing in the wave/collision systems.
 fn spawn_asteroid(commands: &mut Commands, tier: u8, pos: Vec2, vel: Vec2, seed: u32) {
-    let tum = make_tumbler(tier, seed);
-    let screen = project(&tum.verts, tum.rot);
-    let color = hdr_hue(tum.hue, tum.sat, tum.light);
     commands.spawn((
         Asteroid { tier },
-        wireframe_shape(&screen, color),
-        tum,
+        make_tumbler(tier, seed),
         Collider { radius: collider_radius(tier) },
         Velocity(vel),
         Transform::from_xyz(pos.x, pos.y, 0.0),
     ));
 }
 
-/// Advance each asteroid's 3-axis tumble + hue cycle and rebuild its wireframe
-/// `Shape` (lyon re-tessellates on `Changed<Shape>`). Presentation only — the
-/// gameplay collider/velocity are untouched.
-pub fn tumble_asteroids(time: Res<Time>, mut q: Query<(&mut Tumbler, &mut Shape)>) {
+/// Shared white material for the vertex-colored asteroid wireframes (the per-
+/// vertex HDR colors carry the rainbow; the material just passes them through).
+#[derive(Resource)]
+pub struct AsteroidMaterial(pub Handle<ColorMaterial>);
+
+/// Create the shared wireframe material (Startup).
+pub fn setup_asteroid_material(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let h = materials.add(ColorMaterial::from(Color::WHITE));
+    commands.insert_resource(AsteroidMaterial(h));
+}
+
+/// Advance each asteroid's 3-axis tumble + moving hue and rebuild its vertex-
+/// colored wireframe mesh (pulsing, depth-faded rainbow, spec VI.1). Attaches the
+/// `Mesh2d` on first sight (lazy, so spawning needs no `Assets`). Presentation
+/// only — the gameplay collider/velocity are untouched.
+pub fn tumble_asteroids(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mat: Res<AsteroidMaterial>,
+    mut q: Query<(Entity, &mut Tumbler, Option<&Mesh2d>)>,
+) {
     let dt = time.delta_secs();
-    for (mut tum, mut shape) in &mut q {
+    let t = time.elapsed_secs();
+    for (e, mut tum, mesh2d) in &mut q {
         let delta = Quat::from_scaled_axis(tum.spin * dt);
         tum.rot = (delta * tum.rot).normalize();
         tum.hue = (tum.hue + tum.hue_speed * dt).rem_euclid(360.0);
-        let screen = project(&tum.verts, tum.rot);
-        let color = hdr_hue(tum.hue, tum.sat, tum.light);
-        *shape = wireframe_shape(&screen, color);
+
+        let mut screen = [Vec2::ZERO; 12];
+        let mut depth = [0.0f32; 12];
+        for i in 0..12 {
+            let p = tum.rot * tum.verts[i];
+            let s = FOV / (FOV + p.z);
+            screen[i] = Vec2::new(p.x * s, p.y * s);
+            depth[i] = p.z;
+        }
+        let colors = vertex_colors(&tum, &depth, t);
+        let (pos, col, idx) = wireframe_geometry(&screen, &colors);
+
+        match mesh2d {
+            Some(m) => {
+                if let Some(mesh) = meshes.get_mut(&m.0) {
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
+                }
+            }
+            None => {
+                let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+                    .with_inserted_indices(Indices::U32(idx));
+                commands
+                    .entity(e)
+                    .insert((Mesh2d(meshes.add(mesh)), MeshMaterial2d(mat.0.clone())));
+            }
+        }
     }
 }
 

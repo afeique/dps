@@ -2012,3 +2012,39 @@ fn asteroid_icosahedron_geometry() {
     let rotated = project(&ICO_VERTS, Quat::from_rotation_y(0.7));
     assert!(screen != rotated, "rotation changes the projected wireframe");
 }
+
+// ── 59. asteroid_wireframe_mesh ───────────────────────────────────────────────
+
+/// The rainbow wireframe mesh: one thin quad per edge (30 edges → 120 verts /
+/// 180 indices), all indices in range, finite positions, and each edge's quad
+/// carries its two endpoints' vertex colors (so the GPU interpolates the rainbow
+/// gradient along the strut).
+#[test]
+fn asteroid_wireframe_mesh() {
+    use crate::systems::asteroids::{project, wireframe_geometry, ICO_EDGES, ICO_VERTS};
+
+    let screen = project(&ICO_VERTS, Quat::IDENTITY);
+    // Distinct color per vertex so we can verify per-endpoint assignment.
+    let mut colors = [[0.0_f32; 4]; 12];
+    for (i, c) in colors.iter_mut().enumerate() {
+        *c = [i as f32, 12.0 - i as f32, 1.0, 1.0];
+    }
+
+    let (pos, col, idx) = wireframe_geometry(&screen, &colors);
+    assert_eq!(pos.len(), ICO_EDGES.len() * 4, "4 verts per edge");
+    assert_eq!(col.len(), ICO_EDGES.len() * 4);
+    assert_eq!(idx.len(), ICO_EDGES.len() * 6, "2 triangles per edge");
+    assert!(idx.iter().all(|&i| (i as usize) < pos.len()), "indices in range");
+    assert!(
+        pos.iter().all(|p| p.iter().all(|c| c.is_finite())),
+        "finite positions"
+    );
+
+    // Edge 0's quad is colored [a, a, b, b] — endpoints carry their vertex hues.
+    let (a, b) = ICO_EDGES[0];
+    assert_eq!(col[0], colors[a]);
+    assert_eq!(col[1], colors[a]);
+    assert_eq!(col[2], colors[b]);
+    assert_eq!(col[3], colors[b]);
+    assert_ne!(colors[a], colors[b], "the gradient varies vertex-to-vertex");
+}

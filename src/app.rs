@@ -67,6 +67,7 @@ impl Plugin for GamePlugin {
                     render::minimap::setup_minimap,
                     render::cursor::spawn_crosshair,
                     render::flash::setup_screen_flash.after(render::spawn_camera),
+                    systems::asteroids::setup_asteroid_material,
                     audio::setup_sfx,
                 ),
             )
