@@ -489,11 +489,18 @@ pub fn roll_item_drops(rng: &mut GameRng, level: u32, boss: bool) -> Vec<Item> {
 
 // ─── Loot-feed resource + roll system ────────────────────────────────────────
 
+/// One pending loot-feed entry: a dropped item + whether it **auto-equipped**
+/// (out-scored the slot occupant), so the card can mark upgrades vs sidegrades.
+pub struct LootEntry {
+    pub item: Item,
+    pub equipped: bool,
+}
+
 /// Items minted this run that the loot feed has not yet shown. The render layer
 /// (`render::loot_feed`) drains this each frame into left-edge cards.
 #[derive(Resource, Default)]
 pub struct LootFeed {
-    pub pending: Vec<Item>,
+    pub pending: Vec<LootEntry>,
 }
 
 impl LootFeed {
@@ -501,8 +508,8 @@ impl LootFeed {
     /// limit — drop the oldest if we somehow pile up faster than the feed drains.
     const MAX_PENDING: usize = 12;
 
-    pub fn push(&mut self, item: Item) {
-        self.pending.push(item);
+    pub fn push(&mut self, item: Item, equipped: bool) {
+        self.pending.push(LootEntry { item, equipped });
         if self.pending.len() > Self::MAX_PENDING {
             let overflow = self.pending.len() - Self::MAX_PENDING;
             self.pending.drain(0..overflow);
@@ -528,9 +535,9 @@ pub fn roll_item_drops_on_death(
         let boss = death.boss_tier > 0;
         for item in roll_item_drops(&mut rng, level, boss) {
             // Auto-equip if it out-scores the current slot item (JS model); the
-            // feed still shows every drop.
-            equipment.try_equip(item.clone());
-            feed.push(item);
+            // feed shows every drop, marking which ones equipped.
+            let equipped = equipment.try_equip(item.clone());
+            feed.push(item, equipped);
         }
     }
 }

@@ -8,7 +8,7 @@
 //! cleanly. No equip / stat effect yet — the cards are the visible half of the
 //! VI.5 first slice.
 
-use crate::systems::items::{Item, LootFeed};
+use crate::systems::items::{LootEntry, LootFeed};
 use bevy::prelude::*;
 
 /// The flex-column container all loot cards live under (spawned once).
@@ -39,6 +39,16 @@ const MAX_CARDS: usize = 6;
 /// `FADE_SECS`, then a linear fade to 0.
 pub fn card_alpha(life: f32) -> f32 {
     (life / FADE_SECS).clamp(0.0, 1.0)
+}
+
+/// The card's title line: an auto-equipped drop gets a ▲ upgrade marker; a
+/// sidegrade (kept-out-of-the-slot) shows the name plainly.
+pub fn card_title(name: &str, equipped: bool) -> String {
+    if equipped {
+        format!("▲ {name}")
+    } else {
+        name.to_string()
+    }
 }
 
 /// Spawn the empty left-edge column once at startup.
@@ -72,9 +82,9 @@ pub fn drain_loot_feed(
         feed.pending.clear();
         return;
     };
-    let items: Vec<Item> = std::mem::take(&mut feed.pending);
+    let entries: Vec<LootEntry> = std::mem::take(&mut feed.pending);
     commands.entity(root).with_children(|col| {
-        for item in items {
+        for LootEntry { item, equipped } in entries {
             let glow = item.rarity.color();
             let accent = item.slot.accent();
             col.spawn((
@@ -91,7 +101,7 @@ pub fn drain_loot_feed(
             ))
             .with_children(|card| {
                 card.spawn((
-                    Text::new(item.name.clone()),
+                    Text::new(card_title(&item.name, equipped)),
                     TextFont { font_size: 14.0, ..default() },
                     TextColor(glow),
                 ));

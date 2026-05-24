@@ -3161,3 +3161,20 @@ fn gear_panel_row_text() {
     assert!(row.starts_with("SHIELDING"), "row leads with the slot label");
     assert!(row.contains("Refined Quantum Aegis"), "row shows the equipped item name");
 }
+
+// ── 89. loot_card_equipped_marker ─────────────────────────────────────────────
+
+/// An auto-equipped drop's card title gets a ▲ upgrade marker; a sidegrade shows
+/// the plain name (spec VI.5 loot-feed feedback).
+#[test]
+fn loot_card_equipped_marker() {
+    use crate::render::loot_feed::card_title;
+
+    let equipped = card_title("Refined Quantum Aegis", true);
+    assert!(equipped.starts_with('▲'), "equipped drop is marked");
+    assert!(equipped.contains("Refined Quantum Aegis"), "name retained");
+
+    let sidegrade = card_title("Refined Quantum Aegis", false);
+    assert_eq!(sidegrade, "Refined Quantum Aegis", "sidegrade shows the plain name");
+    assert!(!sidegrade.starts_with('▲'), "sidegrade has no marker");
+}
