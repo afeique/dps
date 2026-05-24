@@ -2305,6 +2305,21 @@ fn executioner_hits_low_hp_harder() {
     );
 }
 
+// ── 69. phase_echo_extends_dash_invuln ────────────────────────────────────────
+
+/// Phase Echo adds 2 s of dash i-frames per stack (spec VI.3), on top of the
+/// 0.3 s base.
+#[test]
+fn phase_echo_extends_dash_invuln() {
+    use crate::systems::shop::phase_echo_secs;
+
+    assert_eq!(phase_echo_secs(0), 0.0);
+    assert_eq!(phase_echo_secs(1), 2.0);
+    assert_eq!(phase_echo_secs(2), 4.0);
+    // The dash grants 0.3 s base + the echo bonus.
+    assert!((0.3 + phase_echo_secs(2) - 4.3).abs() < 1e-6, "2 stacks → 4.3 s dash i-frames");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

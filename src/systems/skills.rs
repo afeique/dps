@@ -7,6 +7,7 @@
 use crate::components::*;
 use crate::messages::Death;
 use crate::resources::Score;
+use crate::systems::shop::{phase_echo_secs, UpgradeId, Upgrades};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::TAU;
@@ -72,6 +73,7 @@ pub fn use_skills(
     mut skills: ResMut<Skills>,
     mut deaths: MessageWriter<Death>,
     mut score: ResMut<Score>,
+    upgrades: Res<Upgrades>,
     mut player: Query<(Entity, &mut Velocity, &Transform), With<Ship>>,
     enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
     enemy_bullets: Query<(Entity, &Bullet)>,
@@ -105,9 +107,11 @@ pub fn use_skills(
     if (keys.just_pressed(KeyCode::ShiftLeft) || dash_btn) && skills.dash_cd <= 0.0 {
         let forward = (tf.rotation * Vec3::Y).truncate();
         vel.0 += forward * 600.0;
+        // Phase Echo extends the dash i-frames (+2 s/stack, spec VI.3).
+        let invuln = 0.3 + phase_echo_secs(upgrades.owned(UpgradeId::PhaseEcho));
         commands
             .entity(player_entity)
-            .insert(Invulnerable { seconds: 0.3 });
+            .insert(Invulnerable { seconds: invuln });
         skills.dash_cd = 2.0;
     }
 

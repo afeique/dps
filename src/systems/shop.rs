@@ -42,12 +42,13 @@ pub enum UpgradeId {
     Regen,
     LastStand,
     Executioner,
+    PhaseEcho,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 20] = [
+    pub const ALL: [UpgradeId; 21] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -68,6 +69,7 @@ impl UpgradeId {
         Self::Regen,
         Self::LastStand,
         Self::Executioner,
+        Self::PhaseEcho,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -95,6 +97,7 @@ impl UpgradeId {
             Self::Regen => 17,
             Self::LastStand => 18,
             Self::Executioner => 19,
+            Self::PhaseEcho => 20,
         }
     }
 
@@ -120,6 +123,7 @@ impl UpgradeId {
             Self::Regen => "Repair Field  (+0.5 HP/s)",
             Self::LastStand => "Last Stand    (cheat death 1x)",
             Self::Executioner => "Executioner   (+20% vs <25% HP)",
+            Self::PhaseEcho => "Phase Echo    (+2s dash invuln)",
         }
     }
 
@@ -146,6 +150,7 @@ impl UpgradeId {
             Self::Regen => 2400,
             Self::LastStand => 8000,
             Self::Executioner => 2600,
+            Self::PhaseEcho => 2000,
         }
     }
 
@@ -171,6 +176,7 @@ impl UpgradeId {
             Self::Regen => 6,
             Self::LastStand => 1,
             Self::Executioner => 5,
+            Self::PhaseEcho => 2,
         }
     }
 }
@@ -233,6 +239,12 @@ pub fn executioner_bonus(stacks: u32) -> f32 {
 
 /// HP fraction below which `executioner_bonus` applies (spec VI.3: <25%).
 pub const EXECUTE_THRESHOLD: f32 = 0.25;
+
+/// PHASE ECHO passive (spec VI.3): extra post-dash invulnerability, `2.0 ×
+/// stacks` seconds added on top of the dash's base i-frames.
+pub fn phase_echo_secs(stacks: u32) -> f32 {
+    2.0 * stacks as f32
+}
 
 /// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
 pub fn regen_rate(stacks: u32) -> f32 {
@@ -450,6 +462,7 @@ pub fn apply_upgrade(
         | UpgradeId::Thorns
         | UpgradeId::Regen
         | UpgradeId::LastStand
-        | UpgradeId::Executioner => {}
+        | UpgradeId::Executioner
+        | UpgradeId::PhaseEcho => {}
     }
 }
