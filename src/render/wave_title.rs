@@ -74,3 +74,84 @@ pub fn tick_wave_title(
         }
     }
 }
+
+// ── Pulse-phase toast (spec V.6: "pulse phase toast for P>0, 1600 ms") ──────────
+
+/// Marks a live reinforcement (later-pulse) toast.
+#[derive(Component)]
+pub struct PulseToast {
+    life: f32,
+}
+
+const PULSE_TOAST_LIFE: f32 = 1.6;
+
+/// Whether a pulse advance from `prev`→`cur` spawned pulses should toast: a *new*
+/// pulse (`cur > prev`) that isn't pulse 0 (`cur >= 2`, since `spawned_pulses` is
+/// 1 after pulse 0). The pure core of `show_pulse_toast`.
+pub fn should_toast_pulse(prev: usize, cur: usize) -> bool {
+    cur > prev && cur >= 2
+}
+
+/// Pop a brief "REINFORCEMENTS" toast when a wave's later pulse (P>0) spawns.
+pub fn show_pulse_toast(
+    mut commands: Commands,
+    wave: Res<Wave>,
+    mut last_wave: Local<usize>,
+    mut last_pulses: Local<usize>,
+    existing: Query<Entity, With<PulseToast>>,
+) {
+    let n = wave.number();
+    let p = wave.pulses_spawned();
+    // On wave change, sync without toasting (don't announce pulse 0 of a new wave).
+    if n != *last_wave {
+        *last_wave = n;
+        *last_pulses = p;
+        return;
+    }
+    let toast = should_toast_pulse(*last_pulses, p);
+    *last_pulses = p;
+    if !toast {
+        return;
+    }
+    for e in &existing {
+        commands.entity(e).despawn();
+    }
+    commands
+        .spawn((
+            PulseToast {
+                life: PULSE_TOAST_LIFE,
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Percent(34.0),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Text::new("REINFORCEMENTS"),
+                TextFont {
+                    font_size: 26.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.6, 0.25)),
+            ));
+        });
+}
+
+/// Count down + despawn pulse toasts.
+pub fn tick_pulse_toast(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut PulseToast)>,
+) {
+    for (e, mut t) in &mut q {
+        t.life -= time.delta_secs();
+        if t.life <= 0.0 {
+            commands.entity(e).despawn();
+        }
+    }
+}

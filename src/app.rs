@@ -87,6 +87,7 @@ impl Plugin for GamePlugin {
                     render::damage_numbers::float_damage_numbers,
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
+                    render::wave_title::tick_pulse_toast,
                     // Enemy burn/stun status auras.
                     render::status_fx::spawn_status_auras,
                     render::status_fx::update_status_auras,
@@ -182,6 +183,7 @@ impl Plugin for GamePlugin {
                     systems::survivor::check_survivor,
                     systems::missions::update_missions,
                     render::wave_title::show_wave_title,
+                    render::wave_title::show_pulse_toast,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

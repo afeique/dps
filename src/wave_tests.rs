@@ -2224,6 +2224,22 @@ fn mission_precision_counts_crits() {
     assert!(world.resource::<Mission>().done, "25 crits completes Precision");
 }
 
+// ── 67. pulse_toast_trigger ───────────────────────────────────────────────────
+
+/// The pulse-toast fires only on a *new* reinforcement pulse (P>0): pulse 0
+/// (spawned_pulses 0→1) is silent; later pulses (→2, →3) toast; no change is
+/// silent (spec V.6).
+#[test]
+fn pulse_toast_trigger() {
+    use crate::render::wave_title::should_toast_pulse;
+
+    assert!(!should_toast_pulse(0, 1), "pulse 0 is silent");
+    assert!(should_toast_pulse(1, 2), "first reinforcement toasts");
+    assert!(should_toast_pulse(2, 3), "later reinforcement toasts");
+    assert!(!should_toast_pulse(2, 2), "no new pulse → silent");
+    assert!(!should_toast_pulse(3, 2), "counter reset (wave change) → silent");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

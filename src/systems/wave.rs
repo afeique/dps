@@ -287,6 +287,12 @@ impl Wave {
         self.idx + 1
     }
 
+    /// How many pulses of the current wave have spawned (1 after pulse 0; ≥2
+    /// once a reinforcement pulse has arrived). Drives the pulse-toast overlay.
+    pub fn pulses_spawned(&self) -> usize {
+        self.spawned_pulses
+    }
+
     /// Advance to the next wave after the survivor-card reward is taken: clear
     /// the gate, bump the index, and start the between-wave breather.
     pub fn advance_after_reward(&mut self) {
