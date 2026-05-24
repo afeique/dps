@@ -44,6 +44,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::shop::ShopSel>()
             .init_resource::<systems::drops::HealthDropTimer>()
             .init_resource::<systems::survivor::SurvivorChoice>()
+            .init_resource::<systems::missions::Mission>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
@@ -178,6 +179,7 @@ impl Plugin for GamePlugin {
                 (
                     systems::flow::check_campaign_complete,
                     systems::survivor::check_survivor,
+                    systems::missions::update_missions,
                     render::wave_title::show_wave_title,
                 )
                     .run_if(in_state(GameState::Playing)),

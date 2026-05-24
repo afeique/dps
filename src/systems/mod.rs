@@ -13,6 +13,7 @@ pub mod enemy;
 pub mod enemy_ai;
 pub mod flow;
 pub mod input;
+pub mod missions;
 pub mod movement;
 pub mod power_weapon;
 pub mod powerups;

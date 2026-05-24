@@ -2121,6 +2121,70 @@ fn energy_orb_color_states() {
     assert!(ready.red > ready.blue && ready.green > ready.blue, "ready orb is gold ({ready:?})");
 }
 
+// ── 64. mission_assignment ────────────────────────────────────────────────────
+
+/// Boss waves (every 3rd) always assign `NoDamage`; non-boss waves roll one of
+/// the four trackable objectives; the reward scales with the wave (spec V.6).
+#[test]
+fn mission_assignment() {
+    use crate::resources::GameRng;
+    use crate::systems::missions::{mission_for_wave, mission_reward, MissionKind};
+
+    let mut rng = GameRng::default();
+
+    // Boss waves → always NoDamage.
+    for w in [3, 6, 9, 30] {
+        assert_eq!(mission_for_wave(w, &mut rng), MissionKind::NoDamage, "wave {w} is a boss wave");
+    }
+    // Non-boss waves → some valid objective (sample several rolls).
+    for w in [1, 2, 4, 5, 7] {
+        for _ in 0..8 {
+            let m = mission_for_wave(w, &mut rng);
+            assert!(matches!(
+                m,
+                MissionKind::NoDamage
+                    | MissionKind::FastKill
+                    | MissionKind::Asteroid
+                    | MissionKind::Streak
+            ));
+        }
+    }
+    // Reward scales with the wave.
+    assert!(mission_reward(30) > mission_reward(1));
+}
+
+// ── 65. mission_streak_completion ─────────────────────────────────────────────
+
+/// A Streak mission completes (and pays a gold bonus) once the kill-streak hits
+/// the target (spec V.6).
+#[test]
+fn mission_streak_completion() {
+    use crate::resources::{KillStreak, Score};
+    use crate::systems::missions::{update_missions, Mission, MissionKind};
+    use crate::systems::wave::Wave;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.insert_resource(Time::<()>::default());
+    world.init_resource::<Mission>();
+    world.insert_resource(Wave::default()); // wave 1 (non-boss)
+
+    let mut step = Schedule::default();
+    step.add_systems(update_missions);
+    // First run assigns this wave's mission (last_wave None → Some(1)).
+    step.run(world);
+
+    // Force a Streak objective, then drive the kill-streak to the target.
+    world.resource_mut::<Mission>().kind = MissionKind::Streak;
+    world.resource_mut::<Mission>().done = false;
+    world.resource_mut::<KillStreak>().kills = 12;
+    let gold_before = world.resource::<Score>().gold;
+
+    step.run(world);
+    assert!(world.resource::<Mission>().done, "streak ≥ 12 completes the mission");
+    assert!(world.resource::<Score>().gold > gold_before, "completion pays a gold bonus");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

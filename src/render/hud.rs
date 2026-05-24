@@ -13,6 +13,7 @@
 
 use crate::components::{Health, Lives, Shield, Ship};
 use crate::resources::{EnergyMeter, KillStreak, Score};
+use crate::systems::missions::Mission;
 use crate::systems::power_weapon::PowerWeapon;
 use crate::systems::wave::Wave;
 use crate::systems::weapons::CurrentWeapon;
@@ -25,6 +26,7 @@ pub enum HudText {
     Status,
     Econ,
     Streak,
+    Mission,
 }
 
 /// Marks the health-bar fill node (width % + color updated each frame).
@@ -166,6 +168,20 @@ pub fn setup_hud(mut commands: Commands) {
         },
     ));
 
+    // Mission line, below the status block.
+    commands.spawn((
+        HudText::Mission,
+        Text::new(""),
+        font.clone(),
+        TextColor(Color::srgb(0.7, 0.95, 0.8)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(108.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
+    ));
+
     // Economy readout, top-right.
     commands.spawn((
         HudText::Econ,
@@ -210,6 +226,7 @@ pub fn update_hud(
     score: Res<Score>,
     streak: Res<KillStreak>,
     wave: Res<Wave>,
+    mission: Res<Mission>,
     time: Res<Time>,
     mut texts: Query<(&mut Text, &HudText)>,
     mut bar: Query<(&mut Node, &mut BackgroundColor), With<HealthBarFill>>,
@@ -277,6 +294,10 @@ pub fn update_hud(
                 score.gold,
                 score.points
             ),
+            HudText::Mission => {
+                let mark = if mission.done { "  ✓" } else { "" };
+                format!("MISSION  {}{mark}", mission.kind.label())
+            }
             HudText::Streak => {
                 if streak.timer > 0.0 && streak.kills >= 10 {
                     let gold_pct = ((streak.gold_multiplier() - 1.0) * 100.0).round() as i32;
