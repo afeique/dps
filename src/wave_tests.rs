@@ -2342,6 +2342,78 @@ fn overcharge_cadence() {
     assert_eq!(hot, vec![4, 8, 12], "every 4th bullet (got {hot:?})");
 }
 
+// ── 71. static_discharge_hits_nearby ──────────────────────────────────────────
+
+/// Static Discharge pulses AoE damage to enemies within its radius and spares
+/// distant ones (spec VI.3); more stacks → faster + harder.
+#[test]
+fn static_discharge_hits_nearby() {
+    use crate::systems::passives::tick_static_discharge;
+    use crate::systems::shop::{
+        static_discharge_damage, static_discharge_interval, UpgradeId, Upgrades,
+    };
+
+    // Helpers scale with stacks.
+    assert!(static_discharge_interval(5) < static_discharge_interval(1), "more stacks → faster");
+    assert_eq!(static_discharge_damage(0), 0.0);
+    assert!(static_discharge_damage(5) > static_discharge_damage(1));
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.resource_mut::<Upgrades>().set(UpgradeId::StaticDischarge, 5);
+
+    // Player at origin; a near enemy (in radius) and a far one (well outside).
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let near = world
+        .spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Collider { radius: 18.0 },
+            Health {
+                current: 100.0,
+                max: 100.0,
+            },
+            Transform::from_xyz(80.0, 0.0, 0.0),
+        ))
+        .id();
+    let far = world
+        .spawn((
+            Enemy {
+                kind: EnemyKind::Hunter,
+            },
+            Collider { radius: 18.0 },
+            Health {
+                current: 100.0,
+                max: 100.0,
+            },
+            Transform::from_xyz(600.0, 0.0, 0.0),
+        ))
+        .id();
+
+    // Advance past the pulse interval so it fires this run.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(static_discharge_interval(5) + 0.1));
+    world.insert_resource(time);
+
+    #[derive(Resource, Default)]
+    struct Dmg(Vec<Entity>);
+    world.init_resource::<Dmg>();
+    fn collect(mut r: MessageReader<Damage>, mut d: ResMut<Dmg>) {
+        for ev in r.read() {
+            d.0.push(ev.target);
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_static_discharge, collect).chain());
+    step.run(world);
+
+    let hit = &world.resource::<Dmg>().0;
+    assert!(hit.contains(&near), "discharge damages the near enemy");
+    assert!(!hit.contains(&far), "discharge spares the far enemy");
+}
+
 // ── 62. status_aura_lifecycle ─────────────────────────────────────────────────
 
 /// A burn aura spawns when an enemy gains `Burning`, follows the enemy, and

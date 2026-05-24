@@ -267,6 +267,8 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::update_mines,
                         systems::power_weapon::update_beams,
                         systems::status::tick_burning,
+                        // Static Discharge: periodic AoE pulse around the player.
+                        systems::passives::tick_static_discharge,
                         // Apply all queued shoves last (bullet _KNOCK + Nova/Mine
                         // knockback) so they land the same tick.
                         systems::collision::apply_knockback,

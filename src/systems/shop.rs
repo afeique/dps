@@ -44,12 +44,13 @@ pub enum UpgradeId {
     Executioner,
     PhaseEcho,
     Overcharge,
+    StaticDischarge,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 22] = [
+    pub const ALL: [UpgradeId; 23] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -72,6 +73,7 @@ impl UpgradeId {
         Self::Executioner,
         Self::PhaseEcho,
         Self::Overcharge,
+        Self::StaticDischarge,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -101,6 +103,7 @@ impl UpgradeId {
             Self::Executioner => 19,
             Self::PhaseEcho => 20,
             Self::Overcharge => 21,
+            Self::StaticDischarge => 22,
         }
     }
 
@@ -128,6 +131,7 @@ impl UpgradeId {
             Self::Executioner => "Executioner   (+20% vs <25% HP)",
             Self::PhaseEcho => "Phase Echo    (+2s dash invuln)",
             Self::Overcharge => "Overcharge    (every Nth shot ×3)",
+            Self::StaticDischarge => "Static Disch. (periodic AoE)",
         }
     }
 
@@ -156,6 +160,7 @@ impl UpgradeId {
             Self::Executioner => 2600,
             Self::PhaseEcho => 2000,
             Self::Overcharge => 1900,
+            Self::StaticDischarge => 2300,
         }
     }
 
@@ -183,6 +188,7 @@ impl UpgradeId {
             Self::Executioner => 5,
             Self::PhaseEcho => 2,
             Self::Overcharge => 4,
+            Self::StaticDischarge => 5,
         }
     }
 }
@@ -262,6 +268,17 @@ pub fn overcharge_interval(stacks: u32) -> u32 {
     } else {
         8 - stacks.min(4)
     }
+}
+
+/// STATIC DISCHARGE passive (spec VI.3): seconds between AoE pulses, faster with
+/// more stacks (`max(1.0, 2.0 − 0.2×stacks)`). Only meaningful when owned.
+pub fn static_discharge_interval(stacks: u32) -> f32 {
+    (2.0 - 0.2 * stacks as f32).max(1.0)
+}
+
+/// STATIC DISCHARGE damage per pulse: `4.0 × stacks` (0 = off).
+pub fn static_discharge_damage(stacks: u32) -> f32 {
+    4.0 * stacks as f32
 }
 
 /// Passive-regen rate HP/s with `Regen` stacks (spec II.2: `min(3.0, 0.5×stacks)`).
@@ -482,6 +499,7 @@ pub fn apply_upgrade(
         | UpgradeId::LastStand
         | UpgradeId::Executioner
         | UpgradeId::PhaseEcho
-        | UpgradeId::Overcharge => {}
+        | UpgradeId::Overcharge
+        | UpgradeId::StaticDischarge => {}
     }
 }
