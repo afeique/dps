@@ -2048,3 +2048,37 @@ fn asteroid_wireframe_mesh() {
     assert_eq!(col[3], colors[b]);
     assert_ne!(colors[a], colors[b], "the gradient varies vertex-to-vertex");
 }
+
+// ── 60. lightning_bolt_points ─────────────────────────────────────────────────
+
+/// The Lance/Arc bolt geometry (spec III.7): anchored endpoints on the beam line,
+/// monotonic along its length, bounded interior jag, and a different jag per seed
+/// (so it crackles frame to frame).
+#[test]
+fn lightning_bolt_points() {
+    use crate::systems::power_weapon::bolt_points;
+
+    let length = 300.0;
+    let pts = bolt_points(length, 1.23);
+    assert!(pts.len() >= 5, "enough segments ({})", pts.len());
+
+    // Endpoints anchored on the beam line (y=0), spanning 0..length on x.
+    assert_eq!(pts[0], Vec2::ZERO, "starts at the origin");
+    let last = *pts.last().unwrap();
+    assert!(
+        (last.x - length).abs() < 1e-3 && last.y.abs() < 1e-6,
+        "ends at (length, 0): {last:?}"
+    );
+
+    // x strictly increases; interior y jag stays within the amplitude bound.
+    let amp = (length * 0.05).min(10.0);
+    for w in pts.windows(2) {
+        assert!(w[1].x > w[0].x, "x is monotonic along the bolt");
+    }
+    for p in &pts[1..pts.len() - 1] {
+        assert!(p.y.abs() <= amp + 1e-3, "interior jag bounded by amp ({p:?})");
+    }
+
+    // A different seed re-rolls the jag (the bolt crackles).
+    assert_ne!(pts, bolt_points(length, 9.99), "seed changes the jag");
+}

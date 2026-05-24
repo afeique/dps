@@ -285,23 +285,44 @@ pub fn nova_ring_shape() -> Shape {
         .build()
 }
 
-/// A unit beam quad — `x ∈ [0,1]`, `y ∈ [−0.5, 0.5]` — that `place_beam` scales
-/// to (length × width) and rotates/translates so its base sits at the nose and
-/// it stretches along the beam. Fill-only and HDR-emissive so bloom supplies the
-/// glow (a scaled stroke would smear); Lance is hot green, Arc hot violet.
-pub fn beam_shape(kind: BeamKind) -> Shape {
-    let fill = match kind {
-        // `#44ff44` (Lance) / `#a855ff` (Arc), pushed past 1.0 to feed the bloom.
-        BeamKind::Lance => Color::linear_rgb(0.4, 7.0, 0.4),
-        BeamKind::Arc => Color::linear_rgb(4.0, 1.2, 8.0),
+/// Lightning-bolt jitter points from `(0,0)` to `(length,0)` along +X (local
+/// space; `place_bolt` rotates/translates them onto the beam). Endpoints are
+/// anchored; interior points jag perpendicular (Y) by up to `amp`. `seed`
+/// (re-rolled each frame from time) makes the bolt crackle (spec III.7 zig-zag).
+pub fn bolt_points(length: f32, seed: f32) -> Vec<Vec2> {
+    let segments = ((length / 22.0).round() as u32).clamp(4, 16);
+    let amp = (length * 0.05).min(10.0);
+    let mut pts = Vec::with_capacity(segments as usize + 1);
+    for i in 0..=segments {
+        let f = i as f32 / segments as f32;
+        let x = f * length;
+        let y = if i == 0 || i == segments {
+            0.0 // anchor the ends on the beam line
+        } else {
+            // GLSL-style hash → [0,1). (Rust's `f32::fract` keeps the sign, so
+            // use `x - floor(x)` or the jag overshoots its amplitude.)
+            let raw = (i as f32 * 12.9898 + seed * 78.233).sin() * 43758.547;
+            let h = raw - raw.floor();
+            (h * 2.0 - 1.0) * amp
+        };
+        pts.push(Vec2::new(x, y));
+    }
+    pts
+}
+
+/// Build the jagged bolt `Shape` for `kind` at the given `length` + crackle
+/// `seed`. HDR-emissive so bloom supplies the glow (Lance hot green, Arc violet).
+fn bolt_shape(kind: BeamKind, length: f32, seed: f32) -> Shape {
+    let (color, width) = match kind {
+        BeamKind::Lance => (Color::linear_rgb(0.5, 9.0, 0.6), 3.0),
+        BeamKind::Arc => (Color::linear_rgb(5.0, 1.5, 10.0), 2.5),
     };
-    let path = ShapePath::new()
-        .move_to(Vec2::new(0.0, -0.5))
-        .line_to(Vec2::new(1.0, -0.5))
-        .line_to(Vec2::new(1.0, 0.5))
-        .line_to(Vec2::new(0.0, 0.5))
-        .close();
-    ShapeBuilder::with(&path).fill(fill).build()
+    let pts = bolt_points(length.max(0.001), seed);
+    let mut path = ShapePath::new().move_to(pts[0]);
+    for p in &pts[1..] {
+        path = path.line_to(*p);
+    }
+    ShapeBuilder::with(&path).stroke((color, width)).build()
 }
 
 /// Spawn an active beam of `kind` anchored at `origin` (used by the fire path +
@@ -320,7 +341,8 @@ pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
             range: BEAM_RANGE,
             width,
         },
-        beam_shape(kind),
+        // Initial bolt; `update_beams` rebuilds it (length + crackle) each frame.
+        bolt_shape(kind, 1.0, 0.0),
         Transform::from_translation(origin.extend(0.7)),
     ));
 }
@@ -350,14 +372,23 @@ pub fn steer_toward(current: Vec2, desired_dir: Vec2, max_angle: f32) -> Vec2 {
     rotate(cur_dir, angle.clamp(-max_angle, max_angle)) * speed
 }
 
-/// Stretch the unit beam quad so its base sits at `origin` and it runs `length`
-/// world-units along `dir` with the given full `width`. `dir` is assumed
-/// normalized.
+/// Rebuild the beam's jagged bolt `Shape` (length + crackle `seed`) and anchor it
+/// at `origin` pointing along `dir`. Scale stays 1 — the bolt geometry is already
+/// in world units, so the lightning width/jag don't distort (unlike a scaled quad).
 #[inline]
-fn place_beam(tf: &mut Transform, origin: Vec2, dir: Vec2, length: f32, width: f32) {
+fn place_bolt(
+    shape: &mut Shape,
+    tf: &mut Transform,
+    kind: BeamKind,
+    origin: Vec2,
+    dir: Vec2,
+    length: f32,
+    seed: f32,
+) {
+    *shape = bolt_shape(kind, length, seed);
     tf.translation = origin.extend(0.7);
     tf.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));
-    tf.scale = Vec3::new(length.max(0.001), width, 1.0);
+    tf.scale = Vec3::ONE;
 }
 
 /// Does the ray `(origin, dir, range)` with half-width `half_w` strike an enemy
@@ -627,16 +658,18 @@ pub fn update_beams(
     mut dmg: MessageWriter<Damage>,
     player: Query<(&Transform, &Intent), With<Ship>>,
     enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
-    mut beams: Query<(Entity, &mut Beam, &mut Transform), (Without<Ship>, Without<Enemy>)>,
+    mut beams: Query<(Entity, &mut Beam, &mut Transform, &mut Shape), (Without<Ship>, Without<Enemy>)>,
 ) {
     let dt = time.delta_secs();
     let mult = streak.multiplier();
+    // Re-rolled each frame so the bolt crackles (spec III.7).
+    let seed = time.elapsed_secs() * 60.0;
 
     // Copy out the player's transform + intent (both `Copy`) so this immutable
     // borrow doesn't conflict with the `&mut Transform` beam query below.
     let player_data = player.single().ok().map(|(t, i)| (*t, *i));
 
-    for (be, mut beam, mut tf) in &mut beams {
+    for (be, mut beam, mut tf, mut shape) in &mut beams {
         beam.life -= dt;
 
         let Some((ptf, intent)) = player_data else {
@@ -680,7 +713,7 @@ pub fn update_beams(
                     }
                     None => beam.range,
                 };
-                place_beam(&mut tf, origin, fwd, length, beam.width);
+                place_bolt(&mut shape, &mut tf, beam.kind, origin, fwd, length, seed);
             }
             BeamKind::Arc => {
                 // Aim point: the cursor while mouse-aiming, else straight ahead.
@@ -709,9 +742,11 @@ pub fn update_beams(
                         let to = epos - origin;
                         let len = to.length();
                         let dir = if len > 1e-6 { to / len } else { fwd };
-                        place_beam(&mut tf, origin, dir, len, beam.width);
+                        place_bolt(&mut shape, &mut tf, beam.kind, origin, dir, len, seed);
                     }
-                    None => place_beam(&mut tf, origin, fwd, beam.range, beam.width),
+                    None => {
+                        place_bolt(&mut shape, &mut tf, beam.kind, origin, fwd, beam.range, seed)
+                    }
                 }
             }
         }
