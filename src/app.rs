@@ -48,6 +48,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::LootFeed>()
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
+            .init_resource::<systems::hitstop::Hitstop>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
@@ -309,6 +310,9 @@ impl Plugin for GamePlugin {
                     systems::enemy::boss_pair_rage,
                     // Combat Medic: a kill after taking a hit heals the player.
                     systems::passives::tick_combat_medic,
+                    // Hitstop: a boss/mini-boss `Death` freezes the sim a few
+                    // frames (spec I.1) — fires on the kill tick (chain running).
+                    systems::hitstop::trigger_hitstop,
                     // Drops — runs after apply_damage so `Death` is available.
                     (
                         systems::drops::spawn_drops,
@@ -346,7 +350,15 @@ impl Plugin for GamePlugin {
                         .chain(),
                 )
                     .chain()
-                    .run_if(in_state(GameState::Playing)),
+                    // Gate the whole sim off while a hitstop freeze is active
+                    // (spec I.1) — presentation (Update) keeps animating.
+                    .run_if(in_state(GameState::Playing).and(systems::hitstop::sim_active)),
+            )
+            // Drain the freeze every FixedUpdate tick — UNGATED by `sim_active`
+            // (gating it would deadlock the freeze), only by the Playing state.
+            .add_systems(
+                FixedUpdate,
+                systems::hitstop::tick_hitstop.run_if(in_state(GameState::Playing)),
             );
     }
 }

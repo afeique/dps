@@ -3364,3 +3364,69 @@ fn formation_lerps_and_expires() {
     assert_eq!(world.resource::<Formations>().active.len(), 0, "formation expired");
     assert!(world.get::<FormationMember>(ents[0]).is_none(), "members released back to AI");
 }
+
+// ── 94. hitstop_triggers_and_drains ───────────────────────────────────────────
+
+/// Hitstop coalesces via `max`, fires only on boss/mini-boss deaths, and drains
+/// to zero over time (spec I.1).
+#[test]
+fn hitstop_triggers_and_drains() {
+    use crate::systems::hitstop::{
+        tick_hitstop, trigger_hitstop, Hitstop, BOSS_HITSTOP, MINI_HITSTOP,
+    };
+
+    // Coalesce via max (never sums).
+    let mut h = Hitstop::default();
+    assert!(!h.frozen());
+    h.add(0.05);
+    h.add(0.13);
+    h.add(0.02);
+    assert!((h.secs - 0.13).abs() < 1e-6, "coalesces via max");
+    assert!(h.frozen());
+
+    // trigger_hitstop: a normal kill does nothing; a boss kill freezes.
+    let mut app = test_app();
+    app.world_mut().init_resource::<Hitstop>();
+    let world = app.world_mut();
+    let mut step = Schedule::default();
+    step.add_systems(trigger_hitstop);
+
+    let death = |tier: u8, mini: bool| Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Titan),
+        boss_tier: tier,
+        mini_boss: mini,
+    };
+
+    world.write_message(death(0, false)); // normal kill
+    step.run(world);
+    assert_eq!(world.resource::<Hitstop>().secs, 0.0, "normal kill → no hitstop");
+
+    world.write_message(death(2, false)); // boss kill
+    step.run(world);
+    assert!(
+        (world.resource::<Hitstop>().secs - BOSS_HITSTOP).abs() < 1e-6,
+        "boss kill freezes the sim"
+    );
+
+    // Drain it with the ungated ticker.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    let mut drain = Schedule::default();
+    drain.add_systems(tick_hitstop);
+    drain.run(world);
+    assert!((world.resource::<Hitstop>().secs - 0.03).abs() < 1e-5, "drains by dt");
+    drain.run(world);
+    assert_eq!(world.resource::<Hitstop>().secs, 0.0, "clamps to 0 — freeze always ends");
+    assert!(!world.resource::<Hitstop>().frozen());
+
+    // A mini-boss kill gives the lighter freeze.
+    world.write_message(death(0, true));
+    step.run(world);
+    assert!(
+        (world.resource::<Hitstop>().secs - MINI_HITSTOP).abs() < 1e-6,
+        "mini-boss kill → lighter freeze"
+    );
+}
