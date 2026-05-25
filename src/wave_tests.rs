@@ -1902,18 +1902,66 @@ fn death_and_hurt_trigger_shake() {
 
 // ── 55. screen_flash_add_keeps_max ────────────────────────────────────────────
 
-/// `ScreenFlash::add` keeps the stronger trigger and clamps the alpha to 1.0.
+/// `ScreenFlash::add` keeps the stronger trigger (whose color wins) and clamps
+/// the alpha to 1.0.
 #[test]
 fn screen_flash_add_keeps_max() {
-    use crate::render::flash::ScreenFlash;
+    use crate::render::flash::{ScreenFlash, FLASH_GOLD};
 
     let mut f = ScreenFlash::default();
     assert_eq!(f.intensity, 0.0);
-    f.add(0.42);
-    f.add(0.1);
+    f.add(Color::WHITE, 0.42);
+    f.add(Color::WHITE, 0.1);
     assert_eq!(f.intensity, 0.42, "a weaker trigger does not lower the flash");
-    f.add(5.0);
+
+    // A stronger gold trigger wins both the alpha and the color.
+    f.add(FLASH_GOLD, 0.7);
+    assert_eq!(f.intensity, 0.7);
+    assert_eq!(f.color, FLASH_GOLD, "the stronger trigger's color wins");
+    // A weaker trigger changes neither.
+    f.add(Color::WHITE, 0.3);
+    assert_eq!(f.intensity, 0.7);
+    assert_eq!(f.color, FLASH_GOLD, "weaker trigger keeps the prior color");
+
+    f.add(Color::WHITE, 5.0);
     assert_eq!(f.intensity, 1.0, "alpha is clamped to 1.0");
+}
+
+// ── 91. last_stand_triggers_gold_flash ────────────────────────────────────────
+
+/// `trigger_last_stand_flash` fires a gold flash on the `LastStandUsed`
+/// false→true transition (cheat-death), once (spec I.2 gold channel).
+#[test]
+fn last_stand_triggers_gold_flash() {
+    use crate::render::flash::{trigger_last_stand_flash, ScreenFlash, FLASH_GOLD, LAST_STAND_FLASH};
+    use crate::resources::LastStandUsed;
+
+    let mut app = test_app();
+    app.world_mut().init_resource::<ScreenFlash>();
+    let mut step = Schedule::default();
+    step.add_systems(trigger_last_stand_flash);
+
+    // Not yet spent → no flash.
+    step.run(app.world_mut());
+    assert_eq!(app.world().resource::<ScreenFlash>().intensity, 0.0, "no flash before Last Stand");
+
+    // Spend it → gold flash fires.
+    app.world_mut().resource_mut::<LastStandUsed>().0 = true;
+    step.run(app.world_mut());
+    {
+        let f = app.world().resource::<ScreenFlash>();
+        assert!((f.intensity - LAST_STAND_FLASH).abs() < 1e-3, "cheat-death fires the gold flash");
+        assert_eq!(f.color, FLASH_GOLD, "the flash is gold");
+    }
+
+    // Decay it manually; staying spent does NOT re-fire (one transition only).
+    app.world_mut().resource_mut::<ScreenFlash>().intensity = 0.0;
+    step.run(app.world_mut());
+    assert_eq!(
+        app.world().resource::<ScreenFlash>().intensity,
+        0.0,
+        "no re-fire while it stays spent"
+    );
 }
 
 // ── 56. rage_triggers_screen_flash ────────────────────────────────────────────

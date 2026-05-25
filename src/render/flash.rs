@@ -1,24 +1,37 @@
 //! Screen flash (spec I.2) — the companion to camera shake (`render::shake`).
 //!
-//! A fading full-screen white overlay (a camera-child sprite, so it covers the
-//! view and rides the shake offset) flashes on impactful events — currently
-//! boss-rage activation (`Added<Raged>`, spec IV.7 "screen flash 0.42"). Purely
-//! additive presentation: `ScreenFlash::add` keeps the stronger trigger and
-//! `apply_screen_flash` drives the overlay alpha + decays it. Reusable — other
-//! events can call `ScreenFlash::add`. (Spec's separate gold channel deferred.)
+//! A fading full-screen overlay (a camera-child sprite, so it covers the view
+//! and rides the shake offset) flashes on impactful events: a **white** flash on
+//! boss-rage activation (`Added<Raged>`, spec IV.7 "screen flash 0.42") and a
+//! **gold** flash on a Last Stand cheat-death (spec I.2 gold channel). Purely
+//! additive presentation: `ScreenFlash::add` keeps the stronger trigger (whose
+//! color wins) and `apply_screen_flash` drives the overlay color + alpha + decay.
 
 use crate::components::Raged;
+use crate::resources::LastStandUsed;
 use bevy::prelude::*;
 
-/// Current flash alpha (0..1). `init_resource` in app.rs.
-#[derive(Resource, Default)]
+/// Current flash alpha (0..1) + the color of the active flash. `init_resource`.
+#[derive(Resource)]
 pub struct ScreenFlash {
     pub intensity: f32,
+    /// RGB of the active flash (alpha comes from `intensity`).
+    pub color: Color,
+}
+
+impl Default for ScreenFlash {
+    fn default() -> Self {
+        Self { intensity: 0.0, color: Color::WHITE }
+    }
 }
 
 impl ScreenFlash {
-    /// Trigger a flash, keeping the stronger of current/new (clamped to 1).
-    pub fn add(&mut self, alpha: f32) {
+    /// Trigger a `color` flash at `alpha`, keeping the stronger of current/new
+    /// (clamped to 1); the stronger trigger's color wins the overlay tint.
+    pub fn add(&mut self, color: Color, alpha: f32) {
+        if alpha >= self.intensity {
+            self.color = color;
+        }
         self.intensity = self.intensity.max(alpha).min(1.0);
     }
 }
@@ -29,6 +42,10 @@ pub struct FlashOverlay;
 
 /// Rage-activation flash alpha (spec IV.7 "screen flash 0.42").
 pub const RAGE_FLASH: f32 = 0.42;
+/// Last Stand cheat-death flash alpha — a strong gold pop for the dramatic beat.
+pub const LAST_STAND_FLASH: f32 = 0.7;
+/// Gold tint for the Last Stand flash (HDR-ish warm gold).
+pub const FLASH_GOLD: Color = Color::srgb(1.0, 0.82, 0.25);
 /// Flash decay (alpha/sec) — a 0.42 flash fades in ~0.2 s.
 const FLASH_DECAY: f32 = 2.2;
 /// Overlay edge length (px) — generously larger than any window so it always
@@ -57,18 +74,31 @@ pub fn setup_screen_flash(mut commands: Commands, camera: Query<Entity, With<Cam
 /// Flash white when a boss enters rage (`Added<Raged>`, spec IV.7).
 pub fn trigger_screen_flash(mut flash: ResMut<ScreenFlash>, raged: Query<Entity, Added<Raged>>) {
     if !raged.is_empty() {
-        flash.add(RAGE_FLASH);
+        flash.add(Color::WHITE, RAGE_FLASH);
     }
 }
 
-/// Drive the overlay alpha from the flash intensity, then decay (spec I.2).
+/// Flash **gold** when Last Stand cheats death (spec I.2/III.5 gold channel) —
+/// detects the `LastStandUsed` false→true transition (it's spent once per run).
+pub fn trigger_last_stand_flash(
+    last_stand: Res<LastStandUsed>,
+    mut flash: ResMut<ScreenFlash>,
+    mut prev: Local<bool>,
+) {
+    if last_stand.0 && !*prev {
+        flash.add(FLASH_GOLD, LAST_STAND_FLASH);
+    }
+    *prev = last_stand.0;
+}
+
+/// Drive the overlay color + alpha from the flash, then decay (spec I.2).
 pub fn apply_screen_flash(
     time: Res<Time>,
     mut flash: ResMut<ScreenFlash>,
     mut overlay: Query<&mut Sprite, With<FlashOverlay>>,
 ) {
     if let Ok(mut sprite) = overlay.single_mut() {
-        sprite.color.set_alpha(flash.intensity);
+        sprite.color = flash.color.with_alpha(flash.intensity);
     }
     flash.intensity = (flash.intensity - FLASH_DECAY * time.delta_secs()).max(0.0);
 }

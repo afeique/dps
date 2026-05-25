@@ -118,9 +118,11 @@ impl Plugin for GamePlugin {
                         render::shake::apply_screen_shake,
                     )
                         .chain(),
-                    // Screen flash on boss rage (spec I.2 / IV.7).
+                    // Screen flash: white on boss rage (spec I.2 / IV.7), gold on
+                    // a Last Stand cheat-death (spec I.2 gold channel).
                     (
                         render::flash::trigger_screen_flash,
+                        render::flash::trigger_last_stand_flash,
                         render::flash::apply_screen_flash,
                     )
                         .chain(),
