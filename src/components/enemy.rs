@@ -240,6 +240,33 @@ pub const SPORE_DRONE_INTERVAL: f32 = 4.0;
 /// Max live Spore Carrier drones (enemy-data.js cap: 16).
 pub const SPORE_DRONE_CAP: usize = 16;
 
+/// A **support aura** enemy (Lumen Drone, support-aura.js `shield`): every
+/// `interval` s it stamps an [`AllyShield`] on allies within `radius`. Kill it to
+/// drop the escort's shield (it lingers [`AURA_LINGER`] s after the last pulse).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SupportAura {
+    pub radius: f32,
+    pub amount: f32,
+    pub interval: f32,
+    pub timer: f32,
+}
+
+/// A lingering ally damage-reduction buff from a [`SupportAura`]: incoming damage
+/// ×(1 − `amount`) while present. Refreshed each aura pulse; `secs` counts down
+/// so killing the support drops it shortly after.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct AllyShield {
+    pub secs: f32,
+    pub amount: f32,
+}
+
+/// Lumen Drone aura (support-aura.js / enemy-data.js): r180, 40% DR, every 300 ms,
+/// lingering 400 ms.
+pub const AURA_RADIUS: f32 = 180.0;
+pub const AURA_AMOUNT: f32 = 0.4;
+pub const AURA_INTERVAL: f32 = 0.3;
+pub const AURA_LINGER: f32 = 0.4;
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

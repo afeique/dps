@@ -91,6 +91,7 @@ pub fn bullet_hits_enemy(
             Option<&FrontalShield>,
             Has<Frozen>,
             Has<Oil>,
+            Option<&AllyShield>,
         ),
         (With<Enemy>, Without<Ship>),
     >,
@@ -132,8 +133,20 @@ pub fn bullet_hits_enemy(
         let has_volt = belem_set.is_some_and(|s| s.contains(Element::Volt));
         let has_radiant = belem_set.is_some_and(|s| s.contains(Element::Radiant));
         let has_pyro = belem_set.is_some_and(|s| s.contains(Element::Pyro));
-        for (enemy_e, etf, ec, ehp, eres, ecorrode, econduct, earmor, efrontal, efrozen, eoil) in
-            &enemies
+        for (
+            enemy_e,
+            etf,
+            ec,
+            ehp,
+            eres,
+            ecorrode,
+            econduct,
+            earmor,
+            efrontal,
+            efrozen,
+            eoil,
+            eshield,
+        ) in &enemies
         {
             let reach = bc.radius + ec.radius;
             let d2 = btf
@@ -169,8 +182,10 @@ pub fn bullet_hits_enemy(
                     ),
                     _ => false,
                 };
+                // Lumen Drone ally-shield: incoming damage ×(1 − amount) (EN).
+                let ally = eshield.map_or(1.0, |s| 1.0 - s.amount);
                 let amount = enemy_defense_damage(
-                    bullet.damage * streak_mult * crit_mult * exec * resist_mult,
+                    bullet.damage * streak_mult * crit_mult * exec * resist_mult * ally,
                     ecorrode.map_or(0, |c| c.stacks),
                     econduct.is_some(),
                     has_volt,
@@ -229,7 +244,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

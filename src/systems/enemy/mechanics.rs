@@ -5,7 +5,8 @@
 
 use crate::combat::element::Element;
 use crate::components::{
-    Drone, DroneSpawner, EnemyKind, PlayerCorrode, Ship, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
+    AllyShield, Drone, DroneSpawner, Enemy, EnemyKind, PlayerCorrode, Ship, SupportAura,
+    AURA_LINGER, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
 };
 use crate::messages::{Damage, Death};
 use crate::systems::player_status::apply_player_status;
@@ -65,6 +66,52 @@ pub fn spore_spawner(
                 crate::systems::enemy::spawn_drone(&mut commands, tf.translation.truncate());
                 budget -= 1;
             }
+        }
+    }
+}
+
+/// Each **Lumen Drone** pulses its `SupportAura` every `interval` s, stamping a
+/// refreshing [`AllyShield`] on every enemy within `radius` (the `shield` aura).
+/// Both queries read `&Transform` immutably (the drone is in both), so no
+/// conflict; the buff is applied via deferred `Commands`.
+pub fn lumen_aura(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut lumens: Query<(&Transform, &mut SupportAura)>,
+    allies: Query<(Entity, &Transform), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+    for (ltf, mut aura) in &mut lumens {
+        aura.timer -= dt;
+        if aura.timer > 0.0 {
+            continue;
+        }
+        aura.timer = aura.interval;
+        let center = ltf.translation.truncate();
+        let r2 = aura.radius * aura.radius;
+        for (e, atf) in &allies {
+            if atf.translation.truncate().distance_squared(center) <= r2 {
+                commands.entity(e).insert(AllyShield {
+                    secs: AURA_LINGER,
+                    amount: aura.amount,
+                });
+            }
+        }
+    }
+}
+
+/// Count down each `AllyShield` and remove it on expiry — so when the supporting
+/// Lumen Drone dies (stops refreshing), the buff lapses after `AURA_LINGER` s.
+pub fn tick_ally_shield(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut AllyShield)>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut s) in &mut q {
+        s.secs -= dt;
+        if s.secs <= 0.0 {
+            commands.entity(e).remove::<AllyShield>();
         }
     }
 }

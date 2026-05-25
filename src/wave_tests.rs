@@ -1076,6 +1076,73 @@ fn hazard_dropper_drops_hazard() {
     assert_eq!(world.query::<&HazardField>().iter(world).count(), 1, "dropper spawned a hazard");
 }
 
+/// EN: a Lumen Drone's aura pulse stamps an AllyShield on allies in range only.
+#[test]
+fn lumen_aura_shields_nearby_allies() {
+    use crate::components::{AllyShield, SupportAura, AURA_AMOUNT, AURA_INTERVAL, AURA_RADIUS};
+    use crate::systems::enemy::mechanics::lumen_aura;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((
+        Enemy { kind: EnemyKind::LumenDrone },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        SupportAura { radius: AURA_RADIUS, amount: AURA_AMOUNT, interval: AURA_INTERVAL, timer: 0.05 },
+    ));
+    let near = world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(50.0, 0.0, 0.0))).id();
+    let far = world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(500.0, 0.0, 0.0))).id();
+
+    let mut step = Schedule::default();
+    step.add_systems(lumen_aura);
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1)); // past the 0.05 pulse timer
+    world.insert_resource(time);
+    step.run(world);
+
+    assert!(world.get::<AllyShield>(near).is_some(), "near ally shielded");
+    assert!(world.get::<AllyShield>(far).is_none(), "far ally out of range");
+}
+
+/// EN: an AllyShield reduces incoming bullet damage by its `amount` (×0.6 at 0.4).
+/// Compared across two fresh apps (same seeded RNG → same crit roll) so only the
+/// shield differs.
+#[test]
+fn ally_shield_reduces_bullet_damage() {
+    use crate::components::{AllyShield, Bullet, BulletKind};
+
+    fn hp_loss(shielded: bool) -> f32 {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let mut ec = world.spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        if shielded {
+            ec.insert(AllyShield { secs: 1.0, amount: 0.4 });
+        }
+        let e = ec.id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 5.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        100.0 - world.get::<Health>(e).unwrap().current
+    }
+
+    let unshielded = hp_loss(false);
+    let shielded = hp_loss(true);
+    assert!(unshielded > 0.0 && shielded > 0.0, "both took damage");
+    assert!(
+        (shielded - unshielded * 0.6).abs() < 1e-3,
+        "ally shield ×0.6 ({shielded} vs {unshielded})"
+    );
+}
+
 /// EN: a Hydra splits into 2 lings on death; a ling (`Splitter.lings == 0`) does
 /// not split again.
 #[test]

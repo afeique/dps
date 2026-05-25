@@ -632,6 +632,15 @@ fn spawn_enemy(
         EnemyKind::Plaguebearer => {
             e.insert(crate::systems::hazard::plaguebearer_dropper());
         }
+        // Lumen Drone shields nearby allies on a timer (EN).
+        EnemyKind::LumenDrone => {
+            e.insert(SupportAura {
+                radius: AURA_RADIUS,
+                amount: AURA_AMOUNT,
+                interval: AURA_INTERVAL,
+                timer: AURA_INTERVAL,
+            });
+        }
         _ => {}
     }
 

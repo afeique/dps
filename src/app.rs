@@ -265,12 +265,20 @@ impl Plugin for GamePlugin {
                         systems::enemy::rage_homing_steer,
                     )
                         .chain(),
-                    // Spawner (enemies + the wave's asteroid budget).
-                    systems::wave::spawn_waves,
-                    // Spore Carriers birth Wasp drones on a timer (EN).
-                    systems::enemy::mechanics::spore_spawner,
-                    // Plaguebearers drip a Toxic acid trail (EN hazard fields).
-                    systems::hazard::drop_hazards,
+                    // Spawner phase (one chained sub-group to stay under Bevy's
+                    // 20-element outer-tuple limit): waves + the EN timer-driven
+                    // spawns/auras.
+                    (
+                        // Enemies + the wave's asteroid budget.
+                        systems::wave::spawn_waves,
+                        // Spore Carriers birth Wasp drones on a timer (EN).
+                        systems::enemy::mechanics::spore_spawner,
+                        // Plaguebearers drip a Toxic acid trail (EN hazard fields).
+                        systems::hazard::drop_hazards,
+                        // Lumen Drones shield nearby allies (EN support aura).
+                        systems::enemy::mechanics::lumen_aura,
+                    )
+                        .chain(),
                     // Fire intent → bullets.
                     (
                         systems::enemy::firing::enemy_firing,
@@ -350,6 +358,8 @@ impl Plugin for GamePlugin {
                         systems::status::tick_status_timers,
                         // Count down the player chill/corrode timers (E5).
                         systems::player_status::tick_player_statuses,
+                        // Expire ally-shield buffs (EN — drops when the Lumen dies).
+                        systems::enemy::mechanics::tick_ally_shield,
                         systems::skills::tick_bulwark,
                         systems::skills::tick_repair,
                         systems::skills::tick_tractor,
