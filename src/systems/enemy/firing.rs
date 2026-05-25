@@ -89,7 +89,7 @@ pub fn enemy_firing(
             // JS: 3-shot burst (75 ms spacing) fired in `faceAngle` direction.
             // Approximation: single aimed shot each cooldown expiry; the
             // `FireCooldown` already models the between-burst gap (0.6–2.2 s).
-            EnemyKind::Hunter => {
+            EnemyKind::Hunter | EnemyKind::AshenDetonator => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
@@ -103,7 +103,7 @@ pub fn enemy_firing(
             // ── Guardian — guardian_spread ────────────────────────────────────
             // JS: 5-bullet fan at ±0.5, ±0.25, 0 rad offsets from `faceAngle`.
             // Simplified to 3 shots (±18° ≈ 0.314 rad and center) to stay cheap.
-            EnemyKind::Guardian => {
+            EnemyKind::Guardian | EnemyKind::Glacier => {
                 for offset in [-0.314_f32, 0.0, 0.314] {
                     let dir = rotate(aim_dir, offset);
                     fire.write(Fire {
@@ -120,7 +120,7 @@ pub fn enemy_firing(
             // ── Wasp — wasp_machinegun ────────────────────────────────────────
             // JS: rapid single shot with slight aim jitter (±5° ≈ ±0.087 rad).
             // The short `FireCooldown` (0.45–2 s) provides the machine-gun cadence.
-            EnemyKind::Wasp => {
+            EnemyKind::Wasp | EnemyKind::Cinder => {
                 // Jitter derived deterministically from time so no rand dependency.
                 let jitter = (t * 31.7).sin() * 0.087;
                 let dir = rotate(aim_dir, jitter);
@@ -137,7 +137,7 @@ pub fn enemy_firing(
             // ── Stalker — charged_laser ───────────────────────────────────────
             // JS: charges for ~1.5 s then fires a close-range laser beam (8
             // segmented bullets). Approximated as one fast heavy aimed shot.
-            EnemyKind::Stalker => {
+            EnemyKind::Stalker | EnemyKind::FrostLance => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,

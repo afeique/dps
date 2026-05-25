@@ -123,7 +123,8 @@ pub fn ai(
 
     for (enemy, mut ai, mut vel, tf, sm) in &mut q {
         let spd = spd * sm.map_or(1.0, |s| s.0);
-        if enemy.kind != EnemyKind::Hunter {
+        // Ashen Detonator (EN) reuses the hunter orbital arc.
+        if !matches!(enemy.kind, EnemyKind::Hunter | EnemyKind::AshenDetonator) {
             continue;
         }
 

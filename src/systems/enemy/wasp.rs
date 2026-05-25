@@ -179,7 +179,8 @@ pub fn ai(
 
     for (enemy, mut ai, mut vel, tf, sm) in &mut q {
         let speed = speed * sm.map_or(1.0, |s| s.0);
-        if enemy.kind != EnemyKind::Wasp {
+        // Cinder (EN) reuses the wasp zigzag.
+        if !matches!(enemy.kind, EnemyKind::Wasp | EnemyKind::Cinder) {
             continue;
         }
 

@@ -48,6 +48,12 @@ fn shape_for(kind: EnemyKind) -> Shape {
         EnemyKind::Tangerine => tangerine::shape(),
         EnemyKind::Titan => titan::shape(),
         EnemyKind::Drifter => shapes::drifter_star(18.0),
+        // EN: new elemental enemies reuse the silhouette of the pattern they
+        // borrow (unique `cinder_ember`/`ice_crystal`/… land in an EN follow-up).
+        EnemyKind::Cinder => wasp::shape(),
+        EnemyKind::Glacier => guardian::shape(),
+        EnemyKind::FrostLance => stalker::shape(),
+        EnemyKind::AshenDetonator => hunter::shape(),
     }
 }
 
@@ -56,7 +62,7 @@ fn shape_for(kind: EnemyKind) -> Shape {
 /// Hunter is neutral (empty). Stamped on every enemy at spawn; read by
 /// `collision::bullet_hits_enemy` (E2). The Titan's "tanky all-around 0.30"
 /// stands in until its rotating weak-core behavior lands.
-fn resistances_for(kind: EnemyKind) -> Resistances {
+pub fn resistances_for(kind: EnemyKind) -> Resistances {
     use Element::*;
     let r = Resistances::new();
     match kind {
@@ -77,6 +83,11 @@ fn resistances_for(kind: EnemyKind) -> Resistances {
             .with(Void, 0.30)
             .with(Radiant, 0.30),
         EnemyKind::Hunter => r, // neutral
+        // EN batch E8b resist maps (enemy-data.js:641-644).
+        EnemyKind::Cinder => r.with(Pyro, 0.85).with(Cryo, -0.50),
+        EnemyKind::Glacier => r.with(Cryo, 0.90).with(Pyro, -0.50),
+        EnemyKind::FrostLance => r.with(Cryo, 0.40).with(Toxic, -0.40),
+        EnemyKind::AshenDetonator => r.with(Pyro, 0.50).with(Cryo, -0.40),
     }
 }
 
@@ -95,6 +106,9 @@ pub fn element_for(kind: EnemyKind) -> Element {
         | EnemyKind::Wasp
         | EnemyKind::Prowler
         | EnemyKind::Titan => Element::Kinetic,
+        // EN batch E8b attack elements (enemy-data.js:616-619).
+        EnemyKind::Cinder | EnemyKind::AshenDetonator => Element::Pyro,
+        EnemyKind::Glacier | EnemyKind::FrostLance => Element::Cryo,
     }
 }
 
@@ -116,6 +130,32 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
             radius: 18.0,
             speed: 60.0,
             fire_cooldown: Some(1.4),
+        },
+        // EN batch E8b (enemy-data.js:392-465). Speed is px/frame×60; the borrowed
+        // AI uses the source kind's hardcoded speed, so these tune HP/size/element.
+        EnemyKind::Cinder => EnemyStats {
+            health: 4.0,
+            radius: 15.0,
+            speed: 198.0,
+            fire_cooldown: Some(0.7),
+        },
+        EnemyKind::Glacier => EnemyStats {
+            health: 18.0,
+            radius: 25.0,
+            speed: 60.0,
+            fire_cooldown: Some(3.0),
+        },
+        EnemyKind::FrostLance => EnemyStats {
+            health: 7.0,
+            radius: 19.0,
+            speed: 180.0,
+            fire_cooldown: Some(1.4),
+        },
+        EnemyKind::AshenDetonator => EnemyStats {
+            health: 8.0,
+            radius: 18.0,
+            speed: 132.0,
+            fire_cooldown: Some(1.0),
         },
     }
 }
@@ -284,6 +324,11 @@ pub fn points(kind: EnemyKind) -> u64 {
         EnemyKind::Sentinel => 220,
         EnemyKind::Tangerine => 160,
         EnemyKind::Titan => 320,
+        // EN batch E8b points (enemy-data.js:392-465).
+        EnemyKind::Cinder => 110,
+        EnemyKind::Glacier => 250,
+        EnemyKind::FrostLance => 150,
+        EnemyKind::AshenDetonator => 160,
     }
 }
 
@@ -313,6 +358,10 @@ pub fn drop_budget_mul(kind: EnemyKind, boss: bool) -> f32 {
         EnemyKind::Guardian | EnemyKind::Prowler | EnemyKind::Sentinel => 1.4,
         // miniboss
         EnemyKind::Titan => 1.8,
+        // EN batch E8b drop profiles: Cinder grunt, Glacier tanky, the rest standard.
+        EnemyKind::Cinder => 0.75,
+        EnemyKind::Glacier => 1.4,
+        EnemyKind::FrostLance | EnemyKind::AshenDetonator => 1.0,
     }
 }
 

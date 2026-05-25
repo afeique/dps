@@ -176,7 +176,8 @@ pub fn ai(
 
     for (enemy, mut ai, mut vel, tf, sm) in &mut q {
         let spd = spd * sm.map_or(1.0, |s| s.0);
-        if enemy.kind != EnemyKind::Stalker {
+        // Frost Lance (EN) reuses the stalker swoop→charge→fire arc.
+        if !matches!(enemy.kind, EnemyKind::Stalker | EnemyKind::FrostLance) {
             continue;
         }
 

@@ -4,7 +4,10 @@
 
 use bevy::prelude::*;
 
-/// The ten enemy archetypes from the JS game (`enemy-data.js` `ENEMY_TYPES`).
+/// The enemy archetypes from the JS game (`enemy-data.js` `ENEMY_TYPES`). The
+/// original ten plus the new elemental roster (Phase EN). New kinds reuse an
+/// existing kind's movement + fire pattern (their AI filter / firing arm just
+/// add the variant) until they get unique behavior/silhouettes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnemyKind {
     Drifter,
@@ -17,6 +20,15 @@ pub enum EnemyKind {
     Tangerine,
     Titan,
     Hunter,
+    // ── EN batch E8b — Pyro/Cryo elemental enemies ───────────────────────────
+    /// Pyro swarmer (reuses Wasp's zigzag + machinegun).
+    Cinder,
+    /// Cryo tank (reuses Guardian's square + spread).
+    Glacier,
+    /// Cryo sniper (reuses Stalker's arc + charged laser).
+    FrostLance,
+    /// Pyro bomber (reuses Hunter's arc + burst); EN-followup adds its death-flare.
+    AshenDetonator,
 }
 
 #[derive(Component, Debug)]

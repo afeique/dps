@@ -959,6 +959,28 @@ fn status_timers_count_down_and_expire() {
     assert!(world.get::<Corrode>(e).is_none());
 }
 
+/// EN batch E8b: the 4 Pyro/Cryo enemies carry the right attack element + resist
+/// directions (near-immune to their own element, weak to the opposite).
+#[test]
+fn en_pyro_cryo_enemy_data() {
+    use crate::combat::element::Element;
+    use crate::systems::enemy::{element_for, points, resistances_for};
+
+    assert_eq!(element_for(EnemyKind::Cinder), Element::Pyro);
+    assert_eq!(element_for(EnemyKind::Glacier), Element::Cryo);
+    assert_eq!(element_for(EnemyKind::FrostLance), Element::Cryo);
+    assert_eq!(element_for(EnemyKind::AshenDetonator), Element::Pyro);
+
+    let cinder = resistances_for(EnemyKind::Cinder);
+    assert!((cinder.get(Element::Pyro) - 0.85).abs() < 1e-6, "near-fireproof");
+    assert!(cinder.get(Element::Cryo) < 0.0, "weak to cryo");
+    assert!((resistances_for(EnemyKind::Glacier).get(Element::Cryo) - 0.90).abs() < 1e-6);
+    assert!(resistances_for(EnemyKind::Glacier).get(Element::Pyro) < 0.0, "burn the ice tank");
+
+    assert_eq!(points(EnemyKind::Glacier), 250);
+    assert_eq!(points(EnemyKind::Cinder), 110);
+}
+
 /// E5: the player burn DoT lands a 2-dmg chunk every 0.5 s (surviving the
 /// player-damage rounding) and expires after its duration.
 #[test]
