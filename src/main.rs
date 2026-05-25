@@ -17,6 +17,7 @@
 
 mod app;
 mod audio;
+mod combat;
 mod components;
 mod messages;
 mod music;
@@ -25,6 +26,8 @@ mod resources;
 mod states;
 mod systems;
 
+#[cfg(test)]
+mod combat_tests;
 #[cfg(test)]
 mod gate_tests;
 #[cfg(test)]

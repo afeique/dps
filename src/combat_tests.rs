@@ -1,0 +1,152 @@
+//! Unit tests for the `combat` module (Phase E onward). Ported alongside the
+//! JS `tests/unit/combat/*` invariants. Element/resistance math first.
+
+use crate::combat::element::{
+    elemental_multiplier, resolve_bullet_elements, Element, Resistances, ELEMENT_COUNT,
+};
+
+// ─── Element taxonomy ────────────────────────────────────────────────────────
+
+#[test]
+fn element_all_has_seven_and_distinct_indices() {
+    assert_eq!(Element::ALL.len(), ELEMENT_COUNT);
+    let mut idxs: Vec<usize> = Element::ALL.iter().map(|e| e.idx()).collect();
+    idxs.sort_unstable();
+    assert_eq!(idxs, (0..ELEMENT_COUNT).collect::<Vec<_>>());
+}
+
+#[test]
+fn element_id_roundtrips() {
+    for e in Element::ALL {
+        assert_eq!(Element::from_id(e.id()), Some(e));
+    }
+    assert_eq!(Element::from_id("NONSENSE"), None);
+}
+
+#[test]
+fn only_kinetic_has_no_signature_status() {
+    assert_eq!(Element::Kinetic.status_id(), None);
+    for e in Element::ALL.iter().filter(|e| **e != Element::Kinetic) {
+        assert!(e.status_id().is_some(), "{} should carry a status", e.name());
+    }
+    // Spot-check the exact JS status ids.
+    assert_eq!(Element::Pyro.status_id(), Some("BRN"));
+    assert_eq!(Element::Radiant.status_id(), Some("PURGE"));
+}
+
+// ─── elemental_multiplier (resist → damage mult) ─────────────────────────────
+
+#[test]
+fn elemental_multiplier_neutral_resist_weak_immune() {
+    assert_eq!(elemental_multiplier(0.0), 1.0); // neutral
+    assert_eq!(elemental_multiplier(0.5), 0.5); // resistant
+    assert_eq!(elemental_multiplier(1.0), 0.0); // immune
+    assert_eq!(elemental_multiplier(-0.5), 1.5); // weak → bonus
+}
+
+#[test]
+fn elemental_multiplier_clamps_to_0_2() {
+    assert_eq!(elemental_multiplier(-3.0), 2.0); // a huge weakness caps at +100%
+    assert_eq!(elemental_multiplier(5.0), 0.0); // over-resist floors at 0
+}
+
+// ─── Resistances ─────────────────────────────────────────────────────────────
+
+#[test]
+fn default_resistances_are_all_neutral() {
+    let r = Resistances::new();
+    for e in Element::ALL {
+        assert_eq!(r.multiplier(e), 1.0);
+    }
+}
+
+#[test]
+fn with_builder_sets_per_element_resist() {
+    let r = Resistances::new()
+        .with(Element::Pyro, 0.6)
+        .with(Element::Cryo, -0.4);
+    assert!((r.multiplier(Element::Pyro) - 0.4).abs() < 1e-6); // 1 - 0.6
+    assert!((r.multiplier(Element::Cryo) - 1.4).abs() < 1e-6); // 1 - (-0.4)
+    assert_eq!(r.multiplier(Element::Volt), 1.0); // untouched → neutral
+}
+
+#[test]
+fn multi_multiplier_averages_per_element() {
+    let r = Resistances::new()
+        .with(Element::Pyro, 0.5) // mult 0.5
+        .with(Element::Cryo, -0.5); // mult 1.5
+    assert_eq!(r.multi_multiplier(&[]), 1.0); // none → neutral
+    assert_eq!(r.multi_multiplier(&[Element::Pyro]), 0.5); // single = elemental_multiplier
+    // average of 0.5 and 1.5 = 1.0 (coverage cancels focus)
+    assert!((r.multi_multiplier(&[Element::Pyro, Element::Cryo]) - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn weakness_finds_most_negative_beyond_threshold() {
+    let r = Resistances::new()
+        .with(Element::Cryo, -0.4)
+        .with(Element::Toxic, -0.6); // the bigger weakness
+    assert_eq!(r.weakest(), Some(Element::Toxic));
+    // No weakness past the −0.3 default threshold → None.
+    let r2 = Resistances::new().with(Element::Pyro, 0.5).with(Element::Volt, -0.2);
+    assert_eq!(r2.weakest(), None);
+}
+
+#[test]
+fn adapt_bumps_toward_cap_and_clamps() {
+    let mut r = Resistances::new();
+    r.adapt_default(Element::Pyro); // +0.12
+    assert!((r.get(Element::Pyro) - 0.12).abs() < 1e-6);
+    for _ in 0..20 {
+        r.adapt_default(Element::Pyro);
+    }
+    assert!((r.get(Element::Pyro) - 0.75).abs() < 1e-6); // capped at 0.75
+}
+
+#[test]
+fn decay_scales_adapted_resist_toward_zero_and_snaps() {
+    let mut r = Resistances::new();
+    r.adapt(Element::Volt, 0.5, 0.75); // adapted to 0.5
+    r.decay_default(); // ×0.8 → 0.40
+    assert!((r.get(Element::Volt) - 0.4).abs() < 1e-6);
+    // Decay until it snaps to 0 once at/under the 0.02 floor.
+    for _ in 0..20 {
+        r.decay_default();
+    }
+    assert_eq!(r.get(Element::Volt), 0.0);
+}
+
+#[test]
+fn decay_leaves_base_weakness_untouched() {
+    let mut r = Resistances::new().with(Element::Cryo, -0.4);
+    r.decay_default();
+    assert!((r.get(Element::Cryo) - (-0.4)).abs() < 1e-6); // negatives are not decayed
+}
+
+// ─── resolve_bullet_elements ─────────────────────────────────────────────────
+
+#[test]
+fn resolve_override_replaces_all() {
+    let out = resolve_bullet_elements(
+        Some(Element::Radiant),
+        &[Element::Pyro, Element::Cryo],
+        Element::Kinetic,
+    );
+    assert_eq!(out, vec![Element::Radiant]);
+}
+
+#[test]
+fn resolve_dedups_attunements_preserving_order() {
+    let out = resolve_bullet_elements(
+        None,
+        &[Element::Pyro, Element::Volt, Element::Pyro],
+        Element::Kinetic,
+    );
+    assert_eq!(out, vec![Element::Pyro, Element::Volt]);
+}
+
+#[test]
+fn resolve_falls_back_to_base_element() {
+    let out = resolve_bullet_elements(None, &[], Element::Void);
+    assert_eq!(out, vec![Element::Void]);
+}
