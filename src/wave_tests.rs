@@ -1120,6 +1120,38 @@ fn warden_adapts_then_decays() {
     assert!(decayed < pyro, "adapted resist decays ({decayed} < {pyro})");
 }
 
+/// W: the Cryo Burst power weapon freezes enemies its ring sweeps over — the
+/// player's setup for the Frozen → shatter reaction.
+#[test]
+fn cryo_burst_freezes_enemies() {
+    use crate::components::Frozen;
+    use crate::systems::power_weapon::{spawn_cryo_burst, update_nova};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(20.0),
+            Collider { radius: 16.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_cryo_burst(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.05)); // ring expands over the enemy
+    world.insert_resource(time);
+    let mut step = Schedule::default();
+    step.add_systems(update_nova);
+    step.run(world);
+
+    assert!(world.get::<Frozen>(e).is_some(), "Cryo Burst froze the enemy");
+}
+
 /// EN: a Lumen Drone's aura pulse stamps an AllyShield on allies in range only.
 #[test]
 fn lumen_aura_shields_nearby_allies() {

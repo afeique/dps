@@ -45,6 +45,8 @@ pub enum PowerWeaponKind {
     MineLayer,
     LanceBeam,
     ArcLightning,
+    /// CRYO ring that freezes enemies it sweeps over (W; enables player shatter).
+    CryoBurst,
 }
 
 impl PowerWeaponKind {
@@ -55,7 +57,8 @@ impl PowerWeaponKind {
             Self::NovaBlast => Self::MineLayer,
             Self::MineLayer => Self::LanceBeam,
             Self::LanceBeam => Self::ArcLightning,
-            Self::ArcLightning => Self::MissileSalvo,
+            Self::ArcLightning => Self::CryoBurst,
+            Self::CryoBurst => Self::MissileSalvo,
         }
     }
 
@@ -68,15 +71,17 @@ impl PowerWeaponKind {
             Self::MineLayer => "Mine Layer",
             Self::LanceBeam => "Lance Beam",
             Self::ArcLightning => "Arc Lightning",
+            Self::CryoBurst => "Cryo Burst",
         }
     }
 
-    /// Energy cost per fire (`POWER_ENERGY_COST`, spec III.3).
+    /// Energy cost per fire (`POWER_ENERGY_COST`, spec III.3 / weapon-data.js).
     pub fn energy_cost(self) -> f32 {
         match self {
             Self::ChargeShot => 20.0,
             Self::MineLayer => 25.0,
             Self::ArcLightning => 30.0,
+            Self::CryoBurst => 40.0,
             Self::NovaBlast => 45.0,
             Self::MissileSalvo => 55.0,
             Self::LanceBeam => 60.0,
@@ -92,6 +97,7 @@ impl PowerWeaponKind {
             Self::MissileSalvo => 0.80,
             Self::NovaBlast => 1.00,
             Self::MineLayer => 0.50,
+            Self::CryoBurst => 1.00,
             Self::LanceBeam => BEAM_DURATION,
             Self::ArcLightning => BEAM_DURATION,
         }
@@ -145,8 +151,11 @@ pub struct NovaRing {
     band: f32,
     /// Enemies already hit by this ring (no double-damage).
     hit: Vec<Entity>,
-    /// Damage element (NovaBlast is VOLT) — drives the resist multiplier.
+    /// Damage element (NovaBlast is VOLT, CryoBurst is CRYO) — resist multiplier.
     element: Element,
+    /// Freeze seconds applied to enemies the front sweeps over (CryoBurst); 0 =
+    /// no freeze (NovaBlast).
+    freeze: f32,
 }
 
 // ─── Continuous beams (Lance Beam / Arc Lightning) ───────────────────────────
@@ -269,6 +278,27 @@ pub fn lay_mine(commands: &mut Commands, pos: Vec2) {
         },
         mine_shape(),
         Transform::from_translation(pos.extend(0.4)),
+    ));
+}
+
+/// Spawn a **Cryo Burst** ring at `center` (W): a CRYO shockwave (r300) that
+/// freezes every enemy its front sweeps over for 2.5 s — giving the player a way
+/// to set up the `Frozen → shatter` reaction. Reuses the Nova ring mechanic.
+pub fn spawn_cryo_burst(commands: &mut Commands, center: Vec2) {
+    commands.spawn((
+        NovaRing {
+            center,
+            radius: 0.0,
+            max_radius: 300.0,
+            speed: 500.0,
+            damage: 1.5,
+            band: 30.0,
+            hit: Vec::new(),
+            element: Element::Cryo,
+            freeze: 2.5, // freezeDuration 2500 ms (weapon-data.js)
+        },
+        nova_ring_shape(),
+        Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
     ));
 }
 
@@ -517,6 +547,7 @@ pub fn fire_power_weapon(
                     band: 30.0,
                     hit: Vec::new(),
                     element: Element::Volt, // NovaBlast is VOLT (weapon-data.js)
+                    freeze: 0.0,
                 },
                 nova_ring_shape(),
                 Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
@@ -527,6 +558,7 @@ pub fn fire_power_weapon(
         }
         PowerWeaponKind::LanceBeam => spawn_beam(&mut commands, BeamKind::Lance, nose),
         PowerWeaponKind::ArcLightning => spawn_beam(&mut commands, BeamKind::Arc, nose),
+        PowerWeaponKind::CryoBurst => spawn_cryo_burst(&mut commands, tf.translation.truncate()),
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).
         PowerWeaponKind::ChargeShot => {
@@ -637,6 +669,10 @@ pub fn update_nova(
                 // Shove outward from the ring center (spec III.6).
                 let dir = (epos - ring.center).normalize_or_zero();
                 knock.write(Knockback { target: e, impulse: dir * NOVA_KNOCKBACK });
+                // Cryo Burst freezes what its front sweeps over (W → shatter setup).
+                if ring.freeze > 0.0 {
+                    commands.entity(e).insert(Frozen { secs: ring.freeze });
+                }
                 ring.hit.push(e);
             }
         }
