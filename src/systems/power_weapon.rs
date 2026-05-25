@@ -47,6 +47,8 @@ pub enum PowerWeaponKind {
     ArcLightning,
     /// CRYO ring that freezes enemies it sweeps over (W; enables player shatter).
     CryoBurst,
+    /// No projectile — a temporary buff to the primary (W).
+    Overdrive,
 }
 
 impl PowerWeaponKind {
@@ -58,7 +60,8 @@ impl PowerWeaponKind {
             Self::MineLayer => Self::LanceBeam,
             Self::LanceBeam => Self::ArcLightning,
             Self::ArcLightning => Self::CryoBurst,
-            Self::CryoBurst => Self::MissileSalvo,
+            Self::CryoBurst => Self::Overdrive,
+            Self::Overdrive => Self::MissileSalvo,
         }
     }
 
@@ -72,6 +75,7 @@ impl PowerWeaponKind {
             Self::LanceBeam => "Lance Beam",
             Self::ArcLightning => "Arc Lightning",
             Self::CryoBurst => "Cryo Burst",
+            Self::Overdrive => "Overdrive",
         }
     }
 
@@ -82,6 +86,7 @@ impl PowerWeaponKind {
             Self::MineLayer => 25.0,
             Self::ArcLightning => 30.0,
             Self::CryoBurst => 40.0,
+            Self::Overdrive => 45.0,
             Self::NovaBlast => 45.0,
             Self::MissileSalvo => 55.0,
             Self::LanceBeam => 60.0,
@@ -98,6 +103,7 @@ impl PowerWeaponKind {
             Self::NovaBlast => 1.00,
             Self::MineLayer => 0.50,
             Self::CryoBurst => 1.00,
+            Self::Overdrive => OVERDRIVE_DURATION,
             Self::LanceBeam => BEAM_DURATION,
             Self::ArcLightning => BEAM_DURATION,
         }
@@ -471,6 +477,21 @@ pub fn cycle_power_weapon(keys: Res<ButtonInput<KeyCode>>, mut pw: ResMut<PowerW
     }
 }
 
+/// Count down the Overdrive buff and remove it on expiry (W).
+pub fn tick_overdrive(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut Overdrive)>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut od) in &mut q {
+        od.secs -= dt;
+        if od.secs <= 0.0 {
+            commands.entity(e).remove::<Overdrive>();
+        }
+    }
+}
+
 /// Tick cooldown; on `KeyE` / West, if energy ≥ cost, spend it and fire the
 /// active power weapon.
 pub fn fire_power_weapon(
@@ -480,7 +501,7 @@ pub fn fire_power_weapon(
     mut pw: ResMut<PowerWeapon>,
     mut energy: ResMut<EnergyMeter>,
     mut commands: Commands,
-    player: Query<&Transform, With<Ship>>,
+    player: Query<(Entity, &Transform), With<Ship>>,
     beams: Query<(), With<Beam>>,
 ) {
     pw.cooldown = (pw.cooldown - time.delta_secs()).max(0.0);
@@ -493,7 +514,7 @@ pub fn fire_power_weapon(
         return;
     }
 
-    let Ok(tf) = player.single() else {
+    let Ok((player_e, tf)) = player.single() else {
         return;
     };
 
@@ -559,6 +580,12 @@ pub fn fire_power_weapon(
         PowerWeaponKind::LanceBeam => spawn_beam(&mut commands, BeamKind::Lance, nose),
         PowerWeaponKind::ArcLightning => spawn_beam(&mut commands, BeamKind::Arc, nose),
         PowerWeaponKind::CryoBurst => spawn_cryo_burst(&mut commands, tf.translation.truncate()),
+        // Overdrive: buff the primary for a few seconds (no projectile).
+        PowerWeaponKind::Overdrive => {
+            commands.entity(player_e).insert(Overdrive {
+                secs: OVERDRIVE_DURATION,
+            });
+        }
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).
         PowerWeaponKind::ChargeShot => {

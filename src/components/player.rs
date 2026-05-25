@@ -125,6 +125,19 @@ pub const PLAYER_CORRODE_SECS: f32 = 3.0;
 pub const PLAYER_CORRODE_MAX: u32 = 2;
 pub const PLAYER_CORRODE_PER_STACK: f32 = 0.15;
 
+/// Active **Overdrive** power-weapon buff (W, weapon-data.js): while present the
+/// primary fires faster (cooldown ×[`OVERDRIVE_FIRE_MULT`]) and harder (damage
+/// ×[`OVERDRIVE_DMG_MULT`]). Counted down by `power_weapon::tick_overdrive`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Overdrive {
+    pub secs: f32,
+}
+
+/// Overdrive tuning (weapon-data.js): 4.5 s, ×0.55 fire cooldown, ×1.5 damage.
+pub const OVERDRIVE_DURATION: f32 = 4.5;
+pub const OVERDRIVE_FIRE_MULT: f32 = 0.55;
+pub const OVERDRIVE_DMG_MULT: f32 = 1.5;
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

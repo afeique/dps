@@ -1152,6 +1152,49 @@ fn cryo_burst_freezes_enemies() {
     assert!(world.get::<Frozen>(e).is_some(), "Cryo Burst froze the enemy");
 }
 
+/// W: the Overdrive buff multiplies the primary's per-shot damage (×1.5).
+#[test]
+fn overdrive_buffs_primary_damage() {
+    use crate::components::{Intent, Overdrive, Weapon};
+    use crate::systems::weapons::{player_fire, CurrentWeapon};
+
+    #[derive(Resource, Default)]
+    struct Dmg(f32);
+    fn tally(mut r: MessageReader<Fire>, mut d: ResMut<Dmg>) {
+        for f in r.read() {
+            d.0 = f.damage;
+        }
+    }
+
+    fn fire_dmg(overdrive: bool) -> f32 {
+        let mut app = test_app();
+        app.init_resource::<CurrentWeapon>();
+        app.insert_resource(Dmg::default());
+        let world = app.world_mut();
+        let mut pc = world.spawn((
+            Ship::default(),
+            Intent { firing: true, ..Default::default() },
+            Weapon::default(),
+            Transform::default(),
+        ));
+        if overdrive {
+            pc.insert(Overdrive { secs: 1.0 });
+        }
+        let mut step = Schedule::default();
+        step.add_systems((player_fire, tally).chain());
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.5)); // cooldown starts at 0 → fires
+        world.insert_resource(time);
+        step.run(world);
+        world.resource::<Dmg>().0
+    }
+
+    let base = fire_dmg(false);
+    let buffed = fire_dmg(true);
+    assert!(base > 0.0, "primary fired");
+    assert!((buffed - base * 1.5).abs() < 1e-4, "Overdrive ×1.5 ({buffed} vs {base})");
+}
+
 /// EN: a Lumen Drone's aura pulse stamps an AllyShield on allies in range only.
 #[test]
 fn lumen_aura_shields_nearby_allies() {

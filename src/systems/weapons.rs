@@ -193,7 +193,7 @@ pub fn player_fire(
     cur: Res<CurrentWeapon>,
     upgrades: Res<Upgrades>,
     mut fire: MessageWriter<Fire>,
-    mut q: Query<(&Intent, &mut Weapon, &Transform), With<Ship>>,
+    mut q: Query<(&Intent, &mut Weapon, &Transform, Option<&Overdrive>), With<Ship>>,
 ) {
     let dt = time.delta_secs();
     let st = stats(cur.0);
@@ -205,12 +205,16 @@ pub fn player_fire(
     // The fan is the wider of the weapon's own spread and the `_MULTI` fan.
     let fan = st.spread.max(multishot_fan(count));
 
-    for (intent, mut weapon, tf) in &mut q {
+    for (intent, mut weapon, tf, overdrive) in &mut q {
         weapon.timer = (weapon.timer - dt).max(0.0);
         if !intent.firing || weapon.timer > 0.0 {
             continue;
         }
-        weapon.timer = st.cooldown * rapid_cooldown_mult(rapid);
+        // Overdrive (W): faster fire + harder hits while the buff is active.
+        let od = overdrive.is_some();
+        let cd_mult = if od { OVERDRIVE_FIRE_MULT } else { 1.0 };
+        let dmg = st.damage * if od { OVERDRIVE_DMG_MULT } else { 1.0 };
+        weapon.timer = st.cooldown * rapid_cooldown_mult(rapid) * cd_mult;
 
         let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
         let nose = tf.translation.truncate() + fwd * 20.0;
@@ -219,7 +223,7 @@ pub fn player_fire(
             fire.write(Fire {
                 origin: nose,
                 dir: dir.normalize_or_zero(),
-                damage: st.damage,
+                damage: dmg,
                 speed: st.speed,
                 faction: Faction::Player,
                 homing: false,
