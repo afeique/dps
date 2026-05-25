@@ -53,6 +53,8 @@ pub enum PowerWeaponKind {
     Singularity,
     /// RADIANT fan of 5 rays (W).
     PrismBeam,
+    /// KINETIC telegraphed delayed AoE column (W).
+    OrbitalStrike,
 }
 
 impl PowerWeaponKind {
@@ -67,7 +69,8 @@ impl PowerWeaponKind {
             Self::CryoBurst => Self::Overdrive,
             Self::Overdrive => Self::Singularity,
             Self::Singularity => Self::PrismBeam,
-            Self::PrismBeam => Self::MissileSalvo,
+            Self::PrismBeam => Self::OrbitalStrike,
+            Self::OrbitalStrike => Self::MissileSalvo,
         }
     }
 
@@ -84,6 +87,7 @@ impl PowerWeaponKind {
             Self::Overdrive => "Overdrive",
             Self::Singularity => "Singularity",
             Self::PrismBeam => "Prism Beam",
+            Self::OrbitalStrike => "Orbital Strike",
         }
     }
 
@@ -100,6 +104,7 @@ impl PowerWeaponKind {
             Self::LanceBeam => 60.0,
             Self::Singularity => 60.0,
             Self::PrismBeam => 50.0,
+            Self::OrbitalStrike => 65.0,
         }
     }
 
@@ -116,6 +121,7 @@ impl PowerWeaponKind {
             Self::Overdrive => OVERDRIVE_DURATION,
             Self::Singularity => SINGULARITY_PULL_DURATION,
             Self::PrismBeam => PRISM_DURATION,
+            Self::OrbitalStrike => 1.0,
             Self::LanceBeam => BEAM_DURATION,
             Self::ArcLightning => BEAM_DURATION,
         }
@@ -193,6 +199,22 @@ pub struct Singularity {
     pull_timer: f32,
     collapse_radius: f32,
     collapse_damage: f32,
+}
+
+// Orbital Strike (Kinetic): 0.85 s telegraph → r150 / 15 dmg column (weapon-data.js).
+const ORBITAL_TELEGRAPH: f32 = 0.85;
+const ORBITAL_RADIUS: f32 = 150.0;
+const ORBITAL_DAMAGE: f32 = 15.0;
+
+/// A telegraphed **Orbital Strike**: a marked column at `center` that, after
+/// `timer` s of warning, deals one KINETIC AoE (`damage` within `radius`) and
+/// despawns. Driven by `update_orbital_strike`.
+#[derive(Component)]
+pub struct OrbitalStrike {
+    center: Vec2,
+    timer: f32,
+    radius: f32,
+    damage: f32,
 }
 
 // ─── Continuous beams (Lance Beam / Arc Lightning) ───────────────────────────
@@ -405,6 +427,51 @@ pub fn update_singularity(
             }
             commands.entity(se).despawn();
         }
+    }
+}
+
+/// Spawn a telegraphed **Orbital Strike** at `center` (W): a marked column ring
+/// that strikes after [`ORBITAL_TELEGRAPH`] s.
+pub fn spawn_orbital_strike(commands: &mut Commands, center: Vec2) {
+    commands.spawn((
+        OrbitalStrike {
+            center,
+            timer: ORBITAL_TELEGRAPH,
+            radius: ORBITAL_RADIUS,
+            damage: ORBITAL_DAMAGE,
+        },
+        nova_ring_shape(),
+        Transform::from_translation(center.extend(0.4)).with_scale(Vec3::splat(ORBITAL_RADIUS)),
+    ));
+}
+
+/// Tick each Orbital Strike's telegraph; when it lapses, deal one KINETIC AoE
+/// within `radius` and despawn the marker. Runs in the collision group (writes
+/// `Damage`). The marker's own `Transform` isn't queried here, so the immut enemy
+/// `&Transform` is conflict-free.
+pub fn update_orbital_strike(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    mut strikes: Query<(Entity, &mut OrbitalStrike)>,
+    enemies: Query<(Entity, &Transform, Option<&Resistances>), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+    for (se, mut s) in &mut strikes {
+        s.timer -= dt;
+        if s.timer > 0.0 {
+            continue; // still telegraphing
+        }
+        let r2 = s.radius * s.radius;
+        for (e, etf, eres) in &enemies {
+            if etf.translation.truncate().distance_squared(s.center) <= r2 {
+                dmg.write(Damage {
+                    target: e,
+                    amount: resist_scaled(s.damage, Element::Kinetic, eres),
+                });
+            }
+        }
+        commands.entity(se).despawn();
     }
 }
 
@@ -718,6 +785,10 @@ pub fn fire_power_weapon(
         }
         // Prism Beam: a RADIANT fan of rays from the nose.
         PowerWeaponKind::PrismBeam => spawn_prism(&mut commands, nose),
+        // Orbital Strike: a telegraphed column ahead of the ship.
+        PowerWeaponKind::OrbitalStrike => {
+            spawn_orbital_strike(&mut commands, tf.translation.truncate() + fwd * 200.0);
+        }
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).
         PowerWeaponKind::ChargeShot => {

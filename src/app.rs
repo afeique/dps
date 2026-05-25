@@ -311,6 +311,8 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::update_beams,
                         // Singularity pull + collapse (W).
                         systems::power_weapon::update_singularity,
+                        // Orbital Strike telegraph → column AoE (W).
+                        systems::power_weapon::update_orbital_strike,
                         systems::status::tick_burning,
                         // Bleed (TOXIC poison) DoT — sibling of burn (E3).
                         systems::status::tick_bleed,

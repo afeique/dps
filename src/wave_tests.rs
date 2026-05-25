@@ -1187,6 +1187,41 @@ fn singularity_pulls_then_collapses() {
     assert_eq!(world.query::<&Singularity>().iter(world).count(), 0, "singularity despawned");
 }
 
+/// W: an Orbital Strike telegraphs (no damage) then strikes its column AoE.
+#[test]
+fn orbital_strike_telegraphs_then_hits() {
+    use crate::systems::power_weapon::{spawn_orbital_strike, update_orbital_strike, OrbitalStrike};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_orbital_strike(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    let mut step = Schedule::default();
+    step.add_systems((update_orbital_strike, apply_damage).chain());
+
+    // During the telegraph: no damage, marker present.
+    let mut t1 = Time::<()>::default();
+    t1.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(t1);
+    step.run(world);
+    assert_eq!(world.get::<Health>(e).unwrap().current, 50.0, "no damage during telegraph");
+    assert_eq!(world.query::<&OrbitalStrike>().iter(world).count(), 1, "marker telegraphing");
+
+    // After the telegraph: strike lands + the marker despawns.
+    let mut t2 = Time::<()>::default();
+    t2.advance_by(Duration::from_secs_f32(1.0));
+    world.insert_resource(t2);
+    step.run(world);
+    assert!(world.get::<Health>(e).unwrap().current < 50.0, "strike hit the enemy");
+    assert_eq!(world.query::<&OrbitalStrike>().iter(world).count(), 0, "marker despawned");
+}
+
 /// W: the Prism Beam spawns a fan of 5 RADIANT rays; a ray straight ahead hits
 /// an enemy in front.
 #[test]
