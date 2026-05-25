@@ -51,6 +51,8 @@ pub enum PowerWeaponKind {
     Overdrive,
     /// VOID pull-then-collapse field (W).
     Singularity,
+    /// RADIANT fan of 5 rays (W).
+    PrismBeam,
 }
 
 impl PowerWeaponKind {
@@ -64,7 +66,8 @@ impl PowerWeaponKind {
             Self::ArcLightning => Self::CryoBurst,
             Self::CryoBurst => Self::Overdrive,
             Self::Overdrive => Self::Singularity,
-            Self::Singularity => Self::MissileSalvo,
+            Self::Singularity => Self::PrismBeam,
+            Self::PrismBeam => Self::MissileSalvo,
         }
     }
 
@@ -80,6 +83,7 @@ impl PowerWeaponKind {
             Self::CryoBurst => "Cryo Burst",
             Self::Overdrive => "Overdrive",
             Self::Singularity => "Singularity",
+            Self::PrismBeam => "Prism Beam",
         }
     }
 
@@ -95,6 +99,7 @@ impl PowerWeaponKind {
             Self::MissileSalvo => 55.0,
             Self::LanceBeam => 60.0,
             Self::Singularity => 60.0,
+            Self::PrismBeam => 50.0,
         }
     }
 
@@ -110,6 +115,7 @@ impl PowerWeaponKind {
             Self::CryoBurst => 1.00,
             Self::Overdrive => OVERDRIVE_DURATION,
             Self::Singularity => SINGULARITY_PULL_DURATION,
+            Self::PrismBeam => PRISM_DURATION,
             Self::LanceBeam => BEAM_DURATION,
             Self::ArcLightning => BEAM_DURATION,
         }
@@ -203,6 +209,12 @@ const BEAM_RANGE: f32 = 360.0;
 const LANCE_WIDTH: f32 = 6.0;
 /// Arc Lightning render width (no spec width — the tether is thin).
 const ARC_WIDTH: f32 = 4.0;
+// Prism Beam (RADIANT fan): 5 rays across 0.85 rad, 1.1 s, 0.06/tick×60 dps each.
+const PRISM_DURATION: f32 = 1.1;
+const PRISM_DPS: f32 = 3.6;
+const PRISM_WIDTH: f32 = 5.0;
+const PRISM_SPREAD: f32 = 0.85;
+const PRISM_RAYS: i32 = 5;
 
 /// Which continuous beam an active `Beam` entity is.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -211,6 +223,8 @@ pub enum BeamKind {
     Lance,
     /// Tether to the enemy nearest the cursor within range.
     Arc,
+    /// One of several RADIANT rays fanned out by `Beam.offset` (Prism Beam).
+    Prism,
 }
 
 /// An active continuous beam. Persists for `life` seconds while tracking the
@@ -228,8 +242,10 @@ pub struct Beam {
     range: f32,
     /// Visual + (for Lance) hit-test full width; half is the ray radius.
     width: f32,
-    /// Damage element (Lance = RADIANT, Arc = VOLT) — drives the resist multiplier.
+    /// Damage element (Lance = RADIANT, Arc = VOLT, Prism = RADIANT) — resist mult.
     element: Element,
+    /// Angular offset from the ship's facing (Prism fan rays); 0 for Lance/Arc.
+    offset: f32,
 }
 
 // ─── Shapes ───────────────────────────────────────────────────────────────────
@@ -444,6 +460,7 @@ fn bolt_shape(kind: BeamKind, length: f32, seed: f32) -> Shape {
     let (color, width) = match kind {
         BeamKind::Lance => (Color::linear_rgb(0.5, 9.0, 0.6), 3.0),
         BeamKind::Arc => (Color::linear_rgb(5.0, 1.5, 10.0), 2.5),
+        BeamKind::Prism => (Color::linear_rgb(9.0, 8.0, 3.0), 2.5), // RADIANT gold
     };
     let pts = bolt_points(length.max(0.001), seed);
     let mut path = ShapePath::new().move_to(pts[0]);
@@ -460,10 +477,11 @@ pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
     let width = match kind {
         BeamKind::Lance => LANCE_WIDTH,
         BeamKind::Arc => ARC_WIDTH,
+        BeamKind::Prism => PRISM_WIDTH,
     };
     // Lance Beam is RADIANT, Arc Lightning is VOLT (weapon-data.js).
     let element = match kind {
-        BeamKind::Lance => Element::Radiant,
+        BeamKind::Lance | BeamKind::Prism => Element::Radiant,
         BeamKind::Arc => Element::Volt,
     };
     commands.spawn((
@@ -474,11 +492,35 @@ pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
             range: BEAM_RANGE,
             width,
             element,
+            offset: 0.0,
         },
         // Initial bolt; `update_beams` rebuilds it (length + crackle) each frame.
         bolt_shape(kind, 1.0, 0.0),
         Transform::from_translation(origin.extend(0.7)),
     ));
+}
+
+/// Spawn a **Prism Beam** (W): `PRISM_RAYS` RADIANT rays fanned evenly across
+/// `PRISM_SPREAD` rad around the ship's facing, each a shorter-lived Lance-like
+/// ray (no burn). Anchored at `origin`; `update_beams` re-aims them each tick.
+pub fn spawn_prism(commands: &mut Commands, origin: Vec2) {
+    let n = PRISM_RAYS;
+    for i in 0..n {
+        let offset = (i as f32 - (n as f32 - 1.0) / 2.0) * (PRISM_SPREAD / (n as f32 - 1.0));
+        commands.spawn((
+            Beam {
+                kind: BeamKind::Prism,
+                life: PRISM_DURATION,
+                dps: PRISM_DPS,
+                range: BEAM_RANGE,
+                width: PRISM_WIDTH,
+                element: Element::Radiant,
+                offset,
+            },
+            bolt_shape(BeamKind::Prism, 1.0, 0.0),
+            Transform::from_translation(origin.extend(0.7)),
+        ));
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -607,7 +649,7 @@ pub fn fire_power_weapon(
     // but the guard is the hard invariant.
     let is_beam = matches!(
         pw.kind,
-        PowerWeaponKind::LanceBeam | PowerWeaponKind::ArcLightning
+        PowerWeaponKind::LanceBeam | PowerWeaponKind::ArcLightning | PowerWeaponKind::PrismBeam
     );
     if is_beam && !beams.is_empty() {
         return;
@@ -674,6 +716,8 @@ pub fn fire_power_weapon(
         PowerWeaponKind::Singularity => {
             spawn_singularity(&mut commands, tf.translation.truncate() + fwd * 180.0);
         }
+        // Prism Beam: a RADIANT fan of rays from the nose.
+        PowerWeaponKind::PrismBeam => spawn_prism(&mut commands, nose),
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).
         PowerWeaponKind::ChargeShot => {
@@ -869,13 +913,15 @@ pub fn update_beams(
         let tick_dmg = beam.dps * mult * dt;
 
         match beam.kind {
-            BeamKind::Lance => {
-                // The first enemy along the forward ray (smallest distance).
+            BeamKind::Lance | BeamKind::Prism => {
+                // Lance fires straight ahead; each Prism ray is angled by its offset.
+                let ray_dir = rotate(fwd, beam.offset);
+                // The first enemy along the ray (smallest distance).
                 let mut best: Option<(f32, Entity, f32)> = None;
                 for (e, etf, ec, eres) in &enemies {
                     if let Some(t) = beam_ray_hit_dist(
                         origin,
-                        fwd,
+                        ray_dir,
                         beam.range,
                         beam.width * 0.5,
                         etf.translation.truncate(),
@@ -890,13 +936,15 @@ pub fn update_beams(
                 let length = match best {
                     Some((t, e, rm)) => {
                         dmg.write(Damage { target: e, amount: tick_dmg * rm });
-                        // Lance burn (spec III.3): a refreshing DoT on the target.
-                        commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
+                        // Lance burn (spec III.3) — Prism rays don't burn.
+                        if beam.kind == BeamKind::Lance {
+                            commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
+                        }
                         t
                     }
                     None => beam.range,
                 };
-                place_bolt(&mut shape, &mut tf, beam.kind, origin, fwd, length, seed);
+                place_bolt(&mut shape, &mut tf, beam.kind, origin, ray_dir, length, seed);
             }
             BeamKind::Arc => {
                 // Aim point: the cursor while mouse-aiming, else straight ahead.

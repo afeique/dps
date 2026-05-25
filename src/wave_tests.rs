@@ -1187,6 +1187,40 @@ fn singularity_pulls_then_collapses() {
     assert_eq!(world.query::<&Singularity>().iter(world).count(), 0, "singularity despawned");
 }
 
+/// W: the Prism Beam spawns a fan of 5 RADIANT rays; a ray straight ahead hits
+/// an enemy in front.
+#[test]
+fn prism_beam_fans_rays_and_damages() {
+    use crate::components::Intent;
+    use crate::systems::power_weapon::{spawn_prism, update_beams, Beam};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Intent::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Transform::from_xyz(0.0, 100.0, 0.0), // straight ahead (+Y)
+        ))
+        .id();
+
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_prism(&mut c, Vec2::ZERO));
+    setup.run(world);
+    assert_eq!(world.query::<&Beam>().iter(world).count(), 5, "5 prism rays");
+
+    let mut step = Schedule::default();
+    step.add_systems((update_beams, apply_damage).chain());
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    step.run(world);
+
+    assert!(world.get::<Health>(e).unwrap().current < 100.0, "a prism ray hit the enemy ahead");
+}
+
 /// W: the Overdrive buff multiplies the primary's per-shot damage (×1.5).
 #[test]
 fn overdrive_buffs_primary_damage() {
