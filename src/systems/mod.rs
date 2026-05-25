@@ -13,6 +13,7 @@ pub mod enemy;
 pub mod enemy_ai;
 pub mod flow;
 pub mod formations;
+pub mod hazard;
 pub mod hitstop;
 pub mod input;
 pub mod items;

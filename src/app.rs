@@ -269,6 +269,8 @@ impl Plugin for GamePlugin {
                     systems::wave::spawn_waves,
                     // Spore Carriers birth Wasp drones on a timer (EN).
                     systems::enemy::mechanics::spore_spawner,
+                    // Plaguebearers drip a Toxic acid trail (EN hazard fields).
+                    systems::hazard::drop_hazards,
                     // Fire intent → bullets.
                     (
                         systems::enemy::firing::enemy_firing,
@@ -304,6 +306,8 @@ impl Plugin for GamePlugin {
                         systems::status::tick_bleed,
                         // Player burn DoT (E5 — enemy PYRO attacks).
                         systems::player_status::tick_player_burn,
+                        // Hazard fields tick element damage on the player (EN).
+                        systems::hazard::tick_hazards,
                         // Static Discharge: periodic AoE pulse around the player.
                         systems::passives::tick_static_discharge,
                         // Whirlwind: orbiting damage zone.

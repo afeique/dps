@@ -1028,6 +1028,54 @@ fn spore_carrier_spawns_drones_and_caps() {
     );
 }
 
+/// EN: a Toxic hazard field ticks damage + corrode on a player standing in it.
+#[test]
+fn hazard_field_ticks_and_corrodes_player() {
+    use crate::combat::element::Element;
+    use crate::systems::hazard::{tick_hazards, HazardField};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((Ship::default(), Health::new(40.0), Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+    world.spawn((
+        HazardField { radius: 70.0, element: Element::Toxic, dps: 6.0, life: 4.0, tick: 0.1 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_hazards, apply_damage).chain());
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.2)); // past the 0.1 tick
+    world.insert_resource(time);
+    step.run(world);
+
+    assert!(world.get::<Health>(p).unwrap().current < 40.0, "hazard ticked damage");
+    assert!(world.get::<PlayerCorrode>(p).is_some(), "Toxic hazard corroded the ship");
+}
+
+/// EN: a Plaguebearer-type dropper drops a hazard field when its timer lapses.
+#[test]
+fn hazard_dropper_drops_hazard() {
+    use crate::systems::hazard::{drop_hazards, plaguebearer_dropper, HazardField};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut d = plaguebearer_dropper();
+    d.timer = 0.05;
+    world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), d));
+
+    let mut step = Schedule::default();
+    step.add_systems(drop_hazards);
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    step.run(world);
+
+    assert_eq!(world.query::<&HazardField>().iter(world).count(), 1, "dropper spawned a hazard");
+}
+
 /// EN: a Hydra splits into 2 lings on death; a ling (`Splitter.lings == 0`) does
 /// not split again.
 #[test]

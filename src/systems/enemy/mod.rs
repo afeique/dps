@@ -628,6 +628,10 @@ fn spawn_enemy(
                 timer: SPORE_DRONE_INTERVAL,
             });
         }
+        // Plaguebearer drips a Toxic acid trail as it moves (EN).
+        EnemyKind::Plaguebearer => {
+            e.insert(crate::systems::hazard::plaguebearer_dropper());
+        }
         _ => {}
     }
 
