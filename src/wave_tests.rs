@@ -467,6 +467,53 @@ fn mine_detonates_on_nearby_enemy() {
     assert_eq!(mines_left, 0, "the mine should despawn after detonating");
 }
 
+/// W: a power weapon's damage respects the target's elemental resistance — a
+/// KINETIC-resistant enemy takes less from a (KINETIC) mine blast than a neutral
+/// one in the same detonation.
+#[test]
+fn power_weapon_respects_element_resistance() {
+    use crate::combat::element::{Element, Resistances};
+    use crate::systems::power_weapon::{lay_mine, update_mines};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let resistant = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Resistances::new().with(Element::Kinetic, 0.5),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    let neutral = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Transform::from_xyz(30.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| lay_mine(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0)); // past the 0.6 s arm delay → detonates
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems((update_mines, apply_damage).chain());
+    step.run(world);
+
+    let r_hp = world.get::<Health>(resistant).unwrap().current;
+    let n_hp = world.get::<Health>(neutral).unwrap().current;
+    assert!(r_hp < 100.0 && n_hp < 100.0, "both took blast damage");
+    assert!(r_hp > n_hp, "kinetic-resistant enemy took less ({r_hp} vs {n_hp})");
+}
+
 // ── 10. beam_ray_first_hit ────────────────────────────────────────────────────
 
 /// `beam_ray_hit_dist` (the Lance ray test) reports the forward distance to an

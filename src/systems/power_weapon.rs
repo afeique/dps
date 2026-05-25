@@ -24,7 +24,7 @@
 //! `fire_power_weapon`, `cycle_power_weapon`, `homing_steer`, `update_nova`,
 //! `update_mines`, `update_beams`, `reset_energy`.
 
-use crate::combat::element::ElementSet;
+use crate::combat::element::{Element, ElementSet, Resistances};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{EnergyMeter, KillStreak};
@@ -127,6 +127,8 @@ pub struct Mine {
     damage: f32,
     /// Self-detonation lifetime.
     life: f32,
+    /// Damage element (MineLayer is KINETIC) — drives the resist multiplier.
+    element: Element,
 }
 
 /// An expanding Nova Blast shockwave ring. Damages each enemy once as the ring
@@ -143,6 +145,8 @@ pub struct NovaRing {
     band: f32,
     /// Enemies already hit by this ring (no double-damage).
     hit: Vec<Entity>,
+    /// Damage element (NovaBlast is VOLT) — drives the resist multiplier.
+    element: Element,
 }
 
 // ─── Continuous beams (Lance Beam / Arc Lightning) ───────────────────────────
@@ -184,6 +188,8 @@ pub struct Beam {
     range: f32,
     /// Visual + (for Lance) hit-test full width; half is the ray radius.
     width: f32,
+    /// Damage element (Lance = RADIANT, Arc = VOLT) — drives the resist multiplier.
+    element: Element,
 }
 
 // ─── Shapes ───────────────────────────────────────────────────────────────────
@@ -259,6 +265,7 @@ pub fn lay_mine(commands: &mut Commands, pos: Vec2) {
             blast_radius: 90.0,
             damage: 30.0,
             life: 12.0,
+            element: Element::Kinetic,
         },
         mine_shape(),
         Transform::from_translation(pos.extend(0.4)),
@@ -334,6 +341,11 @@ pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
         BeamKind::Lance => LANCE_WIDTH,
         BeamKind::Arc => ARC_WIDTH,
     };
+    // Lance Beam is RADIANT, Arc Lightning is VOLT (weapon-data.js).
+    let element = match kind {
+        BeamKind::Lance => Element::Radiant,
+        BeamKind::Arc => Element::Volt,
+    };
     commands.spawn((
         Beam {
             kind,
@@ -341,6 +353,7 @@ pub fn spawn_beam(commands: &mut Commands, kind: BeamKind, origin: Vec2) {
             dps: BEAM_DPS,
             range: BEAM_RANGE,
             width,
+            element,
         },
         // Initial bolt; `update_beams` rebuilds it (length + crackle) each frame.
         bolt_shape(kind, 1.0, 0.0),
@@ -503,6 +516,7 @@ pub fn fire_power_weapon(
                     damage: 8.0,
                     band: 30.0,
                     hit: Vec::new(),
+                    element: Element::Volt, // NovaBlast is VOLT (weapon-data.js)
                 },
                 nova_ring_shape(),
                 Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
@@ -537,12 +551,20 @@ const MINE_KNOCKBACK: f32 = 12.0;
 /// Tick mines: arm them, detonate (AoE) on an enemy entering the trigger
 /// radius or on lifetime end, and despawn. Runs in the FixedUpdate collision
 /// group so detonation `Damage` reaches `apply_damage`.
+/// Scale a power-weapon hit by the target's resistance to `element` (W: power
+/// weapons carry an element, so Volt/Radiant/etc. respect enemy resists the way
+/// bullets do). `None` resist ⇒ ×1. (The fuller defense layer — armor/conduct/
+/// corrode/purge — on these non-bullet paths is a later refinement.)
+fn resist_scaled(amount: f32, element: Element, res: Option<&Resistances>) -> f32 {
+    amount * res.map_or(1.0, |r| r.multiplier(element))
+}
+
 pub fn update_mines(
     time: Res<Time>,
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     mut knock: MessageWriter<Knockback>,
-    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    enemies: Query<(Entity, &Transform, &Collider, Option<&Resistances>), With<Enemy>>,
     mut mines: Query<(Entity, &mut Mine, &Transform)>,
 ) {
     let dt = time.delta_secs();
@@ -557,14 +579,17 @@ pub fn update_mines(
 
         let triggered = enemies
             .iter()
-            .any(|(_, etf, ec)| etf.translation.truncate().distance(pos) <= mine.trigger_radius + ec.radius);
+            .any(|(_, etf, ec, _)| etf.translation.truncate().distance(pos) <= mine.trigger_radius + ec.radius);
 
         if triggered || mine.life <= 0.0 {
             // Detonate: damage + shove everything in the blast radius (spec III.6).
-            for (e, etf, ec) in &enemies {
+            for (e, etf, ec, eres) in &enemies {
                 let epos = etf.translation.truncate();
                 if epos.distance(pos) <= mine.blast_radius + ec.radius {
-                    dmg.write(Damage { target: e, amount: mine.damage });
+                    dmg.write(Damage {
+                        target: e,
+                        amount: resist_scaled(mine.damage, mine.element, eres),
+                    });
                     let dir = (epos - pos).normalize_or_zero();
                     knock.write(Knockback { target: e, impulse: dir * MINE_KNOCKBACK });
                 }
@@ -589,7 +614,7 @@ pub fn update_nova(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     mut knock: MessageWriter<Knockback>,
-    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    enemies: Query<(Entity, &Transform, &Collider, Option<&Resistances>), With<Enemy>>,
     // `Without<Enemy>` makes the mut-Transform ring query disjoint from the
     // immut-Transform enemy query above (a ring is never an enemy) — else B0001.
     mut rings: Query<(Entity, &mut NovaRing, &mut Transform), Without<Enemy>>,
@@ -598,14 +623,17 @@ pub fn update_nova(
     for (ring_e, mut ring, mut tf) in &mut rings {
         ring.radius += ring.speed * dt;
 
-        for (e, etf, ec) in &enemies {
+        for (e, etf, ec, eres) in &enemies {
             if ring.hit.contains(&e) {
                 continue;
             }
             let epos = etf.translation.truncate();
             // The enemy's disc overlaps the damaging front band.
             if nova_band_hits(ring.center, ring.radius, ring.band, epos, ec.radius) {
-                dmg.write(Damage { target: e, amount: ring.damage });
+                dmg.write(Damage {
+                    target: e,
+                    amount: resist_scaled(ring.damage, ring.element, eres),
+                });
                 // Shove outward from the ring center (spec III.6).
                 let dir = (epos - ring.center).normalize_or_zero();
                 knock.write(Knockback { target: e, impulse: dir * NOVA_KNOCKBACK });
@@ -660,7 +688,7 @@ pub fn update_beams(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     player: Query<(&Transform, &Intent), With<Ship>>,
-    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+    enemies: Query<(Entity, &Transform, &Collider, Option<&Resistances>), With<Enemy>>,
     mut beams: Query<(Entity, &mut Beam, &mut Transform, &mut Shape), (Without<Ship>, Without<Enemy>)>,
 ) {
     let dt = time.delta_secs();
@@ -692,8 +720,8 @@ pub fn update_beams(
         match beam.kind {
             BeamKind::Lance => {
                 // The first enemy along the forward ray (smallest distance).
-                let mut best: Option<(f32, Entity)> = None;
-                for (e, etf, ec) in &enemies {
+                let mut best: Option<(f32, Entity, f32)> = None;
+                for (e, etf, ec, eres) in &enemies {
                     if let Some(t) = beam_ray_hit_dist(
                         origin,
                         fwd,
@@ -702,14 +730,15 @@ pub fn update_beams(
                         etf.translation.truncate(),
                         ec.radius,
                     ) {
-                        if best.is_none_or(|(bt, _)| t < bt) {
-                            best = Some((t, e));
+                        if best.is_none_or(|(bt, _, _)| t < bt) {
+                            let rm = eres.map_or(1.0, |r| r.multiplier(beam.element));
+                            best = Some((t, e, rm));
                         }
                     }
                 }
                 let length = match best {
-                    Some((t, e)) => {
-                        dmg.write(Damage { target: e, amount: tick_dmg });
+                    Some((t, e, rm)) => {
+                        dmg.write(Damage { target: e, amount: tick_dmg * rm });
                         // Lance burn (spec III.3): a refreshing DoT on the target.
                         commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
                         t
@@ -726,20 +755,21 @@ pub fn update_beams(
                     origin + fwd * beam.range
                 };
                 // The enemy nearest the cursor, within the player's reach.
-                let mut best: Option<(f32, Vec2, Entity)> = None;
-                for (e, etf, _) in &enemies {
+                let mut best: Option<(f32, Vec2, Entity, f32)> = None;
+                for (e, etf, _, eres) in &enemies {
                     let epos = etf.translation.truncate();
                     if epos.distance(ppos) > beam.range {
                         continue;
                     }
                     let d2 = epos.distance_squared(aim);
-                    if best.is_none_or(|(bd, _, _)| d2 < bd) {
-                        best = Some((d2, epos, e));
+                    if best.is_none_or(|(bd, _, _, _)| d2 < bd) {
+                        let rm = eres.map_or(1.0, |r| r.multiplier(beam.element));
+                        best = Some((d2, epos, e, rm));
                     }
                 }
                 match best {
-                    Some((_, epos, e)) => {
-                        dmg.write(Damage { target: e, amount: tick_dmg });
+                    Some((_, epos, e, rm)) => {
+                        dmg.write(Damage { target: e, amount: tick_dmg * rm });
                         // Arc stun (spec III.3): a refreshing fire-suppress lock.
                         commands.entity(e).insert(Stunned { secs: 0.5 });
                         let to = epos - origin;
