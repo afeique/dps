@@ -19,6 +19,7 @@ pub mod titan;
 pub mod wasp;
 pub mod weaver;
 
+use crate::combat::element::{Element, Resistances};
 use crate::components::*;
 use crate::messages::{Death, Fire};
 use crate::render::shapes;
@@ -47,6 +48,35 @@ fn shape_for(kind: EnemyKind) -> Shape {
         EnemyKind::Tangerine => tangerine::shape(),
         EnemyKind::Titan => titan::shape(),
         EnemyKind::Drifter => shapes::drifter_star(18.0),
+    }
+}
+
+/// Per-kind elemental resistance map (ported 1:1 from `enemy-data.js`
+/// `ENEMY_RESISTS`, :631-650): `>0` resists, `<0` is a weakness, `1` immune.
+/// Hunter is neutral (empty). Stamped on every enemy at spawn; read by
+/// `collision::bullet_hits_enemy` (E2). The Titan's "tanky all-around 0.30"
+/// stands in until its rotating weak-core behavior lands.
+fn resistances_for(kind: EnemyKind) -> Resistances {
+    use Element::*;
+    let r = Resistances::new();
+    match kind {
+        EnemyKind::Guardian => r.with(Kinetic, 0.30).with(Volt, -0.40),
+        EnemyKind::Wasp => r.with(Cryo, -0.50),
+        EnemyKind::Stalker => r.with(Radiant, 0.50).with(Void, -0.40),
+        EnemyKind::Drifter => r.with(Volt, 0.60).with(Toxic, -0.40),
+        EnemyKind::Prowler => r.with(Cryo, 0.40).with(Pyro, -0.50),
+        EnemyKind::Weaver => r.with(Cryo, -0.40),
+        EnemyKind::Sentinel => r.with(Radiant, 0.50).with(Kinetic, -0.30),
+        EnemyKind::Tangerine => r.with(Pyro, 0.60).with(Cryo, -0.40),
+        EnemyKind::Titan => r
+            .with(Kinetic, 0.30)
+            .with(Pyro, 0.30)
+            .with(Cryo, 0.30)
+            .with(Volt, 0.30)
+            .with(Toxic, 0.30)
+            .with(Void, 0.30)
+            .with(Radiant, 0.30),
+        EnemyKind::Hunter => r, // neutral
     }
 }
 
@@ -420,6 +450,8 @@ fn spawn_enemy(
         shape_for(kind),
         Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul)),
     ));
+    // Elemental resistance map (E2) — read by the player→enemy damage path.
+    e.insert(resistances_for(kind));
 
     match promo {
         Promo::Boss(tier) => {

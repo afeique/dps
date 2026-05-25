@@ -169,6 +169,62 @@ pub fn resolve_bullet_elements(
     vec![base]
 }
 
+/// A small set of elements carried by a shot (a bitset over [`Element`]). Cheap
+/// + `Copy` so it rides on every bullet without a heap allocation. Empty =
+/// neutral (multiplier 1). Built from the resolved attunement/base elements
+/// (W1); the per-hit resist average reads it via [`Resistances::multi_multiplier_set`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ElementSet(u8);
+
+impl ElementSet {
+    /// The empty (neutral) set.
+    pub const EMPTY: ElementSet = ElementSet(0);
+
+    /// A single-element set.
+    pub fn single(e: Element) -> Self {
+        ElementSet(1 << e.idx())
+    }
+
+    /// A `Kinetic`-only set — the default for an un-attuned shot.
+    pub fn kinetic() -> Self {
+        Self::single(Element::Kinetic)
+    }
+
+    /// Build a set from a slice (deduping naturally).
+    pub fn from_slice(els: &[Element]) -> Self {
+        let mut bits = 0u8;
+        for &e in els {
+            bits |= 1 << e.idx();
+        }
+        ElementSet(bits)
+    }
+
+    /// Is `e` present?
+    pub fn contains(self, e: Element) -> bool {
+        self.0 & (1 << e.idx()) != 0
+    }
+
+    /// Add `e` to the set.
+    pub fn insert(&mut self, e: Element) {
+        self.0 |= 1 << e.idx();
+    }
+
+    /// Number of elements present.
+    pub fn len(self) -> u32 {
+        self.0.count_ones()
+    }
+
+    /// True when no element is present (neutral).
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Iterate the present elements in `Element::ALL` order.
+    pub fn iter(self) -> impl Iterator<Item = Element> {
+        Element::ALL.into_iter().filter(move |&e| self.contains(e))
+    }
+}
+
 /// Per-target elemental resistances (the `resist` map on enemies + the player's
 /// item resist affixes). One slot per [`Element`]: `>0` resistant, `<0` weak,
 /// `1` immune, `0` neutral. Default = all-neutral.
@@ -218,6 +274,16 @@ impl Resistances {
             1 => self.multiplier(elements[0]),
             n => elements.iter().map(|&e| self.multiplier(e)).sum::<f32>() / n as f32,
         }
+    }
+
+    /// [`Resistances::multi_multiplier`] for an [`ElementSet`] (the on-bullet
+    /// form): empty set → `1`; else the AVERAGE of the present elements' multipliers.
+    pub fn multi_multiplier_set(&self, set: ElementSet) -> f32 {
+        let n = set.len();
+        if n == 0 {
+            return 1.0;
+        }
+        set.iter().map(|e| self.multiplier(e)).sum::<f32>() / n as f32
     }
 
     /// The element this target is most WEAK to at/below `threshold` (default

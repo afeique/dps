@@ -9,6 +9,7 @@
 //! (`js/modules/performance/spatial-grid.js` + `combat/collision-system.js`)
 //! and adds the remaining pairs (AOE rings, asteroids).
 
+use crate::combat::element::Resistances;
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
@@ -29,9 +30,14 @@ pub fn bullet_hits_enemy(
     equipment: Res<Equipment>,
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
-    mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet)>,
+    mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet, Option<&BulletElements>)>,
     // `Without<Ship>` keeps this immut `&Health` disjoint from `player_hp`'s mut.
-    enemies: Query<(Entity, &Transform, &Collider, &Health), (With<Enemy>, Without<Ship>)>,
+    // `Resistances` (E2) is optional so test-spawned enemies (no resist map) are
+    // unaffected (neutral ×1).
+    enemies: Query<
+        (Entity, &Transform, &Collider, &Health, Option<&Resistances>),
+        (With<Enemy>, Without<Ship>),
+    >,
     mut player_hp: Query<&mut Health, With<Ship>>,
 ) {
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
@@ -54,11 +60,13 @@ pub fn bullet_hits_enemy(
     let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
     // EXECUTIONER passive: bonus damage vs enemies below the execute threshold.
     let exec_bonus = executioner_bonus(upgrades.owned(UpgradeId::Executioner));
-    for (bullet_e, btf, bc, mut bullet) in &mut bullets {
+    for (bullet_e, btf, bc, mut bullet, belems) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
-        for (enemy_e, etf, ec, ehp) in &enemies {
+        // The bullet's resolved element set (E2); absent ⇒ neutral (no resist).
+        let belem_set = belems.map(|b| b.0);
+        for (enemy_e, etf, ec, ehp, eres) in &enemies {
             let reach = bc.radius + ec.radius;
             let d2 = btf
                 .translation
@@ -76,7 +84,13 @@ pub fn bullet_hits_enemy(
                 } else {
                     1.0
                 };
-                let amount = bullet.damage * streak_mult * crit_mult * exec;
+                // Element/resistance multiplier (E2): the AVERAGE of the bullet's
+                // elements vs this enemy's resist map (resist <1, weakness >1).
+                let resist_mult = match (belem_set, eres) {
+                    (Some(set), Some(res)) => res.multi_multiplier_set(set),
+                    _ => 1.0,
+                };
+                let amount = bullet.damage * streak_mult * crit_mult * exec * resist_mult;
                 dmg.write(Damage {
                     target: enemy_e,
                     amount,
@@ -110,12 +124,20 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2, _) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }
                         if etf2.translation.truncate().distance(hit_pos) <= explode_r + ec2.radius {
-                            dmg.write(Damage { target: e2, amount: splash });
+                            // The splash takes each splashed enemy's own resist (E2).
+                            let smult = match (belem_set, eres2) {
+                                (Some(set), Some(res)) => res.multi_multiplier_set(set),
+                                _ => 1.0,
+                            };
+                            dmg.write(Damage {
+                                target: e2,
+                                amount: splash * smult,
+                            });
                         }
                     }
                 }

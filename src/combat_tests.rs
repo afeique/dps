@@ -2,7 +2,7 @@
 //! JS `tests/unit/combat/*` invariants. Element/resistance math first.
 
 use crate::combat::element::{
-    elemental_multiplier, resolve_bullet_elements, Element, Resistances, ELEMENT_COUNT,
+    elemental_multiplier, resolve_bullet_elements, Element, ElementSet, Resistances, ELEMENT_COUNT,
 };
 
 // ─── Element taxonomy ────────────────────────────────────────────────────────
@@ -149,4 +149,52 @@ fn resolve_dedups_attunements_preserving_order() {
 fn resolve_falls_back_to_base_element() {
     let out = resolve_bullet_elements(None, &[], Element::Void);
     assert_eq!(out, vec![Element::Void]);
+}
+
+// ─── ElementSet (the on-bullet bitset, E2) ───────────────────────────────────
+
+#[test]
+fn element_set_insert_contains_len_iter() {
+    let mut s = ElementSet::EMPTY;
+    assert!(s.is_empty());
+    s.insert(Element::Pyro);
+    s.insert(Element::Pyro); // idempotent (a set)
+    s.insert(Element::Volt);
+    assert_eq!(s.len(), 2);
+    assert!(s.contains(Element::Pyro));
+    assert!(!s.contains(Element::Cryo));
+    // iter yields in Element::ALL order regardless of insert order
+    assert_eq!(s.iter().collect::<Vec<_>>(), vec![Element::Pyro, Element::Volt]);
+}
+
+#[test]
+fn element_set_kinetic_and_from_slice_dedup() {
+    assert_eq!(ElementSet::kinetic(), ElementSet::single(Element::Kinetic));
+    let s = ElementSet::from_slice(&[Element::Pyro, Element::Pyro, Element::Cryo]);
+    assert_eq!(s.len(), 2);
+}
+
+#[test]
+fn multi_multiplier_set_matches_slice_form() {
+    let r = Resistances::new()
+        .with(Element::Pyro, 0.5) // mult 0.5
+        .with(Element::Cryo, -0.5); // mult 1.5
+    assert_eq!(r.multi_multiplier_set(ElementSet::EMPTY), 1.0);
+    assert!((r.multi_multiplier_set(ElementSet::single(Element::Pyro)) - 0.5).abs() < 1e-6);
+    let both = ElementSet::from_slice(&[Element::Pyro, Element::Cryo]);
+    assert!((r.multi_multiplier_set(both) - 1.0).abs() < 1e-6); // average
+}
+
+/// E2 sanity: a Kinetic shot vs the real per-enemy resist directions.
+/// Guardian resists Kinetic (0.30 → ×0.7); Sentinel is weak to Kinetic
+/// (−0.30 → ×1.3); Hunter is neutral (×1.0).
+#[test]
+fn kinetic_shot_respects_guardian_sentinel_hunter_resist() {
+    let kinetic = ElementSet::kinetic();
+    let guardian = Resistances::new().with(Element::Kinetic, 0.30).with(Element::Volt, -0.40);
+    let sentinel = Resistances::new().with(Element::Radiant, 0.50).with(Element::Kinetic, -0.30);
+    let hunter = Resistances::new();
+    assert!((guardian.multi_multiplier_set(kinetic) - 0.70).abs() < 1e-6);
+    assert!((sentinel.multi_multiplier_set(kinetic) - 1.30).abs() < 1e-6);
+    assert_eq!(hunter.multi_multiplier_set(kinetic), 1.0);
 }

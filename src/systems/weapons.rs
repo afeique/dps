@@ -22,6 +22,7 @@
 //! multiply dps base units, not the JS px/tick (timestep alignment is a
 //! separate increment).
 
+use crate::combat::element::ElementSet;
 use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
@@ -302,6 +303,10 @@ pub fn spawn_bullets(
                 ));
                 b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
+            // Element tag (E2): the weapon's base element — `Kinetic` until the
+            // W1 attunement system resolves equipped attunements per shot. The
+            // target's `Resistances` multiplier is applied in `bullet_hits_enemy`.
+            bullet.insert(BulletElements(ElementSet::kinetic()));
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {
                 bullet.insert(Homing { turn_rate: player_homing });

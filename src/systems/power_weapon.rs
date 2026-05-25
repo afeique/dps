@@ -24,6 +24,7 @@
 //! `fire_power_weapon`, `cycle_power_weapon`, `homing_steer`, `update_nova`,
 //! `update_mines`, `update_beams`, `reset_energy`.
 
+use crate::combat::element::ElementSet;
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{EnergyMeter, KillStreak};
@@ -480,6 +481,7 @@ pub fn fire_power_weapon(
                 let dir = rotate(fwd, offset);
                 commands.spawn((
                     Bullet { kind: BulletKind::Player, damage: 22.0, pierce: 0 },
+                    BulletElements(ElementSet::kinetic()),
                     Velocity(dir * 420.0),
                     Collider { radius: 5.0 },
                     Faction::Player,
@@ -516,6 +518,7 @@ pub fn fire_power_weapon(
         PowerWeaponKind::ChargeShot => {
             commands.spawn((
                 Bullet { kind: BulletKind::Player, damage: 60.0, pierce: 3 },
+                BulletElements(ElementSet::kinetic()),
                 Velocity(fwd * 1100.0),
                 Collider { radius: 9.0 },
                 Faction::Player,

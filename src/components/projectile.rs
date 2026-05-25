@@ -1,6 +1,16 @@
 //! Projectile components (bullets now; mines/missiles in Phase 3).
 
+use crate::combat::element::ElementSet;
 use bevy::prelude::*;
+
+/// The element(s) a player bullet carries (resolved from the weapon's base
+/// element + equipped attunements — W1; for now every player shot is the
+/// `Kinetic` base). Read by `collision::bullet_hits_enemy` to apply the target's
+/// `Resistances` multiplier. A bullet **without** this component is treated as
+/// neutral (full damage) — kept a separate component (not a `Bullet` field) so
+/// the existing `Bullet {…}` literals + tests are unchanged.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct BulletElements(pub ElementSet);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
