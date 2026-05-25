@@ -375,7 +375,7 @@ pub fn spawn_for_wave(
     tier: u8,
     mini: bool,
     wave: u64,
-) {
+) -> Entity {
     let diff_hp = difficulty_hp_mul(wave);
     let diff_sp = difficulty_speed_mul(wave);
     if mini {
@@ -387,16 +387,17 @@ pub fn spawn_for_wave(
             MINI_BOSS_SZ_MUL,
             diff_sp,
             Promo::Mini,
-        );
+        )
     } else {
         let (hp_mul, sz_mul, sp_mul) = boss_tier_mul(tier);
         let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
-        spawn_enemy(commands, kind, pos, hp_mul * diff_hp, sz_mul, sp_mul * diff_sp, promo);
+        spawn_enemy(commands, kind, pos, hp_mul * diff_hp, sz_mul, sp_mul * diff_sp, promo)
     }
 }
 
 /// Core spawn used by all variants: build the enemy with HP/size multipliers and
-/// the given promotion marker.
+/// the given promotion marker. Returns the spawned `Entity` so callers (e.g. the
+/// wave pulse) can bundle a group into a formation.
 fn spawn_enemy(
     commands: &mut Commands,
     kind: EnemyKind,
@@ -405,7 +406,7 @@ fn spawn_enemy(
     sz_mul: f32,
     speed_mul: f32,
     promo: Promo,
-) {
+) -> Entity {
     let st = stats_for(kind);
 
     let mut e = commands.spawn((
@@ -447,4 +448,6 @@ fn spawn_enemy(
             ));
         });
     }
+
+    e.id()
 }

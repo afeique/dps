@@ -12,6 +12,7 @@ pub mod drops;
 pub mod enemy;
 pub mod enemy_ai;
 pub mod flow;
+pub mod formations;
 pub mod input;
 pub mod items;
 pub mod missions;

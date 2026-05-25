@@ -47,6 +47,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::missions::Mission>()
             .init_resource::<systems::items::LootFeed>()
             .init_resource::<systems::items::Equipment>()
+            .init_resource::<systems::formations::Formations>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
@@ -147,6 +148,7 @@ impl Plugin for GamePlugin {
                     systems::spawn::spawn_player,
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
+                    systems::formations::clear_formations,
                 ),
             )
             // ── shop (on-demand; pauses the sim) ────────────────────────
@@ -272,6 +274,9 @@ impl Plugin for GamePlugin {
                         .chain(),
                     systems::movement::integrate,
                     systems::movement::confine_player,
+                    // Generic formations (spec IV.6): override bound members'
+                    // movement toward their slot targets, after integrate.
+                    systems::formations::update_formations,
                     // Keep deflector orbs orbiting before collisions resolve.
                     systems::skills::orbit_deflectors,
                     // Collisions → Damage.

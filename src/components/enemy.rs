@@ -54,6 +54,12 @@ pub struct RageTelegraph {
 #[derive(Component, Debug)]
 pub struct TelegraphRing;
 
+/// Marks an enemy currently bound into a generic formation (spec IV.6). Set by
+/// `formations::create_formation`, cleared on release; lets other systems tell a
+/// formation member apart (and gates re-binding).
+#[derive(Component, Debug)]
+pub struct FormationMember;
+
 /// Marks a mid-wave **mini-boss** promotion (spec V.6) — a regular enemy buffed
 /// to HP×1.7 / radius×1.25, awarding 2× points on death.
 #[derive(Component, Debug)]

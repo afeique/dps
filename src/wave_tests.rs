@@ -43,6 +43,7 @@ fn test_app() -> App {
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
         .init_resource::<crate::systems::items::Equipment>()
+        .init_resource::<crate::systems::formations::Formations>()
         .init_resource::<crate::resources::LastStandUsed>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
@@ -1418,7 +1419,7 @@ fn difficulty_curve_scales_hp_and_points() {
     let world = app.world_mut();
     let mut step = Schedule::default();
     step.add_systems(|mut c: Commands| {
-        enemy::spawn_for_wave(&mut c, EnemyKind::Hunter, Vec2::ZERO, 0, false, 30)
+        enemy::spawn_for_wave(&mut c, EnemyKind::Hunter, Vec2::ZERO, 0, false, 30);
     });
     step.run(world);
     let mut q = world.query_filtered::<&Health, With<Enemy>>();
@@ -1464,7 +1465,7 @@ fn difficulty_speed_curve_and_speedmul() {
     let world = app.world_mut();
     let mut step = Schedule::default();
     step.add_systems(|mut c: Commands| {
-        enemy::spawn_for_wave(&mut c, EnemyKind::Titan, Vec2::ZERO, 1, false, 30)
+        enemy::spawn_for_wave(&mut c, EnemyKind::Titan, Vec2::ZERO, 1, false, 30);
     });
     step.run(world);
     let mut q = world.query::<&SpeedMul>();
@@ -3247,4 +3248,119 @@ fn telegraph_pulse_scale_curve() {
     }
     assert_eq!(telegraph_pulse_scale(-1.0), telegraph_pulse_scale(0.0), "clamps below 0");
     assert_eq!(telegraph_pulse_scale(2.0), telegraph_pulse_scale(1.0), "clamps above 1");
+}
+
+// ── 92. formation_pick_and_slots ──────────────────────────────────────────────
+
+/// `pick_formation` needs ≥3, grows its pool with count, and scales params with
+/// the wave; `slot_target` places orbit members on the radius circle and keeps
+/// every pattern bounded (spec IV.6).
+#[test]
+fn formation_pick_and_slots() {
+    use crate::resources::GameRng;
+    use crate::systems::formations::{pick_formation, slot_target, FormationKind};
+
+    let mut rng = GameRng::default();
+    assert!(pick_formation(2, 5, &mut rng).is_none(), "needs ≥3 members");
+
+    // 3 members → only orbit/weave/flank in the pool.
+    for _ in 0..30 {
+        let p = pick_formation(3, 5, &mut rng).unwrap();
+        assert!(
+            matches!(p.kind, FormationKind::Orbit | FormationKind::Weave | FormationKind::Flank),
+            "3-member pool excludes cross/figure8 (got {:?})",
+            p.kind
+        );
+    }
+
+    // Params scale with the wave (radius caps +120, duration caps 12s).
+    let p1 = pick_formation(5, 1, &mut GameRng::default()).unwrap();
+    let p30 = pick_formation(5, 30, &mut GameRng::default()).unwrap();
+    assert!((p1.radius - 186.0).abs() < 1e-3, "W1 radius 180+6");
+    assert!((p30.radius - 300.0).abs() < 1e-3, "radius caps at +120");
+    assert!((p30.duration - 12.0).abs() < 1e-3, "duration caps at 12s");
+    assert!(p30.duration > p1.duration, "later waves last longer");
+
+    // Orbit slot 0 (phase 0, t 0) sits one radius to the +x of the player.
+    let player = Vec2::new(100.0, 50.0);
+    let t0 = slot_target(FormationKind::Orbit, 0, 4, 0.0, player, 200.0, 0.6, 0.0);
+    assert!((t0 - (player + Vec2::new(200.0, 0.0))).length() < 1e-3, "orbit slot 0 at +x radius");
+    for slot in 0..4 {
+        let p = slot_target(FormationKind::Orbit, slot, 4, 0.3, player, 200.0, 0.6, 0.5);
+        assert!(((p - player).length() - 200.0).abs() < 1e-3, "orbit members ride the radius circle");
+    }
+
+    // Every pattern stays within a sane bound of the player (no runaway).
+    for kind in [
+        FormationKind::Orbit, FormationKind::Weave, FormationKind::Flank,
+        FormationKind::Cross, FormationKind::Figure8,
+    ] {
+        for slot in 0..5 {
+            for &t in &[0.0_f32, 1.0, 3.0, 7.0] {
+                let p = slot_target(kind, slot, 5, t, player, 200.0, 0.6, 1.0);
+                assert!((p - player).length() < 600.0, "{kind:?} slot {slot} stays bounded");
+            }
+        }
+    }
+}
+
+// ── 93. formation_lerps_and_expires ───────────────────────────────────────────
+
+/// `update_formations` lerps members toward their slots (overriding AI velocity)
+/// and, past `duration`, expires the formation + releases its members (spec IV.6).
+#[test]
+fn formation_lerps_and_expires() {
+    use crate::components::FormationMember;
+    use crate::systems::formations::{update_formations, Formation, FormationKind, Formations};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Transform::default())); // player at origin
+
+    let mut ents = Vec::new();
+    for _ in 0..3 {
+        let e = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                FormationMember,
+                Velocity(Vec2::new(99.0, 99.0)),
+                Transform::from_xyz(1000.0, 1000.0, 0.0),
+            ))
+            .id();
+        ents.push(e);
+    }
+    world.resource_mut::<Formations>().active.push(Formation {
+        kind: FormationKind::Orbit,
+        members: ents.clone(),
+        initial_count: 3,
+        elapsed: 0.0,
+        duration: 1.0,
+        radius: 200.0,
+        angular_speed: 0.6,
+        lerp: 0.5,
+        phase_seed: 0.0,
+    });
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    let mut step = Schedule::default();
+    step.add_systems(update_formations);
+
+    // A few ticks (elapsed < duration): members converge onto the orbit circle,
+    // and their AI velocity is overridden to zero.
+    for _ in 0..7 {
+        step.run(world);
+    }
+    let d = world.get::<Transform>(ents[0]).unwrap().translation.truncate().length();
+    assert!((d - 200.0).abs() < 30.0, "member converges toward the orbit radius (got {d})");
+    assert_eq!(world.get::<Velocity>(ents[0]).unwrap().0, Vec2::ZERO, "AI movement overridden");
+    assert_eq!(world.resource::<Formations>().active.len(), 1, "still active mid-window");
+
+    // Past duration → expire + release the FormationMember marker.
+    for _ in 0..6 {
+        step.run(world);
+    }
+    assert_eq!(world.resource::<Formations>().active.len(), 0, "formation expired");
+    assert!(world.get::<FormationMember>(ents[0]).is_none(), "members released back to AI");
 }

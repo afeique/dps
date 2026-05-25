@@ -335,6 +335,7 @@ fn spawn_pulse(
     bounds: &PlayBounds,
     rng: &mut GameRng,
     wave: &mut Wave,
+    formations: &mut crate::systems::formations::Formations,
     wave_idx: usize,
     pulse_idx: usize,
 ) {
@@ -348,6 +349,9 @@ fn spawn_pulse(
 
     let wave_n = (wave_idx + 1) as u64;
     let pulse = &WAVES[wave_idx].pulses[pulse_idx];
+    // Collect the pulse's plain (non-boss / non-mini) members — eligible to bind
+    // into a generic formation (spec IV.6).
+    let mut fresh: Vec<Entity> = Vec::new();
     for group in pulse.0 {
         // Mid-wave mini-boss promotion (spec V.6): a non-boss, non-Titan group
         // rolls once; on a hit, its first member spawns as a mini-boss.
@@ -361,8 +365,17 @@ fn spawn_pulse(
             let pos = spawn_pos(wave.spawn_seq, bounds);
             let mini = promote && i == 0;
             // Wave-aware spawn applies the V.4 HP difficulty curve.
-            enemy::spawn_for_wave(commands, group.kind, pos, group.tier, mini, wave_n);
+            let e = enemy::spawn_for_wave(commands, group.kind, pos, group.tier, mini, wave_n);
+            if group.tier == 0 && !mini {
+                fresh.push(e);
+            }
         }
+    }
+
+    // Bundle the freshly-warped plain group into a coordinated formation when
+    // ≥3 spawned (spec IV.6 `pickFormation`).
+    if let Some(params) = crate::systems::formations::pick_formation(fresh.len(), wave_n, rng) {
+        crate::systems::formations::create_formation(commands, formations, fresh, params, rng);
     }
 }
 
@@ -382,6 +395,7 @@ pub fn spawn_waves(
     mut rng: ResMut<GameRng>,
     enemies: Query<(), With<Enemy>>,
     mut wave: ResMut<Wave>,
+    mut formations: ResMut<crate::systems::formations::Formations>,
     mut commands: Commands,
 ) {
     if wave.completed {
@@ -397,7 +411,7 @@ pub fn spawn_waves(
             return;
         }
         let idx = wave.idx;
-        spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, idx, 0);
+        spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, &mut formations, idx, 0);
         wave.spawned_pulses = 1;
         wave.pulse_timer = 0.0;
         wave.started = true;
@@ -411,7 +425,7 @@ pub fn spawn_waves(
         wave.pulse_timer += dt;
         if enemy_count <= PULSE_ADVANCE_ENEMY_THRESHOLD || wave.pulse_timer >= PULSE_STALE_SECS {
             let (idx, next) = (wave.idx, wave.spawned_pulses);
-            spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, idx, next);
+            spawn_pulse(&mut commands, &bounds, &mut rng, &mut wave, &mut formations, idx, next);
             wave.spawned_pulses += 1;
             wave.pulse_timer = 0.0;
         }
