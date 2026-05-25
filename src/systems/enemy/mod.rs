@@ -54,6 +54,10 @@ fn shape_for(kind: EnemyKind) -> Shape {
         EnemyKind::Glacier => guardian::shape(),
         EnemyKind::FrostLance => stalker::shape(),
         EnemyKind::AshenDetonator => hunter::shape(),
+        // EN E8c — reuse the move-pattern source's silhouette.
+        EnemyKind::TeslaWraith => hunter::shape(),
+        EnemyKind::Plaguebearer | EnemyKind::Hydra => tangerine::shape(),
+        EnemyKind::SporeCarrier => prowler::shape(),
     }
 }
 
@@ -88,6 +92,11 @@ pub fn resistances_for(kind: EnemyKind) -> Resistances {
         EnemyKind::Glacier => r.with(Cryo, 0.90).with(Pyro, -0.50),
         EnemyKind::FrostLance => r.with(Cryo, 0.40).with(Toxic, -0.40),
         EnemyKind::AshenDetonator => r.with(Pyro, 0.50).with(Cryo, -0.40),
+        // EN batch E8c resist maps (enemy-data.js:645-647).
+        EnemyKind::TeslaWraith => r.with(Volt, 0.85).with(Toxic, -0.50),
+        EnemyKind::Plaguebearer => r.with(Toxic, 0.60).with(Radiant, -0.40),
+        EnemyKind::SporeCarrier => r.with(Toxic, 0.50).with(Radiant, -0.40),
+        EnemyKind::Hydra => r, // KINETIC bruiser, neutral resists
     }
 }
 
@@ -109,6 +118,10 @@ pub fn element_for(kind: EnemyKind) -> Element {
         // EN batch E8b attack elements (enemy-data.js:616-619).
         EnemyKind::Cinder | EnemyKind::AshenDetonator => Element::Pyro,
         EnemyKind::Glacier | EnemyKind::FrostLance => Element::Cryo,
+        // EN batch E8c attack elements (enemy-data.js:620-622).
+        EnemyKind::TeslaWraith => Element::Volt,
+        EnemyKind::Plaguebearer | EnemyKind::SporeCarrier => Element::Toxic,
+        EnemyKind::Hydra => Element::Kinetic,
     }
 }
 
@@ -156,6 +169,31 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
             radius: 18.0,
             speed: 132.0,
             fire_cooldown: Some(1.0),
+        },
+        // EN batch E8c (enemy-data.js:473-577).
+        EnemyKind::TeslaWraith => EnemyStats {
+            health: 6.0,
+            radius: 17.0,
+            speed: 192.0,
+            fire_cooldown: Some(1.4),
+        },
+        EnemyKind::Plaguebearer => EnemyStats {
+            health: 11.0,
+            radius: 22.0,
+            speed: 120.0,
+            fire_cooldown: Some(2.0),
+        },
+        EnemyKind::SporeCarrier => EnemyStats {
+            health: 13.0,
+            radius: 23.0,
+            speed: 66.0,
+            fire_cooldown: Some(1.2),
+        },
+        EnemyKind::Hydra => EnemyStats {
+            health: 14.0,
+            radius: 22.0,
+            speed: 84.0,
+            fire_cooldown: Some(1.2),
         },
     }
 }
@@ -329,6 +367,11 @@ pub fn points(kind: EnemyKind) -> u64 {
         EnemyKind::Glacier => 250,
         EnemyKind::FrostLance => 150,
         EnemyKind::AshenDetonator => 160,
+        // EN batch E8c points (enemy-data.js:473-577).
+        EnemyKind::TeslaWraith => 150,
+        EnemyKind::Plaguebearer => 200,
+        EnemyKind::SporeCarrier => 240,
+        EnemyKind::Hydra => 220,
     }
 }
 
@@ -362,6 +405,9 @@ pub fn drop_budget_mul(kind: EnemyKind, boss: bool) -> f32 {
         EnemyKind::Cinder => 0.75,
         EnemyKind::Glacier => 1.4,
         EnemyKind::FrostLance | EnemyKind::AshenDetonator => 1.0,
+        // EN batch E8c: Tesla grunt, Plague/Spore/Hydra tanky standoffs.
+        EnemyKind::TeslaWraith => 0.75,
+        EnemyKind::Plaguebearer | EnemyKind::SporeCarrier | EnemyKind::Hydra => 1.4,
     }
 }
 

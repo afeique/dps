@@ -29,6 +29,15 @@ pub enum EnemyKind {
     FrostLance,
     /// Pyro bomber (reuses Hunter's arc + burst); EN-followup adds its death-flare.
     AshenDetonator,
+    // ── EN batch E8c — Volt/Toxic elemental enemies ──────────────────────────
+    /// Volt skirmisher (reuses Hunter's arc + Drifter's arc-lightning fire).
+    TeslaWraith,
+    /// Toxic area-denier (reuses Tangerine's chase + mine); EN-followup adds its acid trail.
+    Plaguebearer,
+    /// Toxic drone spawner (reuses Prowler's keep-distance + Hunter's fire); EN-followup adds its spawner.
+    SporeCarrier,
+    /// Splitting bruiser (reuses Tangerine's chase + Hunter's fire); EN-followup adds its death-split.
+    Hydra,
 }
 
 #[derive(Component, Debug)]

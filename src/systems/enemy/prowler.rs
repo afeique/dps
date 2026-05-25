@@ -182,7 +182,8 @@ pub fn ai(
 
     for (enemy, mut ai, mut vel, tf, sm) in &mut q {
         let spd = spd * sm.map_or(1.0, |s| s.0);
-        if enemy.kind != EnemyKind::Prowler {
+        // Spore Carrier (EN) reuses the prowler keep-distance.
+        if !matches!(enemy.kind, EnemyKind::Prowler | EnemyKind::SporeCarrier) {
             continue;
         }
 

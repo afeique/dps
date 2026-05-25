@@ -981,6 +981,22 @@ fn en_pyro_cryo_enemy_data() {
     assert_eq!(points(EnemyKind::Cinder), 110);
 }
 
+/// EN batch E8c: the Volt/Toxic enemies carry the right attack element + resist.
+#[test]
+fn en_volt_toxic_enemy_data() {
+    use crate::combat::element::Element;
+    use crate::systems::enemy::{element_for, resistances_for};
+
+    assert_eq!(element_for(EnemyKind::TeslaWraith), Element::Volt);
+    assert_eq!(element_for(EnemyKind::Plaguebearer), Element::Toxic);
+    assert_eq!(element_for(EnemyKind::SporeCarrier), Element::Toxic);
+    assert_eq!(element_for(EnemyKind::Hydra), Element::Kinetic);
+
+    assert!((resistances_for(EnemyKind::TeslaWraith).get(Element::Volt) - 0.85).abs() < 1e-6);
+    assert!(resistances_for(EnemyKind::TeslaWraith).get(Element::Toxic) < 0.0);
+    assert!(resistances_for(EnemyKind::Plaguebearer).get(Element::Radiant) < 0.0, "purge the toxic");
+}
+
 /// EN: the new elemental enemies are wired into the campaign wave table (so they
 /// actually spawn), not just defined as types.
 #[test]
@@ -991,6 +1007,10 @@ fn en_enemies_appear_in_campaign() {
         EnemyKind::Glacier,
         EnemyKind::FrostLance,
         EnemyKind::AshenDetonator,
+        EnemyKind::TeslaWraith,
+        EnemyKind::Plaguebearer,
+        EnemyKind::SporeCarrier,
+        EnemyKind::Hydra,
     ] {
         assert!(campaign_uses(k), "{k:?} should appear in the campaign");
     }

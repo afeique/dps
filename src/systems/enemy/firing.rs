@@ -89,7 +89,10 @@ pub fn enemy_firing(
             // JS: 3-shot burst (75 ms spacing) fired in `faceAngle` direction.
             // Approximation: single aimed shot each cooldown expiry; the
             // `FireCooldown` already models the between-burst gap (0.6–2.2 s).
-            EnemyKind::Hunter | EnemyKind::AshenDetonator => {
+            EnemyKind::Hunter
+            | EnemyKind::AshenDetonator
+            | EnemyKind::SporeCarrier
+            | EnemyKind::Hydra => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
@@ -151,7 +154,7 @@ pub fn enemy_firing(
             // ── Drifter — arc_lightning ───────────────────────────────────────
             // JS: charges then fires a fractal lightning bolt (damage orbs along
             // the spine). Approximated as a 5-shot wide arc (±40° total).
-            EnemyKind::Drifter => {
+            EnemyKind::Drifter | EnemyKind::TeslaWraith => {
                 // 5 shots evenly spaced across ±40° (≈ ±0.698 rad).
                 let half_arc = 0.698_f32; // 40°
                 let steps = 4_u32; // indices 0..=4
@@ -231,7 +234,7 @@ pub fn enemy_firing(
             // ── Tangerine — lay_mine ──────────────────────────────────────────
             // JS: spawns a `homing_mine` that slowly crawls toward the player
             // (60-second lifetime). Approximated as a very slow aimed bullet.
-            EnemyKind::Tangerine => {
+            EnemyKind::Tangerine | EnemyKind::Plaguebearer => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
