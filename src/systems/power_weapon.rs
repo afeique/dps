@@ -49,6 +49,8 @@ pub enum PowerWeaponKind {
     CryoBurst,
     /// No projectile — a temporary buff to the primary (W).
     Overdrive,
+    /// VOID pull-then-collapse field (W).
+    Singularity,
 }
 
 impl PowerWeaponKind {
@@ -61,7 +63,8 @@ impl PowerWeaponKind {
             Self::LanceBeam => Self::ArcLightning,
             Self::ArcLightning => Self::CryoBurst,
             Self::CryoBurst => Self::Overdrive,
-            Self::Overdrive => Self::MissileSalvo,
+            Self::Overdrive => Self::Singularity,
+            Self::Singularity => Self::MissileSalvo,
         }
     }
 
@@ -76,6 +79,7 @@ impl PowerWeaponKind {
             Self::ArcLightning => "Arc Lightning",
             Self::CryoBurst => "Cryo Burst",
             Self::Overdrive => "Overdrive",
+            Self::Singularity => "Singularity",
         }
     }
 
@@ -90,6 +94,7 @@ impl PowerWeaponKind {
             Self::NovaBlast => 45.0,
             Self::MissileSalvo => 55.0,
             Self::LanceBeam => 60.0,
+            Self::Singularity => 60.0,
         }
     }
 
@@ -104,6 +109,7 @@ impl PowerWeaponKind {
             Self::MineLayer => 0.50,
             Self::CryoBurst => 1.00,
             Self::Overdrive => OVERDRIVE_DURATION,
+            Self::Singularity => SINGULARITY_PULL_DURATION,
             Self::LanceBeam => BEAM_DURATION,
             Self::ArcLightning => BEAM_DURATION,
         }
@@ -162,6 +168,25 @@ pub struct NovaRing {
     /// Freeze seconds applied to enemies the front sweeps over (CryoBurst); 0 =
     /// no freeze (NovaBlast).
     freeze: f32,
+}
+
+// Singularity (Void): pull r280 for 1.6 s, then collapse r190 / 9 dmg (weapon-data.js).
+const SINGULARITY_PULL_RADIUS: f32 = 280.0;
+const SINGULARITY_PULL_DURATION: f32 = 1.6;
+const SINGULARITY_PULL_SPEED: f32 = 150.0;
+const SINGULARITY_COLLAPSE_RADIUS: f32 = 190.0;
+const SINGULARITY_COLLAPSE_DAMAGE: f32 = 9.0;
+
+/// A Void **Singularity**: drags enemies toward `center` while `pull_timer > 0`,
+/// then collapses once into a Void AoE (`collapse_damage` within
+/// `collapse_radius`) and despawns. Driven by `update_singularity`.
+#[derive(Component)]
+pub struct Singularity {
+    center: Vec2,
+    pull_radius: f32,
+    pull_timer: f32,
+    collapse_radius: f32,
+    collapse_damage: f32,
 }
 
 // ─── Continuous beams (Lance Beam / Arc Lightning) ───────────────────────────
@@ -306,6 +331,65 @@ pub fn spawn_cryo_burst(commands: &mut Commands, center: Vec2) {
         nova_ring_shape(),
         Transform::from_translation(center.extend(0.5)).with_scale(Vec3::splat(0.001)),
     ));
+}
+
+/// Spawn a **Singularity** at `center` (W): a Void pull field that collapses
+/// after 1.6 s. (Reuses the charge bolt's glowing orb shape for now — a violet
+/// void-tinted silhouette is a cosmetic follow-up.)
+pub fn spawn_singularity(commands: &mut Commands, center: Vec2) {
+    commands.spawn((
+        Singularity {
+            center,
+            pull_radius: SINGULARITY_PULL_RADIUS,
+            pull_timer: SINGULARITY_PULL_DURATION,
+            collapse_radius: SINGULARITY_COLLAPSE_RADIUS,
+            collapse_damage: SINGULARITY_COLLAPSE_DAMAGE,
+        },
+        charge_shape(),
+        Transform::from_translation(center.extend(0.5)),
+    ));
+}
+
+/// Drive each `Singularity`: while pulling, drag enemies within `pull_radius`
+/// toward the center; on timeout, deal one Void collapse AoE within
+/// `collapse_radius` and despawn. Runs in the collision group (writes `Damage`).
+/// The enemy `&mut Transform` (pull) is disjoint from the `&mut Singularity`
+/// query (the orb is not an `Enemy`), so no B0001.
+pub fn update_singularity(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    mut singularities: Query<(Entity, &mut Singularity)>,
+    mut enemies: Query<(Entity, &mut Transform, Option<&Resistances>), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+    for (se, mut s) in &mut singularities {
+        s.pull_timer -= dt;
+        if s.pull_timer > 0.0 {
+            let r2 = s.pull_radius * s.pull_radius;
+            for (_, mut etf, _) in &mut enemies {
+                let epos = etf.translation.truncate();
+                let to = s.center - epos;
+                let d2 = to.length_squared();
+                if d2 <= r2 && d2 > 1.0 {
+                    let step = (to.normalize() * SINGULARITY_PULL_SPEED * dt).clamp_length_max(to.length());
+                    etf.translation.x += step.x;
+                    etf.translation.y += step.y;
+                }
+            }
+        } else {
+            let r2 = s.collapse_radius * s.collapse_radius;
+            for (e, etf, eres) in &enemies {
+                if etf.translation.truncate().distance_squared(s.center) <= r2 {
+                    dmg.write(Damage {
+                        target: e,
+                        amount: resist_scaled(s.collapse_damage, Element::Void, eres),
+                    });
+                }
+            }
+            commands.entity(se).despawn();
+        }
+    }
 }
 
 /// A unit-radius ring (no fill) for the Nova shockwave; scaled by the ring's
@@ -585,6 +669,10 @@ pub fn fire_power_weapon(
             commands.entity(player_e).insert(Overdrive {
                 secs: OVERDRIVE_DURATION,
             });
+        }
+        // Singularity: drop a Void pull field ahead of the ship.
+        PowerWeaponKind::Singularity => {
+            spawn_singularity(&mut commands, tf.translation.truncate() + fwd * 180.0);
         }
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).

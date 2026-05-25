@@ -1152,6 +1152,41 @@ fn cryo_burst_freezes_enemies() {
     assert!(world.get::<Frozen>(e).is_some(), "Cryo Burst froze the enemy");
 }
 
+/// W: the Singularity pulls a nearby enemy toward its center, then collapses
+/// into a Void AoE (damaging it) and despawns.
+#[test]
+fn singularity_pulls_then_collapses() {
+    use crate::systems::power_weapon::{spawn_singularity, update_singularity, Singularity};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(20.0), Transform::from_xyz(150.0, 0.0, 0.0)))
+        .id();
+
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_singularity(&mut c, Vec2::ZERO));
+    setup.run(world);
+
+    let mut step = Schedule::default();
+    step.add_systems((update_singularity, apply_damage).chain());
+
+    // Phase 1: pull — the enemy is dragged toward the center.
+    let mut t1 = Time::<()>::default();
+    t1.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(t1);
+    step.run(world);
+    assert!(world.get::<Transform>(e).unwrap().translation.x < 150.0, "enemy pulled inward");
+
+    // Phase 2: past the pull duration → collapse damages + the orb despawns.
+    let mut t2 = Time::<()>::default();
+    t2.advance_by(Duration::from_secs_f32(2.0));
+    world.insert_resource(t2);
+    step.run(world);
+    assert!(world.get::<Health>(e).unwrap().current < 20.0, "collapse damaged the enemy");
+    assert_eq!(world.query::<&Singularity>().iter(world).count(), 0, "singularity despawned");
+}
+
 /// W: the Overdrive buff multiplies the primary's per-shot damage (×1.5).
 #[test]
 fn overdrive_buffs_primary_damage() {

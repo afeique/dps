@@ -309,6 +309,8 @@ impl Plugin for GamePlugin {
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,
                         systems::power_weapon::update_beams,
+                        // Singularity pull + collapse (W).
+                        systems::power_weapon::update_singularity,
                         systems::status::tick_burning,
                         // Bleed (TOXIC poison) DoT — sibling of burn (E3).
                         systems::status::tick_bleed,
