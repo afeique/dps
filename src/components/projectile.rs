@@ -12,6 +12,14 @@ use bevy::prelude::*;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct BulletElements(pub ElementSet);
 
+/// A **Gravity Lance** orb: while it flies it drags enemies within `pull_radius`
+/// toward it at `pull_strength` px/s (`systems::weapons::gravity_pull`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct GravityBullet {
+    pub pull_radius: f32,
+    pub pull_strength: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,

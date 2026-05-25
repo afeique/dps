@@ -22,7 +22,7 @@
 //! multiply dps base units, not the JS px/tick (timestep alignment is a
 //! separate increment).
 
-use crate::combat::element::ElementSet;
+use crate::combat::element::{Element, ElementSet};
 use crate::components::*;
 use crate::messages::Fire;
 use crate::render::bullets::BulletAssets;
@@ -50,6 +50,8 @@ pub enum WeaponKind {
     ScatterShot,
     RailDriver,
     ClusterLauncher,
+    /// VOID slow pull-orb — drags nearby enemies as it flies (W).
+    GravityLance,
 }
 
 impl WeaponKind {
@@ -59,7 +61,8 @@ impl WeaponKind {
             Self::StormNeedles => Self::ScatterShot,
             Self::ScatterShot => Self::RailDriver,
             Self::RailDriver => Self::ClusterLauncher,
-            Self::ClusterLauncher => Self::PulseCannon,
+            Self::ClusterLauncher => Self::GravityLance,
+            Self::GravityLance => Self::PulseCannon,
         }
     }
 
@@ -71,6 +74,16 @@ impl WeaponKind {
             Self::ScatterShot => "Scatter Shot",
             Self::RailDriver => "Rail Driver",
             Self::ClusterLauncher => "Cluster Launcher",
+            Self::GravityLance => "Gravity Lance",
+        }
+    }
+
+    /// The weapon's base element (W; attunements layer on top later). Only
+    /// Gravity Lance is non-Kinetic (`WEAPON_ELEMENTS`, weapon-data.js).
+    pub fn element(self) -> Element {
+        match self {
+            Self::GravityLance => Element::Void,
+            _ => Element::Kinetic,
         }
     }
 }
@@ -117,6 +130,12 @@ fn stats(kind: WeaponKind) -> WeaponStats {
         WeaponKind::ClusterLauncher => WeaponStats {
             cooldown: 0.80, damage: 50.0, speed: BASE_BULLET_SPEED * 1.0,
             radius: BASE_BULLET_RADIUS * 1.4, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+        },
+        // Slow VOID orb that pierces + pulls (weapon-data.js: bulletSpeed 0.6,
+        // pierce 6, pull r150 / strength 0.35). The pull rides on `GravityBullet`.
+        WeaponKind::GravityLance => WeaponStats {
+            cooldown: 0.72, damage: 0.6, speed: BASE_BULLET_SPEED * 0.55,
+            radius: BASE_BULLET_RADIUS * 1.15, count: 1, spread: 0.0, jitter: 0.0, pierce: 6,
         },
     }
 }
@@ -165,6 +184,31 @@ pub fn multishot_fan(count: u32) -> f32 {
         (0.12 * (count as f32 - 1.0)).min(0.8)
     } else {
         0.0
+    }
+}
+
+/// Gravity Lance orbs drag enemies within `pull_radius` toward themselves each
+/// tick (W). The bullet `&Transform` (immut) and enemy `&mut Transform` are kept
+/// disjoint by the `Without` filters (a bullet is never an enemy) → no B0001.
+pub fn gravity_pull(
+    time: Res<Time>,
+    bullets: Query<(&Transform, &GravityBullet), Without<Enemy>>,
+    mut enemies: Query<&mut Transform, (With<Enemy>, Without<GravityBullet>)>,
+) {
+    let dt = time.delta_secs();
+    for (btf, gb) in &bullets {
+        let center = btf.translation.truncate();
+        let r2 = gb.pull_radius * gb.pull_radius;
+        for mut etf in &mut enemies {
+            let epos = etf.translation.truncate();
+            let to = center - epos;
+            let d2 = to.length_squared();
+            if d2 <= r2 && d2 > 1.0 {
+                let step = (to.normalize() * gb.pull_strength * dt).clamp_length_max(to.length());
+                etf.translation.x += step.x;
+                etf.translation.y += step.y;
+            }
+        }
     }
 }
 
@@ -307,10 +351,14 @@ pub fn spawn_bullets(
                 ));
                 b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
-            // Element tag (E2): the weapon's base element — `Kinetic` until the
-            // W1 attunement system resolves equipped attunements per shot. The
-            // target's `Resistances` multiplier is applied in `bullet_hits_enemy`.
-            bullet.insert(BulletElements(ElementSet::kinetic()));
+            // Element tag (W): the active weapon's base element (Gravity Lance =
+            // Void, else Kinetic). The W1 attunement system will fold equipped
+            // attunements in here. Resist is applied in `bullet_hits_enemy`.
+            bullet.insert(BulletElements(ElementSet::single(cur.0.element())));
+            // Gravity Lance orbs pull nearby enemies as they fly (W).
+            if cur.0 == WeaponKind::GravityLance {
+                bullet.insert(GravityBullet { pull_radius: 150.0, pull_strength: 60.0 });
+            }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {
                 bullet.insert(Homing { turn_rate: player_homing });

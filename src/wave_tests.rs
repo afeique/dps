@@ -1187,6 +1187,39 @@ fn singularity_pulls_then_collapses() {
     assert_eq!(world.query::<&Singularity>().iter(world).count(), 0, "singularity despawned");
 }
 
+/// W: the Gravity Lance carries the VOID element (the per-weapon base-element
+/// seam) and its orb pulls a nearby enemy toward it.
+#[test]
+fn gravity_lance_is_void_and_pulls() {
+    use crate::combat::element::Element;
+    use crate::components::GravityBullet;
+    use crate::systems::weapons::{gravity_pull, WeaponKind};
+
+    // Base-element seam: only Gravity Lance is non-Kinetic.
+    assert_eq!(WeaponKind::GravityLance.element(), Element::Void);
+    assert_eq!(WeaponKind::PulseCannon.element(), Element::Kinetic);
+
+    // The orb pulls a nearby enemy inward.
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(100.0, 0.0, 0.0)))
+        .id();
+    world.spawn((
+        GravityBullet { pull_radius: 150.0, pull_strength: 60.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems(gravity_pull);
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    step.run(world);
+
+    assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
+}
+
 /// W: an Orbital Strike telegraphs (no damage) then strikes its column AoE.
 #[test]
 fn orbital_strike_telegraphs_then_hits() {

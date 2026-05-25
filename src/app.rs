@@ -286,6 +286,8 @@ impl Plugin for GamePlugin {
                         systems::weapons::spawn_bullets,
                     )
                         .chain(),
+                    // Gravity Lance orbs drag nearby enemies before they move (W).
+                    systems::weapons::gravity_pull,
                     systems::movement::integrate,
                     systems::movement::confine_player,
                     // Generic formations (spec IV.6): override bound members'
