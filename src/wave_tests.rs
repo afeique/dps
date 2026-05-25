@@ -981,6 +981,53 @@ fn en_pyro_cryo_enemy_data() {
     assert_eq!(points(EnemyKind::Cinder), 110);
 }
 
+/// EN: a Spore Carrier births a Wasp drone when its timer lapses, and respects
+/// the global drone cap.
+#[test]
+fn spore_carrier_spawns_drones_and_caps() {
+    use crate::components::{Drone, DroneSpawner, SPORE_DRONE_CAP};
+    use crate::systems::enemy::mechanics::spore_spawner;
+
+    // (a) a ready spore with no drones out → births exactly one.
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((
+        Enemy { kind: EnemyKind::SporeCarrier },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        DroneSpawner { timer: 0.05 },
+    ));
+    let mut step = Schedule::default();
+    step.add_systems(spore_spawner);
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1)); // past the 0.05 timer
+    world.insert_resource(time);
+    step.run(world);
+    assert_eq!(world.query::<&Drone>().iter(world).count(), 1, "birthed one drone");
+
+    // (b) at the cap, a ready spore births none.
+    let mut app2 = test_app();
+    let world2 = app2.world_mut();
+    for _ in 0..SPORE_DRONE_CAP {
+        world2.spawn((Enemy { kind: EnemyKind::Wasp }, Drone));
+    }
+    world2.spawn((
+        Enemy { kind: EnemyKind::SporeCarrier },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        DroneSpawner { timer: 0.05 },
+    ));
+    let mut step2 = Schedule::default();
+    step2.add_systems(spore_spawner);
+    let mut time2 = Time::<()>::default();
+    time2.advance_by(Duration::from_secs_f32(0.1));
+    world2.insert_resource(time2);
+    step2.run(world2);
+    assert_eq!(
+        world2.query::<&Drone>().iter(world2).count(),
+        SPORE_DRONE_CAP,
+        "no births past the cap"
+    );
+}
+
 /// EN: a Hydra splits into 2 lings on death; a ling (`Splitter.lings == 0`) does
 /// not split again.
 #[test]

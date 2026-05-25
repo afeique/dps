@@ -536,6 +536,13 @@ pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
     );
 }
 
+/// Spawn a Spore Carrier **drone** — a Wasp tagged [`Drone`] (so it counts
+/// against the spawner cap) at `pos`.
+pub fn spawn_drone(commands: &mut Commands, pos: Vec2) {
+    let e = spawn_enemy(commands, EnemyKind::Wasp, pos, 1.0, 1.0, 1.0, Promo::None);
+    commands.entity(e).insert(Drone);
+}
+
 /// Spawn a Hydra **ling** (EN split-on-death): a half-size (×0.5 HP / ×0.7 size)
 /// copy at `pos` that can't split again (`Splitter { lings: 0 }` overrides the
 /// `lings: 2` that `spawn_enemy` stamps on a Hydra).
@@ -614,6 +621,12 @@ fn spawn_enemy(
         // `lings: 0` by `spawn_split_ling` so they don't split again.
         EnemyKind::Hydra => {
             e.insert(Splitter { lings: 2 });
+        }
+        // Spore Carrier births Wasp drones on a timer (EN).
+        EnemyKind::SporeCarrier => {
+            e.insert(DroneSpawner {
+                timer: SPORE_DRONE_INTERVAL,
+            });
         }
         _ => {}
     }

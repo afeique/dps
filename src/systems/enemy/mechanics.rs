@@ -4,7 +4,9 @@
 //! death-hooked ones land first (they reuse the existing `Death` message).
 
 use crate::combat::element::Element;
-use crate::components::{EnemyKind, PlayerCorrode, Ship};
+use crate::components::{
+    Drone, DroneSpawner, EnemyKind, PlayerCorrode, Ship, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
+};
 use crate::messages::{Damage, Death};
 use crate::systems::player_status::apply_player_status;
 use bevy::prelude::*;
@@ -39,6 +41,30 @@ pub fn ashen_death_flare(
                 amount: ASHEN_FLARE_DAMAGE,
             });
             apply_player_status(&mut commands, player_e, Element::Pyro, corrode);
+        }
+    }
+}
+
+/// Each **Spore Carrier** births a Wasp [`Drone`] every [`SPORE_DRONE_INTERVAL`]
+/// s, up to the [`SPORE_DRONE_CAP`] global live-drone cap (the `spawner`
+/// mechanic). Runs in the spawner phase. `DroneSpawner` lives only on Spore
+/// Carriers, so the query needs no kind filter.
+pub fn spore_spawner(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut spores: Query<(&Transform, &mut DroneSpawner)>,
+    drones: Query<(), With<Drone>>,
+) {
+    let dt = time.delta_secs();
+    let mut budget = SPORE_DRONE_CAP.saturating_sub(drones.iter().count());
+    for (tf, mut sp) in &mut spores {
+        sp.timer -= dt;
+        if sp.timer <= 0.0 {
+            sp.timer = SPORE_DRONE_INTERVAL;
+            if budget > 0 {
+                crate::systems::enemy::spawn_drone(&mut commands, tf.translation.truncate());
+                budget -= 1;
+            }
         }
     }
 }

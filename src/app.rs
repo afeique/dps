@@ -267,6 +267,8 @@ impl Plugin for GamePlugin {
                         .chain(),
                     // Spawner (enemies + the wave's asteroid budget).
                     systems::wave::spawn_waves,
+                    // Spore Carriers birth Wasp drones on a timer (EN).
+                    systems::enemy::mechanics::spore_spawner,
                     // Fire intent → bullets.
                     (
                         systems::enemy::firing::enemy_firing,

@@ -221,6 +221,25 @@ pub struct Splitter {
     pub lings: u32,
 }
 
+/// A **drone spawner** enemy (Spore Carrier, `spawner`): births a [`Drone`] Wasp
+/// every [`SPORE_DRONE_INTERVAL`] s while under the [`SPORE_DRONE_CAP`] global
+/// drone cap. `timer` counts down to the next birth. Run by
+/// `enemy::mechanics::spore_spawner`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DroneSpawner {
+    pub timer: f32,
+}
+
+/// Marks an enemy spawned as a Spore Carrier drone (so the spawner can cap the
+/// live drone count without counting wave-spawned Wasps).
+#[derive(Component, Debug)]
+pub struct Drone;
+
+/// Seconds between Spore Carrier drone births (enemy-data.js: 4000 ms).
+pub const SPORE_DRONE_INTERVAL: f32 = 4.0;
+/// Max live Spore Carrier drones (enemy-data.js cap: 16).
+pub const SPORE_DRONE_CAP: usize = 16;
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]
