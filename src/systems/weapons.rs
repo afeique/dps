@@ -52,6 +52,8 @@ pub enum WeaponKind {
     ClusterLauncher,
     /// VOID slow pull-orb — drags nearby enemies as it flies (W).
     GravityLance,
+    /// Minigun — fire rate spools up slow→fast while held (W).
+    SpinCannon,
 }
 
 impl WeaponKind {
@@ -62,7 +64,8 @@ impl WeaponKind {
             Self::ScatterShot => Self::RailDriver,
             Self::RailDriver => Self::ClusterLauncher,
             Self::ClusterLauncher => Self::GravityLance,
-            Self::GravityLance => Self::PulseCannon,
+            Self::GravityLance => Self::SpinCannon,
+            Self::SpinCannon => Self::PulseCannon,
         }
     }
 
@@ -75,6 +78,7 @@ impl WeaponKind {
             Self::RailDriver => "Rail Driver",
             Self::ClusterLauncher => "Cluster Launcher",
             Self::GravityLance => "Gravity Lance",
+            Self::SpinCannon => "Spin Cannon",
         }
     }
 
@@ -137,7 +141,25 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             cooldown: 0.72, damage: 0.6, speed: BASE_BULLET_SPEED * 0.55,
             radius: BASE_BULLET_RADIUS * 1.15, count: 1, spread: 0.0, jitter: 0.0, pierce: 6,
         },
+        // Minigun (weapon-data.js: spinUpTime 1400, fireRate 220→60, spread 0.12).
+        // `cooldown` is the spooled-up floor; `player_fire` lerps via `spin_cooldown`.
+        WeaponKind::SpinCannon => WeaponStats {
+            cooldown: SPIN_SLOW_CD, damage: 0.5, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.12, pierce: 0,
+        },
     }
+}
+
+/// Spin Cannon spool: slow → fast fire-rate over `SPIN_UP_TIME` s of held fire.
+pub const SPIN_SLOW_CD: f32 = 0.22;
+pub const SPIN_FAST_CD: f32 = 0.06;
+pub const SPIN_UP_TIME: f32 = 1.4;
+
+/// The Spin Cannon's cooldown at spool level `t` (0 = just started, 1 = full
+/// speed): lerp `SPIN_SLOW_CD` → `SPIN_FAST_CD`.
+pub fn spin_cooldown(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    SPIN_SLOW_CD + (SPIN_FAST_CD - SPIN_SLOW_CD) * t
 }
 
 /// Resource tracking the active primary weapon. `init_resource` in app.rs.
@@ -291,6 +313,8 @@ pub fn player_fire(
     cur: Res<CurrentWeapon>,
     upgrades: Res<Upgrades>,
     mut fire: MessageWriter<Fire>,
+    // Spin Cannon spool level (0..1), persisted across frames (one player).
+    mut spool: Local<f32>,
     mut q: Query<(&Intent, &mut Weapon, &Transform, Option<&Overdrive>), With<Ship>>,
 ) {
     let dt = time.delta_secs();
@@ -305,6 +329,16 @@ pub fn player_fire(
 
     for (intent, mut weapon, tf, overdrive) in &mut q {
         weapon.timer = (weapon.timer - dt).max(0.0);
+        // Spin Cannon spool: ramp while firing it, decay otherwise (every frame).
+        if cur.0 == WeaponKind::SpinCannon {
+            *spool = if intent.firing {
+                (*spool + dt / SPIN_UP_TIME).min(1.0)
+            } else {
+                (*spool - dt / SPIN_UP_TIME).max(0.0)
+            };
+        } else {
+            *spool = 0.0;
+        }
         if !intent.firing || weapon.timer > 0.0 {
             continue;
         }
@@ -312,7 +346,13 @@ pub fn player_fire(
         let od = overdrive.is_some();
         let cd_mult = if od { OVERDRIVE_FIRE_MULT } else { 1.0 };
         let dmg = st.damage * if od { OVERDRIVE_DMG_MULT } else { 1.0 };
-        weapon.timer = st.cooldown * rapid_cooldown_mult(rapid) * cd_mult;
+        // Spin Cannon's cooldown spools up; others use their fixed rate.
+        let base_cd = if cur.0 == WeaponKind::SpinCannon {
+            spin_cooldown(*spool)
+        } else {
+            st.cooldown
+        };
+        weapon.timer = base_cd * rapid_cooldown_mult(rapid) * cd_mult;
 
         let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
         let nose = tf.translation.truncate() + fwd * 20.0;

@@ -1220,6 +1220,18 @@ fn gravity_lance_is_void_and_pulls() {
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
 }
 
+/// W: the Spin Cannon's fire cooldown spools from slow (0.22 s) to fast (0.06 s)
+/// as the spool fills.
+#[test]
+fn spin_cannon_cooldown_spools_up() {
+    use crate::systems::weapons::{spin_cooldown, SPIN_FAST_CD, SPIN_SLOW_CD};
+    assert!((spin_cooldown(0.0) - SPIN_SLOW_CD).abs() < 1e-6, "just started → slow");
+    assert!((spin_cooldown(1.0) - SPIN_FAST_CD).abs() < 1e-6, "full spool → fast");
+    let mid = spin_cooldown(0.5);
+    assert!(mid < SPIN_SLOW_CD && mid > SPIN_FAST_CD, "ramps between");
+    assert!((spin_cooldown(2.0) - SPIN_FAST_CD).abs() < 1e-6, "clamps past full");
+}
+
 /// W1: a player bullet's element resolves to its attunement if any, else the
 /// weapon base; the debug cycle steps off → Pyro → … → Radiant → off.
 #[test]
