@@ -165,6 +165,26 @@ pub const CORRODE_PER_STACK: f32 = 0.15;
 /// VOLT-damage amplifier vs a conducting target (collision-system: ×1.5).
 pub const CONDUCT_VOLT_MULT: f32 = 1.5;
 
+/// Flat **armor** (`ENEMY_ARMOR`, enemy-data.js:655): subtracted from each
+/// incoming hit down to a 25% floor (`max(dmg×0.25, dmg − armor)`), unless the
+/// hit includes RADIANT (purge). Makes chip damage fall off; big / corrode-
+/// amplified hits punch through. Guardian is the armored archetype (1.0).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Armor(pub f32);
+
+/// **Frontal shield** (`ENEMY_FRONTAL_SHIELD`, enemy-data.js:663, Sentinel):
+/// hits arriving within `arc/2` of the enemy→player bearing are reduced by
+/// `reduction`; flank / bounced / returning shots land full. Bypassed by RADIANT
+/// (purge). Sentinel: `arc` 2.4 rad (~137° cone), `reduction` 0.8 (80% blocked).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct FrontalShield {
+    pub arc: f32,
+    pub reduction: f32,
+}
+
+/// Flat-armor damage floor (`applyDamageToEnemy`: 25% of a hit always lands).
+pub const ARMOR_FLOOR: f32 = 0.25;
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

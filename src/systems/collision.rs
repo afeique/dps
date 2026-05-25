@@ -9,7 +9,7 @@
 //! (`js/modules/performance/spatial-grid.js` + `combat/collision-system.js`)
 //! and adds the remaining pairs (AOE rings, asteroids).
 
-use crate::combat::element::Resistances;
+use crate::combat::element::{Element, Resistances};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
@@ -19,6 +19,49 @@ use crate::systems::shop::{
     Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
 };
 use bevy::prelude::*;
+
+/// Enemy-side defense layer applied to a post-attack-multiplier hit `amount`
+/// (E4 — the `applyDamageToEnemy` order, collision-system.js:2437-2478):
+/// CORRODE amplify (+15%/stack) → CONDUCT (VOLT ×1.5 vs a conducting target) →
+/// **PURGE gate** (a RADIANT hit skips armor + frontal shield) → flat ARMOR
+/// (25% floor) → frontal-shield reduction. Pure + unit-tested.
+pub fn enemy_defense_damage(
+    amount: f32,
+    corrode_stacks: u32,
+    conducting: bool,
+    has_volt: bool,
+    has_radiant: bool,
+    armor: f32,
+    frontal_reduction: f32,
+    frontal_blocked: bool,
+) -> f32 {
+    let mut d = amount * (1.0 + CORRODE_PER_STACK * corrode_stacks as f32);
+    if conducting && has_volt {
+        d *= CONDUCT_VOLT_MULT;
+    }
+    if !has_radiant {
+        if armor > 0.0 {
+            d = (d * ARMOR_FLOOR).max(d - armor);
+        }
+        if frontal_blocked {
+            d *= 1.0 - frontal_reduction;
+        }
+    }
+    d
+}
+
+/// Frontal-shield block test (E4): true when the hit arrives within `arc/2` of
+/// the enemy→player bearing — so direct shots from the player are blocked while
+/// flanking / wall-bounced / returning shots get through. `Vec2::ZERO` bearings
+/// (coincident points) never block.
+pub fn frontal_blocked(enemy_pos: Vec2, player_pos: Vec2, hit_pos: Vec2, arc: f32) -> bool {
+    let to_player = (player_pos - enemy_pos).normalize_or_zero();
+    let to_hit = (hit_pos - enemy_pos).normalize_or_zero();
+    if to_player == Vec2::ZERO || to_hit == Vec2::ZERO {
+        return false;
+    }
+    to_player.angle_to(to_hit).abs() < arc * 0.5
+}
 
 pub fn bullet_hits_enemy(
     mut commands: Commands,
@@ -32,14 +75,28 @@ pub fn bullet_hits_enemy(
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet, Option<&BulletElements>)>,
     // `Without<Ship>` keeps this immut `&Health` disjoint from `player_hp`'s mut.
-    // `Resistances` (E2) is optional so test-spawned enemies (no resist map) are
-    // unaffected (neutral ×1).
+    // The element components (E2/E4) are optional so test-spawned enemies (no
+    // resist/armor) are unaffected (neutral ×1).
     enemies: Query<
-        (Entity, &Transform, &Collider, &Health, Option<&Resistances>),
+        (
+            Entity,
+            &Transform,
+            &Collider,
+            &Health,
+            Option<&Resistances>,
+            Option<&Corrode>,
+            Option<&Conduct>,
+            Option<&Armor>,
+            Option<&FrontalShield>,
+        ),
         (With<Enemy>, Without<Ship>),
     >,
     mut player_hp: Query<&mut Health, With<Ship>>,
+    // Player position for the frontal-shield bearing test (E4). Disjoint from
+    // `player_hp` (different component) so no query conflict.
+    player_pos: Query<&Transform, With<Ship>>,
 ) {
+    let player_pos_v = player_pos.single().ok().map(|t| t.translation.truncate());
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
     let streak_mult = streak.multiplier();
     // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5) — shop
@@ -66,7 +123,9 @@ pub fn bullet_hits_enemy(
         }
         // The bullet's resolved element set (E2); absent ⇒ neutral (no resist).
         let belem_set = belems.map(|b| b.0);
-        for (enemy_e, etf, ec, ehp, eres) in &enemies {
+        let has_volt = belem_set.is_some_and(|s| s.contains(Element::Volt));
+        let has_radiant = belem_set.is_some_and(|s| s.contains(Element::Radiant));
+        for (enemy_e, etf, ec, ehp, eres, ecorrode, econduct, earmor, efrontal) in &enemies {
             let reach = bc.radius + ec.radius;
             let d2 = btf
                 .translation
@@ -90,7 +149,27 @@ pub fn bullet_hits_enemy(
                     (Some(set), Some(res)) => res.multi_multiplier_set(set),
                     _ => 1.0,
                 };
-                let amount = bullet.damage * streak_mult * crit_mult * exec * resist_mult;
+                // Enemy-side defense layer (E4): corrode/conduct amplify, then the
+                // RADIANT-purge-gated flat armor + frontal shield.
+                let blocked = match (efrontal, player_pos_v) {
+                    (Some(fs), Some(ppos)) => frontal_blocked(
+                        etf.translation.truncate(),
+                        ppos,
+                        btf.translation.truncate(),
+                        fs.arc,
+                    ),
+                    _ => false,
+                };
+                let amount = enemy_defense_damage(
+                    bullet.damage * streak_mult * crit_mult * exec * resist_mult,
+                    ecorrode.map_or(0, |c| c.stacks),
+                    econduct.is_some(),
+                    has_volt,
+                    has_radiant,
+                    earmor.map_or(0.0, |a| a.0),
+                    efrontal.map_or(0.0, |f| f.reduction),
+                    blocked,
+                );
                 dmg.write(Damage {
                     target: enemy_e,
                     amount,
@@ -124,7 +203,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2, _ehp2, eres2) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

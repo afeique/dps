@@ -4,6 +4,8 @@
 use crate::combat::element::{
     elemental_multiplier, resolve_bullet_elements, Element, ElementSet, Resistances, ELEMENT_COUNT,
 };
+use crate::systems::collision::{enemy_defense_damage, frontal_blocked};
+use bevy::math::Vec2;
 
 // ─── Element taxonomy ────────────────────────────────────────────────────────
 
@@ -149,6 +151,68 @@ fn resolve_dedups_attunements_preserving_order() {
 fn resolve_falls_back_to_base_element() {
     let out = resolve_bullet_elements(None, &[], Element::Void);
     assert_eq!(out, vec![Element::Void]);
+}
+
+// ─── E4 enemy-side defense pipeline ──────────────────────────────────────────
+
+#[test]
+fn defense_no_modifiers_is_identity() {
+    assert_eq!(
+        enemy_defense_damage(10.0, 0, false, false, false, 0.0, 0.0, false),
+        10.0
+    );
+}
+
+#[test]
+fn defense_corrode_and_conduct_amplify() {
+    // corrode 2 stacks → ×(1 + 0.15·2) = ×1.30
+    assert!((enemy_defense_damage(10.0, 2, false, false, false, 0.0, 0.0, false) - 13.0).abs() < 1e-4);
+    // conducting + a VOLT hit → ×1.5
+    assert!((enemy_defense_damage(10.0, 0, true, true, false, 0.0, 0.0, false) - 15.0).abs() < 1e-4);
+    // conducting but a non-VOLT hit → unchanged
+    assert_eq!(
+        enemy_defense_damage(10.0, 0, true, false, false, 0.0, 0.0, false),
+        10.0
+    );
+}
+
+#[test]
+fn defense_armor_floors_at_25_percent() {
+    // small hit vs armor 1.0 → max(1.2·0.25, 1.2−1.0) = 0.3 (chip floored, not nullified)
+    assert!((enemy_defense_damage(1.2, 0, false, false, false, 1.0, 0.0, false) - 0.3).abs() < 1e-4);
+    // big hit punches through → max(10·0.25, 10−1) = 9.0
+    assert!((enemy_defense_damage(10.0, 0, false, false, false, 1.0, 0.0, false) - 9.0).abs() < 1e-4);
+}
+
+#[test]
+fn defense_radiant_purge_bypasses_armor_and_frontal() {
+    // RADIANT skips both flat armor and the frontal-shield block
+    assert!((enemy_defense_damage(1.2, 0, false, false, true, 1.0, 0.8, true) - 1.2).abs() < 1e-4);
+}
+
+#[test]
+fn defense_frontal_shield_reduces_blocked_hits() {
+    // blocked → ×(1 − 0.8) = ×0.2
+    assert!((enemy_defense_damage(10.0, 0, false, false, false, 0.0, 0.8, true) - 2.0).abs() < 1e-4);
+    // not blocked (flank/bounce) → unchanged
+    assert_eq!(
+        enemy_defense_damage(10.0, 0, false, false, false, 0.0, 0.8, false),
+        10.0
+    );
+}
+
+#[test]
+fn frontal_blocked_geometry() {
+    let enemy = Vec2::ZERO;
+    let player = Vec2::new(0.0, 100.0);
+    // a shot from the player's bearing is blocked
+    assert!(frontal_blocked(enemy, player, Vec2::new(0.0, 50.0), 2.4));
+    // a 90° flank shot gets through (1.57 rad > arc/2 = 1.2)
+    assert!(!frontal_blocked(enemy, player, Vec2::new(50.0, 0.0), 2.4));
+    // a shot from directly behind gets through
+    assert!(!frontal_blocked(enemy, player, Vec2::new(0.0, -50.0), 2.4));
+    // coincident points never block
+    assert!(!frontal_blocked(enemy, player, enemy, 2.4));
 }
 
 // ─── ElementSet (the on-bullet bitset, E2) ───────────────────────────────────

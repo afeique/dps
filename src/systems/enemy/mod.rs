@@ -452,6 +452,17 @@ fn spawn_enemy(
     ));
     // Elemental resistance map (E2) — read by the player→enemy damage path.
     e.insert(resistances_for(kind));
+    // Flat armor (Guardian) + frontal shield (Sentinel) archetypes (E4,
+    // enemy-data.js ENEMY_ARMOR / ENEMY_FRONTAL_SHIELD).
+    match kind {
+        EnemyKind::Guardian => {
+            e.insert(Armor(1.0));
+        }
+        EnemyKind::Sentinel => {
+            e.insert(FrontalShield { arc: 2.4, reduction: 0.8 });
+        }
+        _ => {}
+    }
 
     match promo {
         Promo::Boss(tier) => {
