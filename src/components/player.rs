@@ -83,6 +83,48 @@ pub const TRACTOR_HALF_ARC: f32 = std::f32::consts::FRAC_PI_4;
 /// Coins minted per absorbed bullet (spec III.4: `5 + 5*PROFIT`; base 5).
 pub const TRACTOR_COINS: u64 = 5;
 
+// ── Player elemental statuses (Phase E5, from `player-status.js`) ─────────────
+// Enemy attacks carry an element; on a hit the element's signature status lands
+// on the ship: PYRO→burn DoT, CRYO→chill (slow), TOXIC→corrode (amplify incoming).
+// VOLT/VOID/RADIANT apply no player status. Applied by
+// `systems::player_status::apply_player_status`; ticked in `FixedUpdate`.
+
+/// Burn DoT on the player (`PlayerBurn`, PYRO). Ticks a **chunk** every
+/// `PLAYER_BURN_TICK_SECS` (not dt-scaled) — player damage is `.round()`ed, so a
+/// per-frame fraction would vanish; the 500 ms chunk survives the round (like the
+/// JS 500 ms burn tick). `tick` counts down to the next chunk; `secs` to expiry.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PlayerBurn {
+    pub secs: f32,
+    pub tick: f32,
+}
+
+/// Chill on the player (`PlayerChill`, CRYO): slows the ship to `PLAYER_CHILL_SLOW`×.
+/// (The movement-slow effect is wired in E5b; the component + lifetime land now.)
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PlayerChill {
+    pub secs: f32,
+}
+
+/// Corrode on the player (`PlayerCorrode`, TOXIC): incoming damage ×(1 +
+/// `PLAYER_CORRODE_PER_STACK`×stacks), `stacks` capped at `PLAYER_CORRODE_MAX`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PlayerCorrode {
+    pub stacks: u32,
+    pub secs: f32,
+}
+
+/// Player-status tuning (`player-status.js`): burn 2/tick every 0.5 s for 3 s (6
+/// ticks = 12 total), chill ×0.7 / 1.5 s, corrode +15%/stack cap 2 / 3 s.
+pub const PLAYER_BURN_PER_TICK: f32 = 2.0;
+pub const PLAYER_BURN_TICK_SECS: f32 = 0.5;
+pub const PLAYER_BURN_SECS: f32 = 3.0;
+pub const PLAYER_CHILL_SECS: f32 = 1.5;
+pub const PLAYER_CHILL_SLOW: f32 = 0.7;
+pub const PLAYER_CORRODE_SECS: f32 = 3.0;
+pub const PLAYER_CORRODE_MAX: u32 = 2;
+pub const PLAYER_CORRODE_PER_STACK: f32 = 0.15;
+
 /// The player ship: movement tuning + marker. One per run (for now).
 #[derive(Component, Debug)]
 pub struct Ship {

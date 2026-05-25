@@ -959,6 +959,69 @@ fn status_timers_count_down_and_expire() {
     assert!(world.get::<Corrode>(e).is_none());
 }
 
+/// E5: the player burn DoT lands a 2-dmg chunk every 0.5 s (surviving the
+/// player-damage rounding) and expires after its duration.
+#[test]
+fn player_burn_chunks_then_expires() {
+    use crate::systems::player_status::tick_player_burn;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((
+            Ship::default(),
+            Health::new(40.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            PlayerBurn { secs: 3.0, tick: 0.5 },
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_player_burn, apply_damage).chain());
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.5)); // one chunk
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert_eq!(world.get::<Health>(p).unwrap().current, 38.0, "burn chunk hit the player");
+    assert!(world.get::<PlayerBurn>(p).is_some(), "burn persists mid-duration");
+
+    time.advance_by(Duration::from_secs_f32(3.0)); // past expiry
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<PlayerBurn>(p).is_none(), "burn expires");
+}
+
+/// E5: a Tangerine (PYRO) ramming the player stamps a burn on the ship.
+#[test]
+fn tangerine_contact_burns_player() {
+    use crate::systems::collision::enemy_contact_player;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((
+            Ship::default(),
+            Health::new(40.0),
+            Velocity::default(),
+            Collider { radius: 20.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Enemy { kind: EnemyKind::Tangerine },
+        Velocity::default(),
+        Collider { radius: 16.0 },
+        Transform::from_xyz(10.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems(enemy_contact_player);
+    step.run(world);
+
+    assert!(world.get::<PlayerBurn>(p).is_some(), "Tangerine's PYRO ram burns the player");
+}
+
 // ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
 
 /// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,

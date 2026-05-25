@@ -19,6 +19,7 @@ pub mod items;
 pub mod missions;
 pub mod movement;
 pub mod passives;
+pub mod player_status;
 pub mod power_weapon;
 pub mod powerups;
 pub mod reactions;

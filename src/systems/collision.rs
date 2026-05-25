@@ -322,14 +322,16 @@ const CONTACT_BOUNCE: f32 = 220.0;
 /// invulnerability (spec II.2) — the separation is what stops a single overlap
 /// from melting the player over consecutive ticks.
 pub fn enemy_contact_player(
+    mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
-    mut player: Query<(Entity, &mut Transform, &mut Velocity, &Collider), With<Ship>>,
-    mut enemies: Query<(Entity, &mut Transform, &mut Velocity, &Collider), (With<Enemy>, Without<Ship>)>,
+    mut player: Query<(Entity, &mut Transform, &mut Velocity, &Collider, Option<&PlayerCorrode>), With<Ship>>,
+    mut enemies: Query<(Entity, &Enemy, &mut Transform, &mut Velocity, &Collider), (With<Enemy>, Without<Ship>)>,
 ) {
-    let Ok((player_e, mut ptf, mut pvel, pc)) = player.single_mut() else {
+    let Ok((player_e, mut ptf, mut pvel, pc, pcorrode)) = player.single_mut() else {
         return;
     };
-    for (enemy_e, mut etf, mut evel, ec) in &mut enemies {
+    let corrode_stacks = pcorrode.map_or(0, |c| c.stacks);
+    for (enemy_e, enemy, mut etf, mut evel, ec) in &mut enemies {
         // Re-read the player position each enemy: a prior separation may have
         // already nudged it this tick.
         let ppos = ptf.translation.truncate();
@@ -345,6 +347,16 @@ pub fn enemy_contact_player(
         // a weak enemy may die to the 5-dmg ram).
         dmg.write(Damage { target: player_e, amount: CONTACT_DAMAGE });
         dmg.write(Damage { target: enemy_e, amount: PLAYER_ENEMY_CONTACT_DMG });
+
+        // Elemental contact (E5): the enemy's attack element stamps its signature
+        // status on the ship (e.g. a Tangerine's PYRO ram → burn). Bullet-borne
+        // elemental status follows in E5b.
+        crate::systems::player_status::apply_player_status(
+            &mut commands,
+            player_e,
+            crate::systems::enemy::element_for(enemy.kind),
+            corrode_stacks,
+        );
 
         // Normal from enemy → player (fall back to +Y when exactly coincident).
         let n = if dist > 1e-4 { delta / dist } else { Vec2::Y };

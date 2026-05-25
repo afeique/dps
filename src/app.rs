@@ -300,6 +300,8 @@ impl Plugin for GamePlugin {
                         systems::status::tick_burning,
                         // Bleed (TOXIC poison) DoT — sibling of burn (E3).
                         systems::status::tick_bleed,
+                        // Player burn DoT (E5 — enemy PYRO attacks).
+                        systems::player_status::tick_player_burn,
                         // Static Discharge: periodic AoE pulse around the player.
                         systems::passives::tick_static_discharge,
                         // Whirlwind: orbiting damage zone.
@@ -338,6 +340,8 @@ impl Plugin for GamePlugin {
                         systems::status::tick_stun,
                         // Count down the timer-based elemental statuses (E3).
                         systems::status::tick_status_timers,
+                        // Count down the player chill/corrode timers (E5).
+                        systems::player_status::tick_player_statuses,
                         systems::skills::tick_bulwark,
                         systems::skills::tick_repair,
                         systems::skills::tick_tractor,

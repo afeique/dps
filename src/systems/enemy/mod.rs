@@ -80,6 +80,24 @@ fn resistances_for(kind: EnemyKind) -> Resistances {
     }
 }
 
+/// Per-kind **attack** element (ported from `enemy-data.js` `ENEMY_ELEMENTS`):
+/// the element an enemy's shots / ram carry, driving the player's elemental
+/// status (E5) + (later) the player's elemental resistance. Most of the original
+/// ten are KINETIC; Stalker/Weaver/Sentinel = Radiant, Drifter = Volt, Tangerine
+/// = Pyro. (The new elemental roster fills in Pyro/Cryo/Volt/Toxic in EN.)
+pub fn element_for(kind: EnemyKind) -> Element {
+    match kind {
+        EnemyKind::Stalker | EnemyKind::Weaver | EnemyKind::Sentinel => Element::Radiant,
+        EnemyKind::Drifter => Element::Volt,
+        EnemyKind::Tangerine => Element::Pyro,
+        EnemyKind::Hunter
+        | EnemyKind::Guardian
+        | EnemyKind::Wasp
+        | EnemyKind::Prowler
+        | EnemyKind::Titan => Element::Kinetic,
+    }
+}
+
 fn stats_for(kind: EnemyKind) -> EnemyStats {
     match kind {
         EnemyKind::Hunter => hunter::stats(),
