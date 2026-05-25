@@ -92,7 +92,8 @@ pub fn enemy_firing(
             EnemyKind::Hunter
             | EnemyKind::AshenDetonator
             | EnemyKind::SporeCarrier
-            | EnemyKind::Hydra => {
+            | EnemyKind::Hydra
+            | EnemyKind::LumenDrone => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,
@@ -177,7 +178,7 @@ pub fn enemy_firing(
             // JS: fires a slow missile (`missile_fast_slow` pattern, initial
             // speed px/s ≈ 12 × 60 = 720; decelerated to ~150 over lifetime).
             // Approximated as a single slow aimed bullet.
-            EnemyKind::Prowler => {
+            EnemyKind::Prowler | EnemyKind::Warden => {
                 fire.write(Fire {
                     origin: enemy_pos + aim_dir * 22.0,
                     dir: aim_dir,

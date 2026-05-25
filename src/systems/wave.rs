@@ -197,15 +197,15 @@ static WAVES: &[WaveDef] = &[
     WaveDef { asteroids: 4, pulses: &[ // W25 (9-1)
         Pulse(&[g(Stalker, 3), g(Guardian, 3), g(Wasp, 2), g(Plaguebearer, 1)]),
         Pulse(&[g(Sentinel, 3), g(Prowler, 2), g(Weaver, 2)]),
-        Pulse(&[g(Tangerine, 3), g(Drifter, 2), g(Hunter, 3), g(FrostLance, 2)]),
+        Pulse(&[g(Tangerine, 3), g(Drifter, 2), g(Hunter, 3), g(FrostLance, 2), g(LumenDrone, 1)]),
     ]},
     WaveDef { asteroids: 4, pulses: &[ // W26 (9-2)
         Pulse(&[g(Prowler, 3), g(Sentinel, 2), g(Tangerine, 2), g(AshenDetonator, 2)]),
         Pulse(&[g(Weaver, 3), g(Stalker, 2), g(Guardian, 2), g(SporeCarrier, 1)]),
-        Pulse(&[g(Hunter, 4), g(Wasp, 3), g(Drifter, 2)]),
+        Pulse(&[g(Hunter, 4), g(Wasp, 3), g(Drifter, 2), g(Warden, 1)]),
     ]},
     WaveDef { asteroids: 2, pulses: &[ // W27 (9-3) BOSS T4 ×5
-        Pulse(&[g(Weaver, 3), g(Guardian, 2), g(Sentinel, 2)]),
+        Pulse(&[g(Weaver, 3), g(Guardian, 2), g(Sentinel, 2), g(Warden, 1)]),
         Pulse(&[boss(Titan, 5, 4), g(Weaver, 2), g(Stalker, 2)]),
     ]},
 
@@ -216,7 +216,7 @@ static WAVES: &[WaveDef] = &[
         Pulse(&[g(Sentinel, 3), g(Weaver, 3), g(Drifter, 2), g(FrostLance, 2), g(AshenDetonator, 1)]),
     ]},
     WaveDef { asteroids: 4, pulses: &[ // W29 (10-2) — final TITAN is NORMAL, not a boss
-        Pulse(&[g(Hunter, 4), g(Guardian, 3), g(Wasp, 3)]),
+        Pulse(&[g(Hunter, 4), g(Guardian, 3), g(Wasp, 3), g(LumenDrone, 1)]),
         Pulse(&[g(Stalker, 3), g(Weaver, 3), g(Prowler, 2)]),
         Pulse(&[g(Titan, 1), g(Sentinel, 2), g(Tangerine, 2), g(Drifter, 2)]),
     ]},

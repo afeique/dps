@@ -58,6 +58,9 @@ fn shape_for(kind: EnemyKind) -> Shape {
         EnemyKind::TeslaWraith => hunter::shape(),
         EnemyKind::Plaguebearer | EnemyKind::Hydra => tangerine::shape(),
         EnemyKind::SporeCarrier => prowler::shape(),
+        // EN E8d/e.
+        EnemyKind::Warden => prowler::shape(),
+        EnemyKind::LumenDrone => hunter::shape(),
     }
 }
 
@@ -97,6 +100,10 @@ pub fn resistances_for(kind: EnemyKind) -> Resistances {
         EnemyKind::Plaguebearer => r.with(Toxic, 0.60).with(Radiant, -0.40),
         EnemyKind::SporeCarrier => r.with(Toxic, 0.50).with(Radiant, -0.40),
         EnemyKind::Hydra => r, // KINETIC bruiser, neutral resists
+        // EN batch E8d/e (enemy-data.js:648). Warden starts neutral — its resist
+        // is learned at runtime (adaptive); Lumen is radiant-tough, void-weak.
+        EnemyKind::Warden => r,
+        EnemyKind::LumenDrone => r.with(Radiant, 0.50).with(Void, -0.40),
     }
 }
 
@@ -121,7 +128,8 @@ pub fn element_for(kind: EnemyKind) -> Element {
         // EN batch E8c attack elements (enemy-data.js:620-622).
         EnemyKind::TeslaWraith => Element::Volt,
         EnemyKind::Plaguebearer | EnemyKind::SporeCarrier => Element::Toxic,
-        EnemyKind::Hydra => Element::Kinetic,
+        EnemyKind::Hydra | EnemyKind::Warden => Element::Kinetic,
+        EnemyKind::LumenDrone => Element::Radiant,
     }
 }
 
@@ -194,6 +202,19 @@ fn stats_for(kind: EnemyKind) -> EnemyStats {
             radius: 22.0,
             speed: 84.0,
             fire_cooldown: Some(1.2),
+        },
+        // EN batch E8d/e (enemy-data.js:518-599).
+        EnemyKind::Warden => EnemyStats {
+            health: 16.0,
+            radius: 23.0,
+            speed: 51.0,
+            fire_cooldown: Some(2.0),
+        },
+        EnemyKind::LumenDrone => EnemyStats {
+            health: 9.0,
+            radius: 17.0,
+            speed: 96.0,
+            fire_cooldown: Some(1.0),
         },
     }
 }
@@ -372,6 +393,9 @@ pub fn points(kind: EnemyKind) -> u64 {
         EnemyKind::Plaguebearer => 200,
         EnemyKind::SporeCarrier => 240,
         EnemyKind::Hydra => 220,
+        // EN batch E8d/e points.
+        EnemyKind::Warden => 280,
+        EnemyKind::LumenDrone => 220,
     }
 }
 
@@ -408,6 +432,9 @@ pub fn drop_budget_mul(kind: EnemyKind, boss: bool) -> f32 {
         // EN batch E8c: Tesla grunt, Plague/Spore/Hydra tanky standoffs.
         EnemyKind::TeslaWraith => 0.75,
         EnemyKind::Plaguebearer | EnemyKind::SporeCarrier | EnemyKind::Hydra => 1.4,
+        // EN batch E8d/e: Warden tanky, Lumen standard.
+        EnemyKind::Warden => 1.4,
+        EnemyKind::LumenDrone => 1.0,
     }
 }
 

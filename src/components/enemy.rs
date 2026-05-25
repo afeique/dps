@@ -38,6 +38,13 @@ pub enum EnemyKind {
     SporeCarrier,
     /// Splitting bruiser (reuses Tangerine's chase + Hunter's fire); EN-followup adds its death-split.
     Hydra,
+    // ── EN batch E8d/e — anti-meta + support ─────────────────────────────────
+    /// Adaptive-resist wall (reuses Prowler's keep-distance + missile); EN-followup
+    /// wires the [`crate::combat::element::Resistances`] adapt/decay (the helpers exist).
+    Warden,
+    /// Radiant support drone (reuses Prowler's keep-distance + Hunter's fire);
+    /// EN-followup adds its ally-shield aura.
+    LumenDrone,
 }
 
 #[derive(Component, Debug)]

@@ -1011,6 +1011,8 @@ fn en_enemies_appear_in_campaign() {
         EnemyKind::Plaguebearer,
         EnemyKind::SporeCarrier,
         EnemyKind::Hydra,
+        EnemyKind::Warden,
+        EnemyKind::LumenDrone,
     ] {
         assert!(campaign_uses(k), "{k:?} should appear in the campaign");
     }
