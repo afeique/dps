@@ -1220,6 +1220,41 @@ fn gravity_lance_is_void_and_pulls() {
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
 }
 
+/// W1: a player bullet's element resolves to its attunement if any, else the
+/// weapon base; the debug cycle steps off → Pyro → … → Radiant → off.
+#[test]
+fn attunement_resolution_and_cycle() {
+    use crate::combat::element::{Element, ElementSet};
+    use crate::systems::weapons::{cycle_attunement, next_attunement, resolve_player_bullet_set, Attunements};
+
+    // Resolution: empty attune → weapon base; attuned → the attunement set.
+    assert_eq!(
+        resolve_player_bullet_set(ElementSet::EMPTY, Element::Kinetic),
+        ElementSet::single(Element::Kinetic)
+    );
+    assert_eq!(
+        resolve_player_bullet_set(ElementSet::single(Element::Pyro), Element::Kinetic),
+        ElementSet::single(Element::Pyro)
+    );
+
+    // Cycle order wraps off → Pyro → … → Radiant → off.
+    assert_eq!(next_attunement(ElementSet::EMPTY), ElementSet::single(Element::Pyro));
+    assert_eq!(next_attunement(ElementSet::single(Element::Pyro)), ElementSet::single(Element::Cryo));
+    assert_eq!(next_attunement(ElementSet::single(Element::Radiant)), ElementSet::EMPTY);
+
+    // The debug key advances the resource.
+    let mut app = test_app();
+    app.init_resource::<Attunements>();
+    let world = app.world_mut();
+    let mut input = ButtonInput::<KeyCode>::default();
+    input.press(KeyCode::KeyT);
+    world.insert_resource(input);
+    let mut step = Schedule::default();
+    step.add_systems(cycle_attunement);
+    step.run(world);
+    assert_eq!(world.resource::<Attunements>().0, ElementSet::single(Element::Pyro));
+}
+
 /// W: an Orbital Strike telegraphs (no damage) then strikes its column AoE.
 #[test]
 fn orbital_strike_telegraphs_then_hits() {

@@ -38,6 +38,7 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::resources::LastStandUsed>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::weapons::CurrentWeapon>()
+            .init_resource::<systems::weapons::Attunements>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
             .init_resource::<systems::shop::Upgrades>()
@@ -170,6 +171,7 @@ impl Plugin for GamePlugin {
                 (
                     (systems::input::gather_input, systems::input::update_aim).chain(),
                     systems::weapons::cycle_weapon,
+                    systems::weapons::cycle_attunement,
                     systems::power_weapon::cycle_power_weapon,
                     systems::power_weapon::fire_power_weapon,
                     systems::skills::use_skills,

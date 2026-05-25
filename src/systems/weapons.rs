@@ -144,6 +144,24 @@ fn stats(kind: WeaponKind) -> WeaponStats {
 #[derive(Resource, Default)]
 pub struct CurrentWeapon(pub WeaponKind);
 
+/// The active weapon's equipped attunement elements (W1). Empty = fall back to
+/// the weapon's base element. The BUILD tree (gold-unlocked) populates this
+/// later; for now a debug key (`T`) cycles a single element so player elemental
+/// offense is playable. Read by `spawn_bullets`.
+#[derive(Resource, Default)]
+pub struct Attunements(pub ElementSet);
+
+/// Resolve a player bullet's element set (`resolveBulletElements` semantics):
+/// equipped `attune` elements if any, else the weapon's `base` element. (Element
+/// override — Elemental Infusion / Overdrive — layers on top in a later phase.)
+pub fn resolve_player_bullet_set(attune: ElementSet, base: Element) -> ElementSet {
+    if attune.is_empty() {
+        ElementSet::single(base)
+    } else {
+        attune
+    }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 #[inline]
@@ -213,6 +231,42 @@ pub fn gravity_pull(
 }
 
 // ─── Systems ─────────────────────────────────────────────────────────────────
+
+/// The attunement cycle order: off → the 6 non-Kinetic elements → off.
+pub const ATTUNE_CYCLE: [Option<Element>; 7] = [
+    None,
+    Some(Element::Pyro),
+    Some(Element::Cryo),
+    Some(Element::Volt),
+    Some(Element::Toxic),
+    Some(Element::Void),
+    Some(Element::Radiant),
+];
+
+/// The next single-element attunement after the current one (pure; drives the
+/// debug cycle + testable without input). Matches by the lone set element.
+pub fn next_attunement(current: ElementSet) -> ElementSet {
+    let idx = ATTUNE_CYCLE
+        .iter()
+        .position(|o| match o {
+            None => current.is_empty(),
+            Some(e) => current.len() == 1 && current.contains(*e),
+        })
+        .unwrap_or(0);
+    match ATTUNE_CYCLE[(idx + 1) % ATTUNE_CYCLE.len()] {
+        None => ElementSet::EMPTY,
+        Some(e) => ElementSet::single(e),
+    }
+}
+
+/// DEBUG (until the BUILD tree gold-gates attunements): `T` cycles the active
+/// attunement element through the 6 + off, so player elemental offense — and the
+/// whole reaction/status engine — is playable now.
+pub fn cycle_attunement(keys: Res<ButtonInput<KeyCode>>, mut attune: ResMut<Attunements>) {
+    if keys.just_pressed(KeyCode::KeyT) {
+        attune.0 = next_attunement(attune.0);
+    }
+}
 
 /// Cycle (Tab / Q) or directly select (1–5) the active weapon.
 pub fn cycle_weapon(keys: Res<ButtonInput<KeyCode>>, mut cur: ResMut<CurrentWeapon>) {
@@ -298,6 +352,7 @@ pub fn spawn_bullets(
     mut commands: Commands,
     assets: Res<BulletAssets>,
     cur: Res<CurrentWeapon>,
+    attune: Res<Attunements>,
     upgrades: Res<Upgrades>,
     wave: Res<crate::systems::wave::Wave>,
     // Running count of player bullets fired — drives the Overcharge cadence.
@@ -351,10 +406,10 @@ pub fn spawn_bullets(
                 ));
                 b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
-            // Element tag (W): the active weapon's base element (Gravity Lance =
-            // Void, else Kinetic). The W1 attunement system will fold equipped
-            // attunements in here. Resist is applied in `bullet_hits_enemy`.
-            bullet.insert(BulletElements(ElementSet::single(cur.0.element())));
+            // Element tag (W): equipped attunements if any, else the weapon's
+            // base element (resolve_player_bullet_set). Resist + reactions are
+            // applied in `bullet_hits_enemy` from this set.
+            bullet.insert(BulletElements(resolve_player_bullet_set(attune.0, cur.0.element())));
             // Gravity Lance orbs pull nearby enemies as they fly (W).
             if cur.0 == WeaponKind::GravityLance {
                 bullet.insert(GravityBullet { pull_radius: 150.0, pull_strength: 60.0 });
