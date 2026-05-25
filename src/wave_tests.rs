@@ -981,6 +981,22 @@ fn en_pyro_cryo_enemy_data() {
     assert_eq!(points(EnemyKind::Cinder), 110);
 }
 
+/// EN: the new elemental enemies are wired into the campaign wave table (so they
+/// actually spawn), not just defined as types.
+#[test]
+fn en_enemies_appear_in_campaign() {
+    use crate::systems::wave::campaign_uses;
+    for k in [
+        EnemyKind::Cinder,
+        EnemyKind::Glacier,
+        EnemyKind::FrostLance,
+        EnemyKind::AshenDetonator,
+    ] {
+        assert!(campaign_uses(k), "{k:?} should appear in the campaign");
+    }
+    assert!(campaign_uses(EnemyKind::Hunter), "originals still present");
+}
+
 /// E5: the player burn DoT lands a 2-dmg chunk every 0.5 s (surviving the
 /// player-damage rounding) and expires after its duration.
 #[test]
