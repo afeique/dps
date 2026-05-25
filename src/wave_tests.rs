@@ -981,6 +981,41 @@ fn en_pyro_cryo_enemy_data() {
     assert_eq!(points(EnemyKind::Cinder), 110);
 }
 
+/// EN: an Ashen Detonator dying near the player triggers a PYRO death-flare —
+/// the player takes the flare damage and a burn.
+#[test]
+fn ashen_death_flare_hits_nearby_player() {
+    use crate::messages::Death;
+    use crate::systems::enemy::mechanics::ashen_death_flare;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((Ship::default(), Health::new(40.0), Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+
+    // A setup system writes the Ashen death (50 px away → inside the 130 flare).
+    fn emit_ashen_death(mut w: MessageWriter<Death>, q: Query<Entity, With<Ship>>) {
+        if let Ok(e) = q.single() {
+            w.write(Death {
+                entity: e,
+                position: Vec2::new(50.0, 0.0),
+                kind: Some(EnemyKind::AshenDetonator),
+                boss_tier: 0,
+                mini_boss: false,
+            });
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((emit_ashen_death, ashen_death_flare, apply_damage).chain());
+    world.insert_resource(Time::<()>::default());
+    step.run(world);
+
+    assert_eq!(world.get::<Health>(p).unwrap().current, 28.0, "flare dealt 12");
+    assert!(world.get::<PlayerBurn>(p).is_some(), "flare applied a burn");
+}
+
 /// EN batch E8c: the Volt/Toxic enemies carry the right attack element + resist.
 #[test]
 fn en_volt_toxic_enemy_data() {

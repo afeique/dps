@@ -10,6 +10,7 @@
 
 pub mod firing;
 pub mod guardian;
+pub mod mechanics;
 pub mod hunter;
 pub mod prowler;
 pub mod sentinel;

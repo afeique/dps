@@ -316,6 +316,8 @@ impl Plugin for GamePlugin {
                     systems::damage::apply_thorns,
                     // Boss-pair link: a boss death rages surviving bosses (IV.7).
                     systems::enemy::boss_pair_rage,
+                    // Ashen Detonator death-flare: a PYRO blast on death (EN).
+                    systems::enemy::mechanics::ashen_death_flare,
                     // Combat Medic: a kill after taking a hit heals the player.
                     systems::passives::tick_combat_medic,
                     // Hitstop: a boss/mini-boss `Death` freezes the sim a few
