@@ -86,6 +86,85 @@ pub struct Stunned {
     pub secs: f32,
 }
 
+// ── Elemental statuses (Phase E3, from `combat-manager.js` STATUS_DEF :2018+) ──
+// The signature on-hit statuses for the six non-Kinetic elements (Burning +
+// Stunned above already cover PYRO + the stun verb). Each ticks down in
+// `FixedUpdate` and removes itself on expiry (`status::tick_status_timers`);
+// DoT statuses (Bleed) emit `Damage` like `Burning`. Their gameplay *effects*
+// (chill slow, conduct/corrode amplify, void pull) are read by the damage/
+// movement paths as those land — application on hit arrives with elemental
+// damage sources (W attunements / E5 enemy elements).
+
+/// CRYO **chill** (`CHILL`): the enemy moves at `CHILL_SLOW`× while present.
+/// 2000 ms. Escalates to `Frozen` on a heavy/again CRYO hit.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Chill {
+    pub secs: f32,
+}
+
+/// CRYO **freeze** (`FREEZE`): the enemy is halted + can't fire; a heavy hit
+/// while frozen triggers SHATTER (E4). 1500 ms.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Frozen {
+    pub secs: f32,
+}
+
+/// VOLT **conduct** ("wet", `CONDUCT`): incoming VOLT damage is amplified
+/// ×`CONDUCT_VOLT_MULT` while present (applied in the damage path, E4). 3000 ms.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Conduct {
+    pub secs: f32,
+}
+
+/// TOXIC **corrode** (`CORRODE`): a vulnerability — incoming damage from ALL
+/// sources ×(1 + `CORRODE_PER_STACK`×stacks), `stacks` capped at
+/// `CORRODE_MAX_STACKS`. 4000 ms (refreshed on re-application).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Corrode {
+    pub stacks: u32,
+    pub secs: f32,
+}
+
+/// VOID **mark** (`MARK`): tags the enemy for void pull / bonus effects. 6000 ms.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Mark {
+    pub secs: f32,
+}
+
+/// **Oil** coat (`OIL`): flammable — a PYRO hit ignites it into a burn AoE
+/// (oil-flare, E4). 5000 ms.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Oil {
+    pub secs: f32,
+}
+
+/// TOXIC **bleed** (`BLEED`): a poison DoT (`dps × dt`), no refresh. 4000 ms.
+/// Distinct from `Burning` (different source + stacking rules); shares the DoT
+/// tick shape (`status::tick_bleed`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Bleed {
+    pub dps: f32,
+    pub secs: f32,
+}
+
+/// Status durations in seconds (`STATUS_DEF`, combat-manager.js:2018+).
+pub const CHILL_SECS: f32 = 2.0;
+pub const FREEZE_SECS: f32 = 1.5;
+pub const CONDUCT_SECS: f32 = 3.0;
+pub const CORRODE_SECS: f32 = 4.0;
+pub const MARK_SECS: f32 = 6.0;
+pub const OIL_SECS: f32 = 5.0;
+pub const BLEED_SECS: f32 = 4.0;
+
+/// Movement-speed factor while chilled (combat-manager: ×0.7).
+pub const CHILL_SLOW: f32 = 0.7;
+/// Corrode stack cap (combat-manager: 3).
+pub const CORRODE_MAX_STACKS: u32 = 3;
+/// Per-stack incoming-damage amplification from corrode (+15%/stack).
+pub const CORRODE_PER_STACK: f32 = 0.15;
+/// VOLT-damage amplifier vs a conducting target (collision-system: ×1.5).
+pub const CONDUCT_VOLT_MULT: f32 = 1.5;
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

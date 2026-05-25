@@ -30,7 +30,7 @@
 //! Sentinel 2; Stalker/Prowler/Titan 3; Tangerine 4. These are small by design —
 //! the player has only 40 HP (spec II.2), so a few hits matter.
 
-use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Raged, Ship, Stunned};
+use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Frozen, Raged, Ship, Stunned};
 use crate::messages::Fire;
 use bevy::prelude::*;
 
@@ -53,9 +53,12 @@ pub fn enemy_firing(
     time: Res<Time>,
     mut fire: MessageWriter<Fire>,
     player: Query<&Transform, With<Ship>>,
-    // Stunned enemies can't fire (spec III.6) — their cooldown simply freezes.
-    // `Has<Raged>` makes a raged boss's bullets home toward the player (spec IV.7).
-    mut q: Query<(&Enemy, &Transform, &mut FireCooldown, Has<Raged>), Without<Stunned>>,
+    // Stunned OR frozen enemies can't fire (spec III.6 / E3) — their cooldown
+    // simply freezes. `Has<Raged>` makes a raged boss's bullets home (spec IV.7).
+    mut q: Query<
+        (&Enemy, &Transform, &mut FireCooldown, Has<Raged>),
+        (Without<Stunned>, Without<Frozen>),
+    >,
 ) {
     let Ok(player_tf) = player.single() else { return };
     let player_pos = player_tf.translation.truncate();

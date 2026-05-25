@@ -791,6 +791,82 @@ fn burning_dots_then_expires() {
     assert!(world.get::<Burning>(e).is_none(), "burn expires");
 }
 
+/// `Bleed` (TOXIC poison, E3) is a no-refresh DoT — same shape as burn: ticks
+/// `dps × dt` damage and expires on schedule.
+#[test]
+fn bleed_dots_then_expires() {
+    use crate::components::Bleed;
+    use crate::systems::status::tick_bleed;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(20.0),
+            Bleed { dps: 4.0, secs: 0.3 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_bleed, apply_damage).chain());
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert!(world.get::<Health>(e).unwrap().current < 20.0, "bleed deals damage");
+    assert!(world.get::<Bleed>(e).is_some(), "bleed persists mid-duration");
+
+    time.advance_by(Duration::from_secs_f32(0.5));
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<Bleed>(e).is_none(), "bleed expires");
+}
+
+/// The simple-timer elemental statuses (E3) count down and remove themselves on
+/// expiry; `Corrode` keeps its stacks for its whole duration.
+#[test]
+fn status_timers_count_down_and_expire() {
+    use crate::components::{Chill, Corrode, Frozen};
+    use crate::systems::status::tick_status_timers;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Chill { secs: 0.3 },
+            Frozen { secs: 0.3 },
+            Corrode { stacks: 2, secs: 0.3 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_status_timers);
+
+    // Mid-duration: all persist, corrode holds its stacks.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time.clone());
+    step.run(world);
+    assert!(world.get::<Chill>(e).is_some());
+    assert!(world.get::<Frozen>(e).is_some());
+    assert_eq!(world.get::<Corrode>(e).unwrap().stacks, 2);
+
+    // Past expiry: all removed.
+    time.advance_by(Duration::from_secs_f32(0.5));
+    world.insert_resource(time);
+    step.run(world);
+    assert!(world.get::<Chill>(e).is_none());
+    assert!(world.get::<Frozen>(e).is_none());
+    assert!(world.get::<Corrode>(e).is_none());
+}
+
 // ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
 
 /// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,
