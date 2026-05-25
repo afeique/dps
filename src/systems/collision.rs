@@ -92,6 +92,7 @@ pub fn bullet_hits_enemy(
             Has<Frozen>,
             Has<Oil>,
             Option<&AllyShield>,
+            Has<Adaptive>,
         ),
         (With<Enemy>, Without<Ship>),
     >,
@@ -146,6 +147,7 @@ pub fn bullet_hits_enemy(
             efrozen,
             eoil,
             eshield,
+            eadaptive,
         ) in &enemies
         {
             let reach = bc.radius + ec.radius;
@@ -215,6 +217,19 @@ pub fn bullet_hits_enemy(
                         damage: flare_damage(amount),
                     });
                 }
+                // Warden adaptive resist (EN): after a hit, bump a copy of the
+                // enemy's resist toward each element carried, so the NEXT
+                // same-element hit does less. Deferred via Commands → no
+                // mut-`Resistances` borrow in this (shared, splash-iterated) query.
+                if eadaptive {
+                    if let (Some(set), Some(res)) = (belem_set, eres) {
+                        let mut bumped = *res;
+                        for el in set.iter() {
+                            bumped.adapt_default(el);
+                        }
+                        commands.entity(enemy_e).insert(bumped);
+                    }
+                }
                 // VAMPIRISM: heal the player for a fraction of the damage dealt.
                 // (Over-fill allowed; overheal_to_tanks converts the overflow.)
                 if vamp > 0.0 {
@@ -244,7 +259,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

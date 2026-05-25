@@ -3,9 +3,9 @@
 //! runs on a per-enemy timer (spawner, acid trail). Built incrementally; the
 //! death-hooked ones land first (they reuse the existing `Death` message).
 
-use crate::combat::element::Element;
+use crate::combat::element::{Element, Resistances};
 use crate::components::{
-    AllyShield, Drone, DroneSpawner, Enemy, EnemyKind, PlayerCorrode, Ship, SupportAura,
+    Adaptive, AllyShield, Drone, DroneSpawner, Enemy, EnemyKind, PlayerCorrode, Ship, SupportAura,
     AURA_LINGER, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
 };
 use crate::messages::{Damage, Death};
@@ -113,5 +113,27 @@ pub fn tick_ally_shield(
         if s.secs <= 0.0 {
             commands.entity(e).remove::<AllyShield>();
         }
+    }
+}
+
+/// Seconds between Warden adaptive-resist decay steps (the counter-play to the
+/// adapt loop — switching elements lets the old resistance fade).
+pub const ADAPT_DECAY_INTERVAL: f32 = 1.0;
+
+/// Slowly decay every adaptive (Warden) enemy's learned resistances toward 0
+/// (`decay`), once per [`ADAPT_DECAY_INTERVAL`]. The on-hit bump lives in
+/// `collision::bullet_hits_enemy`.
+pub fn decay_warden_resist(
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    mut q: Query<&mut Resistances, With<Adaptive>>,
+) {
+    *acc -= time.delta_secs();
+    if *acc > 0.0 {
+        return;
+    }
+    *acc = ADAPT_DECAY_INTERVAL;
+    for mut r in &mut q {
+        r.decay_default();
     }
 }

@@ -641,6 +641,10 @@ fn spawn_enemy(
                 timer: AURA_INTERVAL,
             });
         }
+        // Warden learns to resist the element you spam at it (EN).
+        EnemyKind::Warden => {
+            e.insert(Adaptive);
+        }
         _ => {}
     }
 

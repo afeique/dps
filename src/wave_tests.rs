@@ -1076,6 +1076,50 @@ fn hazard_dropper_drops_hazard() {
     assert_eq!(world.query::<&HazardField>().iter(world).count(), 1, "dropper spawned a hazard");
 }
 
+/// EN: a Warden adapts — a hit bumps its resistance to the hit's element — and
+/// `decay_warden_resist` fades that resistance over time.
+#[test]
+fn warden_adapts_then_decays() {
+    use crate::combat::element::{Element, ElementSet, Resistances};
+    use crate::components::{Adaptive, Bullet, BulletElements, BulletKind};
+    use crate::systems::enemy::mechanics::decay_warden_resist;
+
+    // (a) a PYRO hit on a neutral Warden bumps its Pyro resist above 0.
+    let mut app = test_app();
+    let world = app.world_mut();
+    let w = world
+        .spawn((
+            Enemy { kind: EnemyKind::Warden },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Resistances::new(),
+            Adaptive,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 5.0, pierce: 0 },
+        BulletElements(ElementSet::single(Element::Pyro)),
+        Collider { radius: 5.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    let mut step = Schedule::default();
+    step.add_systems(bullet_hits_enemy);
+    step.run(world);
+    let pyro = world.get::<Resistances>(w).unwrap().get(Element::Pyro);
+    assert!(pyro > 0.0, "Warden adapted to Pyro (got {pyro})");
+
+    // (b) decay fades it back down.
+    let mut step2 = Schedule::default();
+    step2.add_systems(decay_warden_resist);
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(2.0));
+    world.insert_resource(time);
+    step2.run(world);
+    let decayed = world.get::<Resistances>(w).unwrap().get(Element::Pyro);
+    assert!(decayed < pyro, "adapted resist decays ({decayed} < {pyro})");
+}
+
 /// EN: a Lumen Drone's aura pulse stamps an AllyShield on allies in range only.
 #[test]
 fn lumen_aura_shields_nearby_allies() {

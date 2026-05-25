@@ -235,6 +235,13 @@ pub struct DroneSpawner {
 #[derive(Component, Debug)]
 pub struct Drone;
 
+/// An **adaptive-resist** enemy (Warden): each player hit bumps its `Resistances`
+/// toward the hit's element(s) (`adapt`, applied in `bullet_hits_enemy`), and
+/// `mechanics::decay_warden_resist` decays them on a timer — so spamming one
+/// element walls it while switching resets the pressure. Starts neutral.
+#[derive(Component, Debug)]
+pub struct Adaptive;
+
 /// Seconds between Spore Carrier drone births (enemy-data.js: 4000 ms).
 pub const SPORE_DRONE_INTERVAL: f32 = 4.0;
 /// Max live Spore Carrier drones (enemy-data.js cap: 16).

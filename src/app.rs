@@ -360,6 +360,8 @@ impl Plugin for GamePlugin {
                         systems::player_status::tick_player_statuses,
                         // Expire ally-shield buffs (EN — drops when the Lumen dies).
                         systems::enemy::mechanics::tick_ally_shield,
+                        // Decay Warden adaptive resistances over time (EN).
+                        systems::enemy::mechanics::decay_warden_resist,
                         systems::skills::tick_bulwark,
                         systems::skills::tick_repair,
                         systems::skills::tick_tractor,
