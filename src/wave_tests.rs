@@ -44,6 +44,7 @@ fn test_app() -> App {
         .init_resource::<crate::systems::shop::Upgrades>()
         .init_resource::<crate::systems::items::Equipment>()
         .init_resource::<crate::systems::formations::Formations>()
+        .init_resource::<crate::combat::reaction::PendingReactions>()
         .init_resource::<crate::resources::LastStandUsed>()
         .insert_resource(NextState::<GameState>::Unchanged);
     app
@@ -824,6 +825,50 @@ fn bleed_dots_then_expires() {
     world.insert_resource(time);
     step.run(world);
     assert!(world.get::<Bleed>(e).is_none(), "bleed expires");
+}
+
+/// SHATTER (E4b): a shatter seed bursts CRYO damage + re-freezes every neighbor
+/// within radius, excluding the source; neighbors outside the radius are spared.
+#[test]
+fn shatter_aoe_damages_and_freezes_neighbors() {
+    use crate::combat::reaction::{PendingReactions, ReactionSeed};
+    use crate::components::Frozen;
+    use crate::systems::reactions::resolve_reactions;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let source = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(20.0), Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+    let near = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(20.0), Transform::from_xyz(50.0, 0.0, 0.0)))
+        .id();
+    let far = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(20.0), Transform::from_xyz(500.0, 0.0, 0.0)))
+        .id();
+
+    world.resource_mut::<PendingReactions>().0.push(ReactionSeed::Shatter {
+        source,
+        center: Vec2::ZERO,
+        depth: 0,
+    });
+
+    let mut step = Schedule::default();
+    step.add_systems((resolve_reactions, apply_damage).chain());
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.016));
+    world.insert_resource(time);
+    step.run(world);
+
+    assert!(world.get::<Health>(near).unwrap().current < 20.0, "near neighbor shattered");
+    assert!(world.get::<Frozen>(near).is_some(), "near neighbor re-frozen");
+    assert_eq!(world.get::<Health>(far).unwrap().current, 20.0, "far neighbor untouched");
+    assert_eq!(
+        world.get::<Health>(source).unwrap().current,
+        20.0,
+        "source excluded from its own AoE"
+    );
 }
 
 /// The simple-timer elemental statuses (E3) count down and remove themselves on

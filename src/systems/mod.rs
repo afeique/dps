@@ -21,6 +21,7 @@ pub mod movement;
 pub mod passives;
 pub mod power_weapon;
 pub mod powerups;
+pub mod reactions;
 pub mod shop;
 pub mod skills;
 pub mod spawn;

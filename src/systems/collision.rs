@@ -10,6 +10,7 @@
 //! and adds the remaining pairs (AOE rings, asteroids).
 
 use crate::combat::element::{Element, Resistances};
+use crate::combat::reaction::{flare_damage, shatter_triggers, PendingReactions, ReactionSeed};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
@@ -88,6 +89,8 @@ pub fn bullet_hits_enemy(
             Option<&Conduct>,
             Option<&Armor>,
             Option<&FrontalShield>,
+            Has<Frozen>,
+            Has<Oil>,
         ),
         (With<Enemy>, Without<Ship>),
     >,
@@ -95,6 +98,9 @@ pub fn bullet_hits_enemy(
     // Player position for the frontal-shield bearing test (E4). Disjoint from
     // `player_hp` (different component) so no query conflict.
     player_pos: Query<&Transform, With<Ship>>,
+    // Reaction seeds (E4b) — shatter/oil-flare detected here, resolved by
+    // `reactions::resolve_reactions` after this system.
+    mut reactions: ResMut<PendingReactions>,
 ) {
     let player_pos_v = player_pos.single().ok().map(|t| t.translation.truncate());
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
@@ -125,7 +131,10 @@ pub fn bullet_hits_enemy(
         let belem_set = belems.map(|b| b.0);
         let has_volt = belem_set.is_some_and(|s| s.contains(Element::Volt));
         let has_radiant = belem_set.is_some_and(|s| s.contains(Element::Radiant));
-        for (enemy_e, etf, ec, ehp, eres, ecorrode, econduct, earmor, efrontal) in &enemies {
+        let has_pyro = belem_set.is_some_and(|s| s.contains(Element::Pyro));
+        for (enemy_e, etf, ec, ehp, eres, ecorrode, econduct, earmor, efrontal, efrozen, eoil) in
+            &enemies
+        {
             let reach = bc.radius + ec.radius;
             let d2 = btf
                 .translation
@@ -174,6 +183,23 @@ pub fn bullet_hits_enemy(
                     target: enemy_e,
                     amount,
                 });
+                // Elemental reactions (E4b): a heavy hit on a frozen enemy
+                // shatters into its neighbors; a PYRO hit on an oiled enemy
+                // flares. Resolved by `reactions::resolve_reactions` this tick.
+                let center = etf.translation.truncate();
+                if shatter_triggers(efrozen, amount, 0) {
+                    reactions.0.push(ReactionSeed::Shatter {
+                        source: enemy_e,
+                        center,
+                        depth: 0,
+                    });
+                }
+                if eoil && has_pyro {
+                    reactions.0.push(ReactionSeed::Flare {
+                        center,
+                        damage: flare_damage(amount),
+                    });
+                }
                 // VAMPIRISM: heal the player for a fraction of the damage dealt.
                 // (Over-fill allowed; overheal_to_tanks converts the overflow.)
                 if vamp > 0.0 {
@@ -203,7 +229,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * streak_mult;
-                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

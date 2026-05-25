@@ -201,6 +201,26 @@ fn defense_frontal_shield_reduces_blocked_hits() {
     );
 }
 
+// ─── E4b reaction triggers ───────────────────────────────────────────────────
+
+#[test]
+fn shatter_trigger_conditions() {
+    use crate::combat::reaction::shatter_triggers;
+    assert!(shatter_triggers(true, 6.0, 0)); // frozen, at threshold, depth ok
+    assert!(shatter_triggers(true, 10.0, 1)); // depth 1 still chains
+    assert!(!shatter_triggers(false, 10.0, 0)); // not frozen
+    assert!(!shatter_triggers(true, 5.9, 0)); // below threshold
+    assert!(!shatter_triggers(true, 10.0, 2)); // depth cap reached
+}
+
+#[test]
+fn flare_damage_floor_and_scale() {
+    use crate::combat::reaction::flare_damage;
+    assert_eq!(flare_damage(10.0), 4.0); // 10 × 0.4
+    assert_eq!(flare_damage(1.0), 2.0); // floored at 2
+    assert_eq!(flare_damage(0.0), 2.0);
+}
+
 #[test]
 fn frontal_blocked_geometry() {
     let enemy = Vec2::ZERO;

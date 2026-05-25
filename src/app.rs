@@ -48,6 +48,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::LootFeed>()
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
+            .init_resource::<crate::combat::reaction::PendingReactions>()
             .init_resource::<systems::hitstop::Hitstop>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
@@ -283,6 +284,9 @@ impl Plugin for GamePlugin {
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,
+                        // Elemental reactions (E4b): resolve shatter/oil-flare
+                        // seeds from the hit above (writes Damage + statuses).
+                        systems::reactions::resolve_reactions,
                         // Orbs + tractor absorb enemy bullets before they reach
                         // the player.
                         systems::skills::deflector_blocks,

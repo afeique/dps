@@ -6,6 +6,7 @@
 //! data, attunements, and passives follow.
 
 pub mod element;
+pub mod reaction;
 
 // Convenience re-export for the damage pipeline (E2/E5) + weapon data (W1) that
 // read these next; unused until then, so the foundation-only E1 commit is clean.
