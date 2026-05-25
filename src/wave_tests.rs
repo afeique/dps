@@ -981,6 +981,39 @@ fn en_pyro_cryo_enemy_data() {
     assert_eq!(points(EnemyKind::Cinder), 110);
 }
 
+/// EN: a Hydra splits into 2 lings on death; a ling (`Splitter.lings == 0`) does
+/// not split again.
+#[test]
+fn hydra_splits_into_lings_on_death() {
+    use crate::components::Splitter;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let hydra = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hydra },
+            Health::new(1.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            Splitter { lings: 2 },
+        ))
+        .id();
+    world.write_message(Damage { target: hydra, amount: 5.0 }); // lethal
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    // Original despawned; exactly 2 Hydra lings remain, each unable to re-split.
+    let mut q = world.query::<(&Enemy, &Splitter)>();
+    let lings: Vec<u32> = q
+        .iter(world)
+        .filter(|(e, _)| e.kind == EnemyKind::Hydra)
+        .map(|(_, s)| s.lings)
+        .collect();
+    assert_eq!(lings.len(), 2, "Hydra split into 2 lings");
+    assert!(lings.iter().all(|&l| l == 0), "lings can't re-split");
+}
+
 /// EN: an Ashen Detonator dying near the player triggers a PYRO death-flare —
 /// the player takes the flare damage and a burn.
 #[test]

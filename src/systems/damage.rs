@@ -13,8 +13,8 @@
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
 use crate::components::{
-    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, BULWARK_RESIST,
-    MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
+    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, Splitter,
+    BULWARK_RESIST, MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
@@ -46,6 +46,7 @@ pub fn apply_damage(
         Option<&Boss>,
         Option<&Bulwark>,
         Has<MiniBoss>,
+        Option<&Splitter>,
     )>,
 ) {
     for ev in dmg.read() {
@@ -60,6 +61,7 @@ pub fn apply_damage(
             boss,
             bulwark,
             mini_boss,
+            splitter,
         )) = q.get_mut(ev.target)
         else {
             continue; // target already gone this tick
@@ -139,6 +141,15 @@ pub fn apply_damage(
                 next_state.set(GameState::GameOver);
                 commands.entity(ev.target).despawn();
             } else {
+                // Split-on-death (Hydra, EN): spawn the lings at the death spot
+                // before the parent despawns. Lings get `lings: 0` (no re-split).
+                if let Some(s) = splitter {
+                    for i in 0..s.lings {
+                        let a = i as f32 / s.lings.max(1) as f32 * std::f32::consts::TAU;
+                        let off = Vec2::new(a.cos(), a.sin()) * 20.0;
+                        crate::systems::enemy::spawn_split_ling(&mut commands, position + off);
+                    }
+                }
                 deaths.write(Death {
                     entity: ev.target,
                     position,

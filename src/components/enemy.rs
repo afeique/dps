@@ -213,6 +213,14 @@ pub struct FrontalShield {
 /// Flat-armor damage floor (`applyDamageToEnemy`: 25% of a hit always lands).
 pub const ARMOR_FLOOR: f32 = 0.25;
 
+/// A **split-on-death** enemy (Hydra, `splitOnDeath`): on death it spawns `lings`
+/// half-size copies. A spawned ling gets `lings = 0` so it can't split again
+/// (maxGen 1). Read by `damage::apply_damage` at the death tick.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Splitter {
+    pub lings: u32,
+}
+
 /// Per-enemy AI scratch state (steering targets, phase timers). Filled out
 /// per-kind in Phase 3; carried now so the component shape is stable.
 #[derive(Component, Debug, Default)]

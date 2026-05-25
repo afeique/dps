@@ -536,6 +536,14 @@ pub fn spawn_mini_boss(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
     );
 }
 
+/// Spawn a Hydra **ling** (EN split-on-death): a half-size (×0.5 HP / ×0.7 size)
+/// copy at `pos` that can't split again (`Splitter { lings: 0 }` overrides the
+/// `lings: 2` that `spawn_enemy` stamps on a Hydra).
+pub fn spawn_split_ling(commands: &mut Commands, pos: Vec2) {
+    let e = spawn_enemy(commands, EnemyKind::Hydra, pos, 0.5, 0.7, 1.0, Promo::None);
+    commands.entity(e).insert(Splitter { lings: 0 });
+}
+
 /// Wave-aware spawn used by the campaign: applies the V.4 HP difficulty curve on
 /// top of the tier / mini-boss HP overlay. `mini` promotes to a mini-boss
 /// (ignoring `tier`); otherwise `tier` selects the boss overlay (0 = normal).
@@ -601,6 +609,11 @@ fn spawn_enemy(
         }
         EnemyKind::Sentinel => {
             e.insert(FrontalShield { arc: 2.4, reduction: 0.8 });
+        }
+        // Hydra splits into 2 lings on death (EN). Lings are re-stamped with
+        // `lings: 0` by `spawn_split_ling` so they don't split again.
+        EnemyKind::Hydra => {
+            e.insert(Splitter { lings: 2 });
         }
         _ => {}
     }
