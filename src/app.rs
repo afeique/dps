@@ -397,6 +397,8 @@ impl Plugin for GamePlugin {
                         systems::skills::tick_bulwark,
                         systems::skills::tick_repair,
                         systems::skills::tick_tractor,
+                        // Drop-zone ability fields (AB): re-apply status in radius.
+                        systems::abilities::tick_ability_fields,
                         // Passive regen (after 4 s no-damage) then overheal → tanks.
                         systems::damage::passive_regen,
                         // Reconcile MAX HP against equipped HP affixes (spec VI.5).

@@ -75,11 +75,10 @@ impl Ability {
             Ability::GravitySnare => 16.0,
             Ability::Designator => 20.0,
             Ability::SecondWind => 90.0,
-            Ability::ElementalInfusion => 24.0,
-            Ability::CryoField
-            | Ability::StasisField
-            | Ability::StormCell
-            | Ability::PyreAura => 18.0,
+            Ability::ElementalInfusion => 16.0,
+            // Drop-zone fields (weapon-data.js): Cryo 18 s, the rest 16 s.
+            Ability::CryoField => 18.0,
+            Ability::StasisField | Ability::StormCell | Ability::PyreAura => 16.0,
         }
     }
 
@@ -92,10 +91,11 @@ impl Ability {
             Ability::SentryDrone => 8.0,
             Ability::Designator => 6.0,
             Ability::ElementalInfusion => 8.0,
+            // All four drop-zone fields persist 5 s (weapon-data.js `duration`).
             Ability::CryoField
             | Ability::StasisField
             | Ability::StormCell
-            | Ability::PyreAura => 6.0,
+            | Ability::PyreAura => 5.0,
             // EmpPulse / Blink / GravitySnare / SecondWind are instantaneous.
             _ => 0.0,
         }
@@ -132,8 +132,54 @@ impl Ability {
                 | Ability::DeflectorOrbs
                 | Ability::EmpPulse
                 | Ability::Blink
+                | Ability::CryoField
+                | Ability::StasisField
+                | Ability::StormCell
+                | Ability::PyreAura
         )
     }
+
+    /// For a drop-zone field ability, its `(status, radius, tick interval)`
+    /// (`weapon-data.js`). `None` for non-field abilities. Duration is
+    /// [`Ability::duration`] (5 s for every field).
+    pub fn field_params(self) -> Option<(FieldStatus, f32, f32)> {
+        match self {
+            Ability::CryoField => Some((FieldStatus::Freeze, 180.0, 0.25)),
+            Ability::StasisField => Some((FieldStatus::Chill, 210.0, 0.25)),
+            Ability::StormCell => Some((FieldStatus::Conduct, 200.0, 0.30)),
+            Ability::PyreAura => Some((FieldStatus::Burn, 190.0, 0.40)),
+            _ => None,
+        }
+    }
+}
+
+/// The status a [`AbilityField`] re-applies to enemies inside it each tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldStatus {
+    /// Cryo Field — halts enemies (`Frozen`).
+    Freeze,
+    /// Stasis Field — slows enemies (`Chill`).
+    Chill,
+    /// Storm Cell — makes enemies conductive / shocked (`Conduct`).
+    Conduct,
+    /// Pyre Aura — burns enemies (`Burning`, 6 dps).
+    Burn,
+}
+
+/// A dropped drop-zone field that re-applies [`FieldStatus`] to every enemy
+/// within `radius` every `tick` seconds, until `secs` elapses. Spawned by the
+/// Cryo/Stasis/Storm/Pyre abilities and ticked by
+/// `systems::abilities::tick_ability_fields`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct AbilityField {
+    pub status: FieldStatus,
+    pub radius: f32,
+    /// Remaining lifetime (s).
+    pub secs: f32,
+    /// Interval between status applications (s).
+    pub tick: f32,
+    /// Countdown to the next application (s).
+    pub timer: f32,
 }
 
 /// The player's equipped abilities — slot `i` is fired by ability key `i`. `None`

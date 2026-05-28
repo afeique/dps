@@ -3,8 +3,8 @@
 //! (slot fires, empty/on-cooldown gating, Blink teleport).
 
 use crate::components::loadout::*;
-use crate::components::{Bulwark, Invulnerable, Ship};
-use crate::systems::abilities::activate_loadout;
+use crate::components::{Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Ship};
+use crate::systems::abilities::{activate_loadout, tick_ability_fields};
 use bevy::prelude::*;
 use std::time::Duration;
 
@@ -59,7 +59,28 @@ fn ability_catalog_is_complete_and_well_formed() {
         assert!(!a.name().is_empty());
     }
     let wired = Ability::ALL.iter().filter(|a| a.implemented()).count();
-    assert_eq!(wired, 5, "exactly five abilities are wired this increment");
+    assert_eq!(wired, 9, "five base abilities + the four drop-zone fields");
+}
+
+#[test]
+fn field_params_match_weapon_data() {
+    assert_eq!(
+        Ability::CryoField.field_params(),
+        Some((FieldStatus::Freeze, 180.0, 0.25))
+    );
+    assert_eq!(
+        Ability::StasisField.field_params(),
+        Some((FieldStatus::Chill, 210.0, 0.25))
+    );
+    assert_eq!(
+        Ability::StormCell.field_params(),
+        Some((FieldStatus::Conduct, 200.0, 0.30))
+    );
+    assert_eq!(
+        Ability::PyreAura.field_params(),
+        Some((FieldStatus::Burn, 190.0, 0.40))
+    );
+    assert_eq!(Ability::Bulwark.field_params(), None);
 }
 
 /// A bare world with the loadout resources, a 16 ms clock, and a ship at origin.
@@ -137,5 +158,82 @@ fn blink_teleports_forward_with_iframe() {
     assert!(
         world.get::<Invulnerable>(ship).is_some(),
         "blink grants i-frames"
+    );
+}
+
+#[test]
+fn cryo_field_ability_drops_a_field_zone() {
+    let (mut world, _ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([Some(Ability::CryoField), None, None, None]));
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+    let mut q = world.query::<&AbilityField>();
+    assert_eq!(q.iter(&world).count(), 1, "CryoField drops one field zone");
+    assert!(
+        !world.resource::<AbilityCooldowns>().is_ready(0),
+        "slot 0 on cooldown after dropping the field"
+    );
+}
+
+/// A bare world with a 16 ms clock (no ship needed — fields tick on their own).
+fn world_with_clock(ms: u64) -> World {
+    let mut world = World::new();
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(ms));
+    world.insert_resource(time);
+    world
+}
+
+#[test]
+fn cryo_field_freezes_enemies_inside_radius_only() {
+    let mut world = world_with_clock(16);
+    world.spawn((
+        AbilityField {
+            status: FieldStatus::Freeze,
+            radius: 180.0,
+            secs: 5.0,
+            tick: 0.25,
+            timer: 0.0,
+        },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    let inside = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(100.0, 0.0, 0.0)))
+        .id();
+    let outside = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(300.0, 0.0, 0.0)))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_ability_fields);
+    step.run(&mut world);
+
+    assert!(world.get::<Frozen>(inside).is_some(), "enemy inside the field is frozen");
+    assert!(world.get::<Frozen>(outside).is_none(), "enemy outside the radius is not");
+}
+
+#[test]
+fn ability_field_despawns_when_lifetime_elapses() {
+    let mut world = world_with_clock(100); // 0.1 s step
+    let field = world
+        .spawn((
+            AbilityField {
+                status: FieldStatus::Burn,
+                radius: 100.0,
+                secs: 0.05, // shorter than the step → expires this tick
+                tick: 0.4,
+                timer: 0.0,
+            },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_ability_fields);
+    step.run(&mut world);
+
+    assert!(
+        world.get::<AbilityField>(field).is_none(),
+        "the field despawns once its lifetime elapses"
     );
 }
