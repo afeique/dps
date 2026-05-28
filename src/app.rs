@@ -105,6 +105,7 @@ impl Plugin for GamePlugin {
                     render::starfield::parallax_stars,
                     render::nebula::parallax_nebula,
                     render::hud::update_hud,
+                    render::hud::update_boss_bar,
                     render::hud::update_ability_bar,
                     render::cursor::update_crosshair,
                     render::damage_numbers::spawn_damage_numbers,

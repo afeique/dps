@@ -4086,6 +4086,22 @@ fn boss_parts_track_their_boss_and_clean_up() {
     );
 }
 
+/// The boss healthbar picks the lowest-HP boss to display, and shows nothing
+/// when no boss is present.
+#[test]
+fn boss_bar_picks_the_active_boss() {
+    use crate::render::hud::pick_active_boss;
+
+    assert_eq!(pick_active_boss(&[]), None, "no boss → bar hidden");
+    assert_eq!(pick_active_boss(&[(0.8, true)]), Some((0.8, true)), "single boss");
+    // Two bosses → the weaker (lower fraction) one drives the bar.
+    assert_eq!(
+        pick_active_boss(&[(0.9, false), (0.4, true)]),
+        Some((0.4, true)),
+        "lowest-HP boss wins"
+    );
+}
+
 /// A spawned tier boss carries a ring of 3 shielding parts, and reads as
 /// `CoreShielded` once the tracker runs.
 #[test]

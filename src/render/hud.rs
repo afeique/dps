@@ -12,7 +12,7 @@
 //! so it lives in `render` and runs in `Update` (not the FixedUpdate sim).
 
 use crate::components::loadout::{AbilityCooldowns, EquippedAbilities};
-use crate::components::{Health, Lives, Shield, Ship};
+use crate::components::{Boss, CoreShielded, Health, Lives, Shield, Ship};
 use crate::resources::{EnergyMeter, KillStreak, Score};
 use crate::systems::missions::Mission;
 use crate::systems::power_weapon::PowerWeapon;
@@ -69,6 +69,25 @@ pub struct AbilitySlotLabel(pub usize);
 #[derive(Component)]
 pub struct AbilitySlotCooldown(pub usize);
 
+/// The boss healthbar track (top-center); shown only while a boss is alive.
+#[derive(Component)]
+pub struct BossBarRoot;
+
+/// The boss healthbar fill; its width tracks the active boss's core HP fraction
+/// (cyan while `CoreShielded` = invulnerable, red once exposed). `update_boss_bar`.
+#[derive(Component)]
+pub struct BossBarFill;
+
+/// Pick the boss the player is fighting from `(hp_frac, core_shielded)` pairs:
+/// the lowest-HP-fraction boss (so a freshly-spawned pair shows the weaker one).
+/// `None` when no boss is present. Pure, for testing the selection.
+pub fn pick_active_boss(bosses: &[(f32, bool)]) -> Option<(f32, bool)> {
+    bosses
+        .iter()
+        .copied()
+        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+}
+
 /// Energy-sphere color: a gold pulse when `ready` (energy ≥ cost & off cooldown),
 /// else teal whose brightness tracks `frac` (energy / cost, 0..1). `t` drives the
 /// ready-pulse.
@@ -111,6 +130,34 @@ pub fn setup_hud(mut commands: Commands) {
                     ..default()
                 },
                 BackgroundColor(Color::srgb(0.2, 0.6, 1.0)),
+            ));
+        });
+
+    // ── Boss core healthbar (top-center) — hidden until a boss is alive ──────
+    commands
+        .spawn((
+            BossBarRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(40.0),
+                left: Val::Percent(50.0),
+                margin: UiRect::left(Val::Px(-200.0)), // center the 400px bar
+                width: Val::Px(400.0),
+                height: Val::Px(12.0),
+                display: Display::None, // update_boss_bar reveals it when fighting a boss
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.08, 0.04, 0.04, 0.8)),
+        ))
+        .with_children(|track| {
+            track.spawn((
+                BossBarFill,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.9, 0.2, 0.2)),
             ));
         });
 
@@ -380,6 +427,37 @@ pub fn update_hud(
         if text.0 != s {
             text.0 = s;
         }
+    }
+}
+
+/// Drive the boss healthbar: reveal it while a boss is alive, set the fill to the
+/// active boss's core HP fraction, and colour it cyan while the core is shielded
+/// (invulnerable — clear the parts!) or red once exposed.
+pub fn update_boss_bar(
+    bosses: Query<(&Health, Has<CoreShielded>), With<Boss>>,
+    mut root: Query<&mut Node, (With<BossBarRoot>, Without<BossBarFill>)>,
+    mut fill: Query<(&mut Node, &mut BackgroundColor), With<BossBarFill>>,
+) {
+    let data: Vec<(f32, bool)> = bosses
+        .iter()
+        .map(|(hp, sh)| ((hp.current / hp.max).clamp(0.0, 1.0), sh))
+        .collect();
+    let Ok(mut root_node) = root.single_mut() else {
+        return;
+    };
+    match pick_active_boss(&data) {
+        Some((frac, shielded)) => {
+            root_node.display = Display::Flex;
+            if let Ok((mut fnode, mut fcol)) = fill.single_mut() {
+                fnode.width = Val::Percent(frac * 100.0);
+                fcol.0 = if shielded {
+                    Color::srgb(0.4, 0.7, 1.0) // cyan — core invulnerable
+                } else {
+                    Color::srgb(0.9, 0.2, 0.2) // red — exposed
+                };
+            }
+        }
+        None => root_node.display = Display::None,
     }
 }
 
