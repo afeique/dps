@@ -1570,6 +1570,14 @@ fn overflow_buffs_damage_at_full_energy() {
     assert!(dmg(true) > dmg(false) * 1.5, "full energy + Overflow x3 ≈ 1.75× the empty-meter hit");
 }
 
+/// Kinetic Battery refunds power-weapon energy per dash (+20/stack).
+#[test]
+fn kinetic_battery_refunds_energy_per_dash() {
+    use crate::systems::shop::kinetic_battery_refund;
+    assert_eq!(kinetic_battery_refund(0), 0.0, "not owned → no refund");
+    assert!((kinetic_battery_refund(3) - 60.0).abs() < 1e-6, "x3 → +60 energy/dash");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

@@ -6,8 +6,8 @@
 
 use crate::components::*;
 use crate::messages::Death;
-use crate::resources::Score;
-use crate::systems::shop::{phase_echo_secs, UpgradeId, Upgrades};
+use crate::resources::{EnergyMeter, Score};
+use crate::systems::shop::{kinetic_battery_refund, phase_echo_secs, UpgradeId, Upgrades};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::TAU;
@@ -71,6 +71,7 @@ pub fn use_skills(
     time: Res<Time>,
     // Optional so headless tests (no audio assets) still run the skill logic.
     sfx: Option<Res<crate::audio::Sfx>>,
+    mut energy: ResMut<EnergyMeter>,
     mut commands: Commands,
     mut skills: ResMut<Skills>,
     mut deaths: MessageWriter<Death>,
@@ -115,6 +116,8 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(Invulnerable { seconds: invuln });
         skills.dash_cd = 2.0;
+        // KINETIC BATTERY: a dash refunds power-weapon energy.
+        energy.gain(kinetic_battery_refund(upgrades.owned(UpgradeId::KineticBattery)));
         if let Some(sfx) = &sfx {
             commands.spawn((AudioPlayer::new(sfx.dash.clone()), PlaybackSettings::DESPAWN));
         }

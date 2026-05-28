@@ -80,12 +80,14 @@ pub enum UpgradeId {
     XpBoost,
     /// Overflow — primaries hit harder while energy is full (rainboids OVERFLOW_SPARK).
     Overflow,
+    /// Kinetic Battery — dashing refunds power-weapon energy (rainboids KINETIC_BATTERY).
+    KineticBattery,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 42] = [
+    pub const ALL: [UpgradeId; 43] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -128,6 +130,7 @@ impl UpgradeId {
         Self::Scavenger,
         Self::XpBoost,
         Self::Overflow,
+        Self::KineticBattery,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -177,6 +180,7 @@ impl UpgradeId {
             Self::Scavenger => 39,
             Self::XpBoost => 40,
             Self::Overflow => 41,
+            Self::KineticBattery => 42,
         }
     }
 
@@ -224,6 +228,7 @@ impl UpgradeId {
             Self::Scavenger => "Scavenger     (+25% gold orbs)",
             Self::XpBoost => "XP Boost      (+20% account XP)",
             Self::Overflow => "Overflow      (+25% dmg at full NRG)",
+            Self::KineticBattery => "Kinetic Batt. (dash refunds NRG)",
         }
     }
 
@@ -272,6 +277,7 @@ impl UpgradeId {
             Self::Scavenger => 1800,
             Self::XpBoost => 2000,
             Self::Overflow => 2400,
+            Self::KineticBattery => 2000,
         }
     }
 
@@ -319,6 +325,7 @@ impl UpgradeId {
             Self::Scavenger => 4,
             Self::XpBoost => 4,
             Self::Overflow => 3,
+            Self::KineticBattery => 3,
         }
     }
 }
@@ -457,6 +464,12 @@ pub fn xp_boost_mult(stacks: u32) -> f32 {
 /// `amp` multiplier in `bullet_hits_enemy`. 0 when not full / not owned.
 pub fn overflow_bonus(stacks: u32) -> f32 {
     0.25 * stacks as f32
+}
+
+/// KINETIC BATTERY passive (rainboids KINETIC_BATTERY): a dash refunds
+/// `20 × stacks` power-weapon energy — granted in `skills::use_skills` on dash.
+pub fn kinetic_battery_refund(stacks: u32) -> f32 {
+    20.0 * stacks as f32
 }
 
 /// FRENZY passive: a *live* kill-streak adds `0.03 × stacks × kills` damage on top
@@ -771,6 +784,7 @@ pub fn apply_upgrade(
         | UpgradeId::Frenzy
         | UpgradeId::Scavenger
         | UpgradeId::XpBoost
-        | UpgradeId::Overflow => {}
+        | UpgradeId::Overflow
+        | UpgradeId::KineticBattery => {}
     }
 }
