@@ -3734,6 +3734,62 @@ fn status_aura_lifecycle() {
     }
 }
 
+// ── 62b. elemental_status_auras ───────────────────────────────────────────────
+
+/// Each elemental status gets its own aura: an enemy with two simultaneous
+/// statuses (Frozen + Mark) shows two rings, and each ring despawns when its
+/// status is removed independently.
+#[test]
+fn elemental_status_auras_stack_and_despawn_independently() {
+    use crate::components::{Frozen, Mark};
+    use crate::render::status_fx::{spawn_status_auras, update_status_auras, StatusAura};
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(Time::<()>::default());
+
+    let enemy = app
+        .world_mut()
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Collider { radius: 16.0 },
+            Frozen { secs: 1.5 },
+            Mark { secs: 6.0 },
+            Transform::from_xyz(50.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut spawn = Schedule::default();
+    spawn.add_systems(spawn_status_auras);
+    spawn.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(
+            q.iter(app.world()).count(),
+            2,
+            "two statuses → two concentric auras"
+        );
+    }
+
+    let mut update = Schedule::default();
+    update.add_systems(update_status_auras);
+
+    // Drop Frozen → only the Mark aura remains.
+    app.world_mut().entity_mut(enemy).remove::<Frozen>();
+    update.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 1, "Frozen aura despawns, Mark stays");
+    }
+
+    // Drop Mark → no auras left.
+    app.world_mut().entity_mut(enemy).remove::<Mark>();
+    update.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 0, "all auras gone when statuses clear");
+    }
+}
+
 // ── 75. survivor_pick_chains_into_shop ────────────────────────────────────────
 
 /// A stage-clear survivor-card pick applies the card and chains into the Shop
