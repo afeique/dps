@@ -159,6 +159,26 @@ impl Meta {
         self.cores = self.cores.saturating_add(amount);
     }
 
+    /// A read-only `(label, value)` summary of the account for the BUILD screen's
+    /// STATS tab: level + XP-to-next, the two wallets, unspent SP, and the unlock
+    /// / stash counts. Pure (no I/O) so it's unit-testable.
+    pub fn account_summary(&self) -> Vec<(&'static str, String)> {
+        let xp = if self.level >= MAX_LEVEL {
+            "MAX".to_string()
+        } else {
+            format!("{} / {}", self.xp, xp_for_level(self.level))
+        };
+        vec![
+            ("Account Level", self.level.to_string()),
+            ("XP", xp),
+            ("Account Gold", self.account_gold.to_string()),
+            ("Cores", self.cores.to_string()),
+            ("Unspent SP", self.sp.to_string()),
+            ("Unlocks", self.unlocked.len().to_string()),
+            ("Stash Items", self.stash.len().to_string()),
+        ]
+    }
+
     /// Spend `cost` Cores if affordable, returning whether the spend happened
     /// (a stash reroll / tier-up). Never goes negative.
     pub fn spend_cores(&mut self, cost: u64) -> bool {

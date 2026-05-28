@@ -18,6 +18,7 @@ use bevy_egui::{egui, EguiContexts};
 /// Which BUILD tab is showing.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Tab {
+    Stats,
     Armory,
     Skills,
     Loadout,
@@ -79,6 +80,7 @@ pub fn build_screen_ui(
         ui.separator();
 
         ui.horizontal(|ui| {
+            ui.selectable_value(&mut tab.0, Tab::Stats, "STATS");
             ui.selectable_value(&mut tab.0, Tab::Armory, "ARMORY");
             ui.selectable_value(&mut tab.0, Tab::Skills, "SKILLS");
             ui.selectable_value(&mut tab.0, Tab::Loadout, "LOADOUT");
@@ -87,6 +89,22 @@ pub fn build_screen_ui(
         ui.separator();
 
         match tab.0 {
+            Tab::Stats => {
+                // Read-only account overview (backed by Meta::account_summary).
+                egui::Grid::new("stats_grid")
+                    .num_columns(2)
+                    .spacing([24.0, 4.0])
+                    .show(ui, |ui| {
+                        for (label, value) in meta.account_summary() {
+                            ui.monospace(label);
+                            ui.monospace(
+                                egui::RichText::new(value)
+                                    .color(egui::Color32::from_rgb(120, 220, 255)),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
             Tab::Skills => {
                 let mut spent = false;
                 egui::ScrollArea::vertical().show(ui, |ui| {

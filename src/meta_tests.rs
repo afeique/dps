@@ -126,6 +126,32 @@ fn salvage_converts_stash_items_to_cores() {
 }
 
 #[test]
+fn account_summary_reports_the_wallets_and_counts() {
+    use crate::meta::xp_for_level;
+
+    let mut m = Meta { account_gold: 500, cores: 42, sp: 3, level: 4, xp: 120, ..Default::default() };
+    m.unlock("STORM", 0);
+
+    let s = m.account_summary();
+    let get = |label: &str| s.iter().find(|(l, _)| *l == label).map(|(_, v)| v.clone());
+
+    assert_eq!(get("Account Level").as_deref(), Some("4"));
+    assert_eq!(get("XP").as_deref(), Some(format!("120 / {}", xp_for_level(4)).as_str()));
+    assert_eq!(get("Account Gold").as_deref(), Some("500"));
+    assert_eq!(get("Cores").as_deref(), Some("42"));
+    assert_eq!(get("Unspent SP").as_deref(), Some("3"));
+    assert_eq!(get("Unlocks").as_deref(), Some("1"));
+    assert_eq!(get("Stash Items").as_deref(), Some("0"));
+
+    // At the level cap, XP reads "MAX" instead of a fraction.
+    let maxed = Meta { level: crate::meta::MAX_LEVEL, ..Default::default() };
+    assert_eq!(
+        maxed.account_summary().iter().find(|(l, _)| *l == "XP").map(|(_, v)| v.as_str()),
+        Some("MAX")
+    );
+}
+
+#[test]
 fn cores_crafting_reroll_and_tier_up() {
     use crate::resources::GameRng;
     use crate::systems::cores::{reroll_cost, reroll_stash_item, tier_up_cost, tier_up_stash_item};
