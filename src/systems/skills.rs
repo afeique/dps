@@ -128,6 +128,9 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(Invulnerable { seconds: 0.8 });
         skills.shield_cd = 8.0;
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.shield.clone()), PlaybackSettings::DESPAWN));
+        }
     }
 
     // --- BOMB (X) --------------------------------------------------------
@@ -164,6 +167,9 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(Bulwark { seconds: 4.0 });
         skills.bulwark_cd = 20.0;
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.shield.clone()), PlaybackSettings::DESPAWN));
+        }
     }
 
     // --- REPAIR NANITES (H) ----------------------------------------------
