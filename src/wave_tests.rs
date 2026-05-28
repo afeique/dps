@@ -1131,6 +1131,52 @@ fn amplifier_raises_weapon_damage() {
     assert!((damage_dealt(5) - 16.0).abs() < 0.01, "Amplifier ×5 (+60%) → 16");
 }
 
+/// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
+/// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
+/// `enemy_contact_player` by the enemy's element.
+#[test]
+fn player_resist_reduces_contact_damage() {
+    use crate::combat::element::{Element, Resistances};
+    use crate::systems::collision::enemy_contact_player;
+    use crate::systems::damage::apply_damage;
+    use crate::systems::enemy::element_for;
+
+    // Pure multiplier: floor 0 (no amplify), cap 0.9 (no immunity).
+    assert!((Resistances::new().with(Element::Pyro, 0.5).player_multiplier(Element::Pyro) - 0.5).abs() < 1e-6);
+    assert!((Resistances::new().with(Element::Pyro, 2.0).player_multiplier(Element::Pyro) - 0.1).abs() < 1e-6);
+    assert!((Resistances::new().with(Element::Pyro, -1.0).player_multiplier(Element::Pyro) - 1.0).abs() < 1e-6);
+
+    let kind = EnemyKind::Hunter;
+    let elem = element_for(kind);
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health::new(1000.0), // no Shield → isolate the resist scaling
+            Velocity::default(),
+            Collider { radius: 20.0 },
+            Resistances::new().with(elem, 0.6), // 60% resist → ×0.4
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Enemy { kind },
+        Velocity::default(),
+        Collider { radius: 16.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0), // overlapping
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((enemy_contact_player, apply_damage).chain());
+    step.run(world);
+
+    // CONTACT_DAMAGE 25 × (1 − 0.6) = 10 (rounded player damage).
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!((hp - 990.0).abs() < 1.0, "60% resist → ~10 contact damage (hp now {hp})");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

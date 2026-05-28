@@ -23,6 +23,9 @@ pub fn spawn_player(mut commands: Commands) {
             Shield {
                 reduction: BASE_SHIELD_REDUCTION,
             },
+            // Player elemental resistances (E5/E8) — neutral until item resist
+            // affixes populate them; read by `enemy_contact_player`.
+            crate::combat::element::Resistances::new(),
             Faction::Player,
             shapes::ship_hull(),
             Transform::from_xyz(0.0, -140.0, 0.0),

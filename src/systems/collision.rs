@@ -433,10 +433,20 @@ const CONTACT_BOUNCE: f32 = 220.0;
 pub fn enemy_contact_player(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
-    mut player: Query<(Entity, &mut Transform, &mut Velocity, &Collider, Option<&PlayerCorrode>), With<Ship>>,
+    mut player: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut Velocity,
+            &Collider,
+            Option<&PlayerCorrode>,
+            Option<&Resistances>,
+        ),
+        With<Ship>,
+    >,
     mut enemies: Query<(Entity, &Enemy, &mut Transform, &mut Velocity, &Collider), (With<Enemy>, Without<Ship>)>,
 ) {
-    let Ok((player_e, mut ptf, mut pvel, pc, pcorrode)) = player.single_mut() else {
+    let Ok((player_e, mut ptf, mut pvel, pc, pcorrode, presist)) = player.single_mut() else {
         return;
     };
     let corrode_stacks = pcorrode.map_or(0, |c| c.stacks);
@@ -453,8 +463,12 @@ pub fn enemy_contact_player(
         }
 
         // Damage both ways (the pipeline applies the player's shield + rounding;
-        // a weak enemy may die to the 5-dmg ram).
-        dmg.write(Damage { target: player_e, amount: CONTACT_DAMAGE });
+        // a weak enemy may die to the 5-dmg ram). The contact is typed by the
+        // enemy's element (E5/E8) and scaled by the player's elemental resist
+        // (item resist affixes feed `Resistances`; neutral until they land).
+        let contact_elem = crate::systems::enemy::element_for(enemy.kind);
+        let resist_mult = presist.map_or(1.0, |r| r.player_multiplier(contact_elem));
+        dmg.write(Damage { target: player_e, amount: CONTACT_DAMAGE * resist_mult });
         dmg.write(Damage { target: enemy_e, amount: PLAYER_ENEMY_CONTACT_DMG });
 
         // Elemental contact (E5): the enemy's attack element stamps its signature

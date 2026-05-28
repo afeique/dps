@@ -265,6 +265,14 @@ impl Resistances {
         elemental_multiplier(self.get(e))
     }
 
+    /// Incoming-damage multiplier for the **player** vs element `e`:
+    /// `1 − clamp(resist, 0, 0.9)` (`playerElementResistMult`, lifecycle.js).
+    /// Gear can't grant full immunity (cap 0.9) or amplify (floor 0) — the
+    /// symmetric counterpart to the enemy-side [`Resistances::multiplier`].
+    pub fn player_multiplier(&self, e: Element) -> f32 {
+        1.0 - self.get(e).clamp(0.0, 0.9)
+    }
+
     /// Multi-element damage multiplier (`multiElementMultiplier`, elements.js:57-63):
     /// no elements → `1`; one element → its multiplier; several → the **average**
     /// of the per-element multipliers (the W1 attunement "focus vs coverage" lever).
