@@ -15,13 +15,14 @@ use crate::combat::reaction::{
     SHATTER_DAMAGE, SHATTER_RADIUS, SHATTER_REFREEZE_SECS,
 };
 use crate::components::{Burning, Enemy, Frozen, Ship};
-use crate::messages::Damage;
+use crate::messages::{Damage, Reaction, ReactionFx};
 use bevy::prelude::*;
 
 pub fn resolve_reactions(
     mut commands: Commands,
     mut pending: ResMut<PendingReactions>,
     mut dmg: MessageWriter<Damage>,
+    mut fx: MessageWriter<Reaction>,
     enemies: Query<
         (Entity, &Transform, Option<&Resistances>, Has<Frozen>),
         (With<Enemy>, Without<Ship>),
@@ -44,6 +45,10 @@ pub fn resolve_reactions(
                 if depth >= MAX_SHATTER_DEPTH {
                     continue;
                 }
+                fx.write(Reaction {
+                    center,
+                    kind: ReactionFx::Shatter,
+                });
                 let r2 = SHATTER_RADIUS * SHATTER_RADIUS;
                 for (e, tf, res, frozen) in &enemies {
                     if e == source {
@@ -73,6 +78,10 @@ pub fn resolve_reactions(
                 }
             }
             ReactionSeed::Flare { center, damage } => {
+                fx.write(Reaction {
+                    center,
+                    kind: ReactionFx::Flare,
+                });
                 let r2 = FLARE_RADIUS * FLARE_RADIUS;
                 for (e, tf, _res, _frozen) in &enemies {
                     if tf.translation.truncate().distance_squared(center) > r2 {

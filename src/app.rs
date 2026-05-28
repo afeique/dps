@@ -68,6 +68,7 @@ impl Plugin for GamePlugin {
             .add_message::<PlayerHurt>()
             .add_message::<crate::messages::Crit>()
             .add_message::<crate::messages::Shard>()
+            .add_message::<crate::messages::Reaction>()
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,
@@ -112,13 +113,15 @@ impl Plugin for GamePlugin {
                     render::minimap::update_minimap,
                     render::wave_title::tick_wave_title,
                     render::wave_title::tick_pulse_toast,
-                    // Enemy-state visuals: burn/stun auras + the boss-rage
-                    // telegraph ring pulse. Nested as one element so the outer
-                    // Update tuple stays within Bevy's 20-element limit.
+                    // Enemy-state visuals: status auras, the boss-rage telegraph
+                    // ring pulse, and elemental-reaction shockwaves. Nested as one
+                    // element so the outer Update tuple stays under Bevy's 20 limit.
                     (
                         render::status_fx::spawn_status_auras,
                         render::status_fx::update_status_auras,
                         render::telegraph_fx::pulse_telegraph_rings,
+                        render::reaction_fx::spawn_reaction_fx,
+                        render::reaction_fx::tick_shockwaves,
                     )
                         .chain(),
                     // 3D-tumble + rebuild the asteroid wireframes (spec VI.1).

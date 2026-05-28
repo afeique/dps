@@ -38,6 +38,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
         .add_message::<crate::messages::Shard>()
+        .add_message::<crate::messages::Reaction>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -917,6 +918,62 @@ fn shatter_aoe_damages_and_freezes_neighbors() {
         20.0,
         "source excluded from its own AoE"
     );
+}
+
+/// A shatter emits a `Reaction`, which `spawn_reaction_fx` turns into an
+/// expanding `Shockwave` that grows then despawns past its lifetime (E4b VFX).
+#[test]
+fn shatter_emits_reaction_and_spawns_shockwave() {
+    use crate::combat::reaction::{PendingReactions, ReactionSeed};
+    use crate::render::reaction_fx::{spawn_reaction_fx, tick_shockwaves, Shockwave};
+    use crate::systems::reactions::resolve_reactions;
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(Time::<()>::default());
+    let source = app
+        .world_mut()
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(0.0, 0.0, 0.0)))
+        .id();
+    app.world_mut()
+        .resource_mut::<PendingReactions>()
+        .0
+        .push(ReactionSeed::Shatter { source, center: Vec2::new(10.0, 0.0), depth: 0 });
+
+    // resolve_reactions → Reaction message → spawn_reaction_fx → one Shockwave.
+    let mut step = Schedule::default();
+    step.add_systems((resolve_reactions, spawn_reaction_fx).chain());
+    step.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&Shockwave>();
+        assert_eq!(q.iter(app.world()).count(), 1, "a shatter spawns one shockwave");
+    }
+
+    // A small tick grows the ring (scale > 1).
+    {
+        let mut t = Time::<()>::default();
+        t.advance_by(Duration::from_secs_f32(0.1));
+        app.world_mut().insert_resource(t);
+    }
+    let mut tick = Schedule::default();
+    tick.add_systems(tick_shockwaves);
+    tick.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query_filtered::<&Transform, With<Shockwave>>();
+        let scale = q.iter(app.world()).next().unwrap().scale.x;
+        assert!(scale > 1.0, "the shockwave expands (scale {scale})");
+    }
+
+    // Past its 0.35 s lifetime → despawns.
+    {
+        let mut t = Time::<()>::default();
+        t.advance_by(Duration::from_secs_f32(0.4));
+        app.world_mut().insert_resource(t);
+    }
+    tick.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&Shockwave>();
+        assert_eq!(q.iter(app.world()).count(), 0, "the shockwave despawns past its lifetime");
+    }
 }
 
 /// The simple-timer elemental statuses (E3) count down and remove themselves on

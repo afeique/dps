@@ -59,6 +59,24 @@ pub struct PlayerHurt {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Crit;
 
+/// A resolved elemental reaction (E4b), emitted by `systems::reactions` — drives
+/// a one-shot expanding-ring shockwave VFX (`render::reaction_fx`). Pure
+/// presentation signal; the gameplay AoE is already applied via `Damage`.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Reaction {
+    pub center: Vec2,
+    pub kind: ReactionFx,
+}
+
+/// Which reaction fired — selects the shockwave's color + radius.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReactionFx {
+    /// CRYO shatter — an icy cyan burst.
+    Shatter,
+    /// OIL flare — a fiery orange burst.
+    Flare,
+}
+
 /// Shove `target` by `impulse` world-units (the `_KNOCK` bullet trait, spec
 /// III.2/III.6 — a flat 16 px positional shove). Applied by
 /// `collision::apply_knockback` so the producer needn't hold a mutable handle.

@@ -15,6 +15,7 @@ pub mod hud;
 pub mod loot_feed;
 pub mod minimap;
 pub mod nebula;
+pub mod reaction_fx;
 pub mod screenshot;
 pub mod shake;
 pub mod shapes;
