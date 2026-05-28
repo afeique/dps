@@ -10,6 +10,7 @@ pub mod asteroids;
 pub mod build_screen;
 pub mod cleanup;
 pub mod collision;
+pub mod cores;
 pub mod damage;
 pub mod drops;
 pub mod enemy;

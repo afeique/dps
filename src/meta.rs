@@ -99,6 +99,11 @@ pub struct Meta {
     /// Last-used attunement element id (`Element::id`); `None` = no attunement.
     #[serde(default)]
     pub attunement: Option<String>,
+    /// Cores — the item-crafting currency earned by salvaging gear (Phase IT,
+    /// rainboids `world/cores.js`). Spent on rerolls / tier-ups in the stash.
+    /// `#[serde(default)]` so older saves (without the field) load as 0.
+    #[serde(default)]
+    pub cores: u64,
 }
 
 impl Default for Meta {
@@ -113,6 +118,7 @@ impl Default for Meta {
             abilities: Vec::new(),
             weapon: None,
             attunement: None,
+            cores: 0,
         }
     }
 }
@@ -138,6 +144,22 @@ impl Meta {
     /// Bank a finished run's gold into the persistent wallet.
     pub fn bank(&mut self, run_gold: u64) {
         self.account_gold = self.account_gold.saturating_add(run_gold);
+    }
+
+    /// Add Cores to the wallet (earned by salvaging gear; Phase IT).
+    pub fn add_cores(&mut self, amount: u64) {
+        self.cores = self.cores.saturating_add(amount);
+    }
+
+    /// Spend `cost` Cores if affordable, returning whether the spend happened
+    /// (a stash reroll / tier-up). Never goes negative.
+    pub fn spend_cores(&mut self, cost: u64) -> bool {
+        if self.cores >= cost {
+            self.cores -= cost;
+            true
+        } else {
+            false
+        }
     }
 
     /// Whether `id` has been unlocked in the armory.

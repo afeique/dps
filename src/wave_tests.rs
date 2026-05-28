@@ -1621,6 +1621,48 @@ fn gunslinger_buffs_damage_and_fire_rate() {
     assert!((dmg(true) - dmg(false) * 1.5).abs() < 0.05 * dmg(false), "Gunslinger → +50% damage");
 }
 
+/// Cores salvage economy (Phase IT, rainboids cores.js): salvage value, batch
+/// total, reroll/tier-up costs, and the Meta Cores wallet (add + bounded spend).
+#[test]
+fn cores_salvage_value_and_wallet() {
+    use crate::meta::Meta;
+    use crate::systems::cores::{reroll_cost, salvage_value, tier_up_cost, total_salvage};
+    use crate::systems::items::{Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    let item = |rarity: Rarity, level: u32, n: usize| Item {
+        slot: ItemSlot::Hull,
+        level,
+        rarity,
+        affixes: (0..n).map(|_| Affix { kind: AffixKind::Hp, value: 1.0 }).collect(),
+        name: String::new(),
+    };
+
+    // salvageValue = max(1, round(rank × affixCount × (1 + lvl×0.1)))
+    assert_eq!(salvage_value(&item(Rarity::Common, 1, 1)), 1, "common L1 → round(1.1)=1");
+    assert_eq!(salvage_value(&item(Rarity::Epic, 10, 3)), 30, "epic L10 ×3 → round(5·3·2)=30");
+    assert_eq!(
+        salvage_value(&item(Rarity::Rare, 1, 0)),
+        salvage_value(&item(Rarity::Rare, 1, 1)),
+        "affix count floored at 1"
+    );
+    assert_eq!(total_salvage(&[item(Rarity::Common, 1, 1), item(Rarity::Epic, 10, 3)]), 31);
+
+    // reroll = max(2, rank×3); tier-up = (rank+1)×12, None at rank 8.
+    assert_eq!(reroll_cost(&item(Rarity::Common, 1, 1)), 3);
+    assert_eq!(reroll_cost(&item(Rarity::Transcendental, 1, 1)), 24);
+    assert_eq!(tier_up_cost(&item(Rarity::Common, 1, 1)), Some(24));
+    assert_eq!(tier_up_cost(&item(Rarity::Transcendental, 1, 1)), None);
+
+    // Meta Cores wallet: add, then bounded spend (never negative).
+    let mut m = Meta::default();
+    assert_eq!(m.cores, 0, "fresh account has no cores");
+    m.add_cores(30);
+    assert!(m.spend_cores(24), "afford a tier-up");
+    assert_eq!(m.cores, 6);
+    assert!(!m.spend_cores(10), "can't overspend");
+    assert_eq!(m.cores, 6);
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.
