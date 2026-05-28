@@ -1210,6 +1210,57 @@ fn opportunist_boosts_damage_vs_afflicted_enemies() {
     assert!((damage_dealt(4, true) - 18.0).abs() < 0.01, "Opportunist ×4 (+80%) → 18 vs frozen");
 }
 
+/// Glass Cannon trades max HP for damage: +50% weapon damage but −15 max HP.
+#[test]
+fn glass_cannon_trades_hp_for_damage() {
+    use crate::components::ItemHpBonus;
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::items::apply_item_hp;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    // Damage side: +50% vs an enemy.
+    let dmg = {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::GlassCannon, 1);
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1000.0),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1000.0 - world.get::<Health>(enemy).unwrap().current
+    };
+    assert!((dmg - 15.0).abs() < 0.01, "Glass Cannon → +50% damage (10 → 15)");
+
+    // HP side: −15 max HP, reconciled by apply_item_hp.
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::GlassCannon, 1);
+    let world = app.world_mut();
+    let player = world
+        .spawn((Ship::default(), Health::new(40.0), ItemHpBonus(0.0), Transform::default()))
+        .id();
+    let mut step = Schedule::default();
+    step.add_systems(apply_item_hp);
+    step.run(world);
+    let hp = world.get::<Health>(player).unwrap();
+    assert!((hp.max - 25.0).abs() < 1e-3, "Glass Cannon → −15 max HP (40 → 25)");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

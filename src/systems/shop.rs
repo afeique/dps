@@ -60,12 +60,14 @@ pub enum UpgradeId {
     Predator,
     /// Bonus damage vs status-afflicted enemies (frozen/oiled/corroded/conducting).
     Opportunist,
+    /// Glass Cannon — big +damage at the cost of max HP (a risk/reward keystone).
+    GlassCannon,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 32] = [
+    pub const ALL: [UpgradeId; 33] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -98,6 +100,7 @@ impl UpgradeId {
         Self::Warding,
         Self::Predator,
         Self::Opportunist,
+        Self::GlassCannon,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -137,6 +140,7 @@ impl UpgradeId {
             Self::Warding => 29,
             Self::Predator => 30,
             Self::Opportunist => 31,
+            Self::GlassCannon => 32,
         }
     }
 
@@ -174,6 +178,7 @@ impl UpgradeId {
             Self::Warding => "Warding       (+8% all resist)",
             Self::Predator => "Predator      (+dmg vs healthy)",
             Self::Opportunist => "Opportunist   (+dmg vs afflicted)",
+            Self::GlassCannon => "Glass Cannon  (+50% dmg, -15 HP)",
         }
     }
 
@@ -212,6 +217,7 @@ impl UpgradeId {
             Self::Warding => 2200,
             Self::Predator => 2400,
             Self::Opportunist => 2400,
+            Self::GlassCannon => 3000,
         }
     }
 
@@ -249,6 +255,7 @@ impl UpgradeId {
             Self::Warding => 5,
             Self::Predator => 4,
             Self::Opportunist => 4,
+            Self::GlassCannon => 1,
         }
     }
 }
@@ -350,6 +357,16 @@ pub fn opportunist_bonus(stacks: u32) -> f32 {
     0.20 * stacks as f32
 }
 
+/// GLASS CANNON (keystone, binary): +50% weapon damage multiplier when owned.
+pub fn glass_cannon_dmg(owned: u32) -> f32 {
+    if owned > 0 { 0.5 } else { 0.0 }
+}
+
+/// GLASS CANNON max-HP cost (flat, subtracted in `items::apply_item_hp`).
+pub fn glass_cannon_hp(owned: u32) -> f32 {
+    if owned > 0 { 15.0 } else { 0.0 }
+}
+
 /// PHASE ECHO passive (spec VI.3): extra post-dash invulnerability, `2.0 ×
 /// stacks` seconds added on top of the dash's base i-frames.
 pub fn phase_echo_secs(stacks: u32) -> f32 {
@@ -405,9 +422,19 @@ pub fn regen_rate(stacks: u32) -> f32 {
 pub const REGEN_DELAY: f32 = 4.0;
 
 /// Owned stack counts, indexed by `UpgradeId`. Run-scoped (reset per run).
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct Upgrades {
     owned: [u32; UpgradeId::COUNT],
+}
+
+// `[u32; N]` only auto-derives Default for N ≤ 32; COUNT exceeded that, so impl
+// it by hand (all-zero stacks).
+impl Default for Upgrades {
+    fn default() -> Self {
+        Self {
+            owned: [0; UpgradeId::COUNT],
+        }
+    }
 }
 
 impl Upgrades {
@@ -624,6 +651,7 @@ pub fn apply_upgrade(
         | UpgradeId::Amplifier
         | UpgradeId::Warding
         | UpgradeId::Predator
-        | UpgradeId::Opportunist => {}
+        | UpgradeId::Opportunist
+        | UpgradeId::GlassCannon => {}
     }
 }

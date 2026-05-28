@@ -16,9 +16,9 @@ use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
-    amplifier_mult, executioner_bonus, explosion_radius, knock_chance, opportunist_bonus,
-    predator_bonus, stun_chance, vampirism_frac, UpgradeId, Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
-    PREDATOR_THRESHOLD,
+    amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
+    opportunist_bonus, predator_bonus, stun_chance, vampirism_frac, UpgradeId, Upgrades,
+    EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
 
@@ -134,8 +134,9 @@ pub fn bullet_hits_enemy(
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
     let crit_dmg_bonus =
         equipment.affix_total(AffixKind::CritDamage) / 100.0 + meta.sp_value("CRIT_DAMAGE") / 100.0;
-    // AMPLIFIER passive: flat +% to all weapon damage.
-    let amp = amplifier_mult(upgrades.owned(UpgradeId::Amplifier));
+    // AMPLIFIER (+%/stack) + GLASS CANNON (+50% flat) damage multipliers.
+    let amp = amplifier_mult(upgrades.owned(UpgradeId::Amplifier))
+        + glass_cannon_dmg(upgrades.owned(UpgradeId::GlassCannon));
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).

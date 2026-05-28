@@ -661,11 +661,15 @@ pub fn roll_item_drops_on_death(
 pub fn apply_item_hp(
     equipment: Res<Equipment>,
     meta: Res<crate::meta::Meta>,
+    upgrades: Res<crate::systems::shop::Upgrades>,
     mut player: Query<(&mut Health, &mut ItemHpBonus), With<Ship>>,
 ) {
-    // Equipped HP affixes + account SP HEALTH — both flat max-HP added on top of
-    // the ship's base, reconciled against ItemHpBonus.
-    let target = equipment.affix_total(AffixKind::Hp) + meta.sp_value("HEALTH");
+    // Equipped HP affixes + account SP HEALTH (flat max-HP on top of base), minus
+    // the Glass Cannon keystone's HP cost; reconciled against ItemHpBonus.
+    let target = equipment.affix_total(AffixKind::Hp) + meta.sp_value("HEALTH")
+        - crate::systems::shop::glass_cannon_hp(
+            upgrades.owned(crate::systems::shop::UpgradeId::GlassCannon),
+        );
     let Ok((mut hp, mut bonus)) = player.single_mut() else {
         return; // no player (between runs) — reconcile once it spawns
     };
