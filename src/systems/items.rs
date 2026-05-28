@@ -27,53 +27,105 @@ use bevy::prelude::*;
 
 // ─── Rarity ────────────────────────────────────────────────────────────────
 
-/// Item rarity (spec VI.5, v6.55 3-tier). Drives the affix count, the roll
-/// multiplier band, and the loot-card glow color.
+/// Item rarity — the v6.161 **8-tier ladder** (`item-names.js` RARITY_TIERS).
+/// Drives the affix count, the roll multiplier band, the loot-card glow color,
+/// and the name adjective.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Rarity {
     Common,
     Rare,
+    Exceptional,
+    Legendary,
     Epic,
+    Godlike,
+    Divine,
+    Transcendental,
 }
 
 impl Rarity {
-    /// Roll a rarity from a uniform `[0, 1)` sample (spec VI.5: common 0.65 /
-    /// rare 0.27 / epic 0.08 — cumulative 0.65 / 0.92 / 1.00).
+    /// All eight tiers, ascending.
+    pub const ALL: [Rarity; 8] = [
+        Rarity::Common,
+        Rarity::Rare,
+        Rarity::Exceptional,
+        Rarity::Legendary,
+        Rarity::Epic,
+        Rarity::Godlike,
+        Rarity::Divine,
+        Rarity::Transcendental,
+    ];
+
+    /// Roll a rarity from a uniform `[0, 1)` sample, weighted by the tier drop
+    /// weights (common 0.50 … transcendental 0.001; `item-names.js`). Cumulative
+    /// thresholds; the top tier catches the tail.
     pub fn roll(r: f32) -> Rarity {
-        if r < 0.65 {
-            Rarity::Common
-        } else if r < 0.92 {
-            Rarity::Rare
-        } else {
-            Rarity::Epic
+        match r {
+            x if x < 0.50 => Rarity::Common,
+            x if x < 0.76 => Rarity::Rare,
+            x if x < 0.89 => Rarity::Exceptional,
+            x if x < 0.95 => Rarity::Legendary,
+            x if x < 0.98 => Rarity::Epic,
+            x if x < 0.992 => Rarity::Godlike,
+            x if x < 0.997 => Rarity::Divine,
+            _ => Rarity::Transcendental,
         }
     }
 
-    /// How many distinct affixes an item of this rarity rolls (spec VI.5: 1/2/3).
+    /// 1-based rank (common = 1 … transcendental = 8); drives Cores salvage value.
+    pub fn rank(self) -> u32 {
+        match self {
+            Rarity::Common => 1,
+            Rarity::Rare => 2,
+            Rarity::Exceptional => 3,
+            Rarity::Legendary => 4,
+            Rarity::Epic => 5,
+            Rarity::Godlike => 6,
+            Rarity::Divine => 7,
+            Rarity::Transcendental => 8,
+        }
+    }
+
+    /// The next tier up (for Cores tier-up crafting); `None` at the cap.
+    pub fn next(self) -> Option<Rarity> {
+        Rarity::ALL.get(self.rank() as usize).copied()
+    }
+
+    /// How many distinct affixes an item of this rarity rolls (`affixCount`).
     pub fn affix_count(self) -> usize {
         match self {
             Rarity::Common => 1,
             Rarity::Rare => 2,
-            Rarity::Epic => 3,
+            Rarity::Exceptional | Rarity::Legendary => 3,
+            Rarity::Epic | Rarity::Godlike => 4,
+            Rarity::Divine | Rarity::Transcendental => 5,
         }
     }
 
-    /// Roll-multiplier band `(min, max)` for affix values (v6.55 `RARITY_TIERS`).
+    /// Roll-multiplier band `(min, max)` for affix values (`RARITY_TIERS`).
     pub fn mult_range(self) -> (f32, f32) {
         match self {
             Rarity::Common => (0.85, 1.05),
             Rarity::Rare => (1.00, 1.40),
-            Rarity::Epic => (1.35, 1.85),
+            Rarity::Exceptional => (1.30, 1.70),
+            Rarity::Legendary => (1.50, 1.90),
+            Rarity::Epic => (1.80, 2.20),
+            Rarity::Godlike => (2.10, 2.60),
+            Rarity::Divine => (2.50, 3.00),
+            Rarity::Transcendental => (3.00, 3.60),
         }
     }
 
-    /// Glow color for the loot card (`RARITY_TIERS.color`; epic uses the
-    /// canonical purple `#c060ff`).
+    /// Glow color for the loot card (`RARITY_TIERS.color`).
     pub fn color(self) -> Color {
         match self {
             Rarity::Common => Color::srgb_u8(0xb8, 0xc0, 0xcc),
             Rarity::Rare => Color::srgb_u8(0x5c, 0xc6, 0xff),
+            Rarity::Exceptional => Color::srgb_u8(0x36, 0xe6, 0xa0),
+            Rarity::Legendary => Color::srgb_u8(0xff, 0xb4, 0x3a),
             Rarity::Epic => Color::srgb_u8(0xc0, 0x60, 0xff),
+            Rarity::Godlike => Color::srgb_u8(0xff, 0x3d, 0x6e),
+            Rarity::Divine => Color::srgb_u8(0xff, 0xf0, 0xa0),
+            Rarity::Transcendental => Color::srgb_u8(0xff, 0x66, 0xff),
         }
     }
 
@@ -82,7 +134,12 @@ impl Rarity {
         match self {
             Rarity::Common => "",
             Rarity::Rare => "Refined ",
+            Rarity::Exceptional => "Calibrated ",
+            Rarity::Legendary => "Vanguard ",
             Rarity::Epic => "Prototype ",
+            Rarity::Godlike => "Ascendant ",
+            Rarity::Divine => "Empyrean ",
+            Rarity::Transcendental => "Transcendent ",
         }
     }
 }

@@ -3693,20 +3693,30 @@ fn item_rarity_and_affix_counts() {
     use crate::resources::GameRng;
     use crate::systems::items::{create_item, ItemSlot, Rarity};
 
+    // 8-tier ladder thresholds (v6.161 RARITY_TIERS).
     assert_eq!(Rarity::roll(0.0), Rarity::Common);
-    assert_eq!(Rarity::roll(0.649), Rarity::Common);
-    assert_eq!(Rarity::roll(0.65), Rarity::Rare);
-    assert_eq!(Rarity::roll(0.919), Rarity::Rare);
-    assert_eq!(Rarity::roll(0.92), Rarity::Epic);
-    assert_eq!(Rarity::roll(0.999), Rarity::Epic);
+    assert_eq!(Rarity::roll(0.49), Rarity::Common);
+    assert_eq!(Rarity::roll(0.50), Rarity::Rare);
+    assert_eq!(Rarity::roll(0.80), Rarity::Exceptional);
+    assert_eq!(Rarity::roll(0.90), Rarity::Legendary);
+    assert_eq!(Rarity::roll(0.96), Rarity::Epic);
+    assert_eq!(Rarity::roll(0.985), Rarity::Godlike);
+    assert_eq!(Rarity::roll(0.994), Rarity::Divine);
+    assert_eq!(Rarity::roll(0.999), Rarity::Transcendental);
 
+    // affix counts 1/2/3/3/4/4/5/5 ascending; rank 1..8; next() walks the ladder.
     assert_eq!(Rarity::Common.affix_count(), 1);
-    assert_eq!(Rarity::Rare.affix_count(), 2);
-    assert_eq!(Rarity::Epic.affix_count(), 3);
+    assert_eq!(Rarity::Exceptional.affix_count(), 3);
+    assert_eq!(Rarity::Epic.affix_count(), 4);
+    assert_eq!(Rarity::Transcendental.affix_count(), 5);
+    assert_eq!(Rarity::Common.rank(), 1);
+    assert_eq!(Rarity::Transcendental.rank(), 8);
+    assert_eq!(Rarity::Common.next(), Some(Rarity::Rare));
+    assert_eq!(Rarity::Transcendental.next(), None);
 
     // create_item respects the count + carries the wave-level + has a name.
     let mut rng = GameRng::default();
-    for (rarity, n) in [(Rarity::Common, 1), (Rarity::Rare, 2), (Rarity::Epic, 3)] {
+    for (rarity, n) in [(Rarity::Common, 1), (Rarity::Epic, 4), (Rarity::Transcendental, 5)] {
         let item = create_item(&mut rng, ItemSlot::Cockpit, 7, rarity);
         assert_eq!(item.affixes.len(), n, "{rarity:?} → {n} affixes");
         assert_eq!(item.level, 7, "item level = wave");
