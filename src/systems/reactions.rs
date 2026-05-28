@@ -40,6 +40,11 @@ pub fn resolve_reactions(
         + crate::systems::shop::catalyst_bonus(
             upgrades.owned(crate::systems::shop::UpgradeId::Catalyst),
         );
+    // Detonator passive: widens the reaction blast radius.
+    let radius_mult = 1.0
+        + crate::systems::shop::detonator_bonus(
+            upgrades.owned(crate::systems::shop::UpgradeId::Detonator),
+        );
     let mut work: Vec<ReactionSeed> = std::mem::take(&mut pending.0);
     while let Some(seed) = work.pop() {
         match seed {
@@ -55,7 +60,8 @@ pub fn resolve_reactions(
                     center,
                     kind: ReactionFx::Shatter,
                 });
-                let r2 = SHATTER_RADIUS * SHATTER_RADIUS;
+                let radius = SHATTER_RADIUS * radius_mult;
+                let r2 = radius * radius;
                 for (e, tf, res, frozen) in &enemies {
                     if e == source {
                         continue; // the cracked enemy isn't in its own AoE
@@ -88,7 +94,8 @@ pub fn resolve_reactions(
                     center,
                     kind: ReactionFx::Flare,
                 });
-                let r2 = FLARE_RADIUS * FLARE_RADIUS;
+                let radius = FLARE_RADIUS * radius_mult;
+                let r2 = radius * radius;
                 for (e, tf, _res, _frozen) in &enemies {
                     if tf.translation.truncate().distance_squared(center) > r2 {
                         continue;

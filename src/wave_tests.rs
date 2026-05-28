@@ -1054,6 +1054,45 @@ fn catalyst_amplifies_reaction_damage() {
     );
 }
 
+/// The Detonator passive widens the reaction radius: a neighbor at 150px (just
+/// outside the 110px base shatter radius) is only caught once Detonator extends
+/// the blast.
+#[test]
+fn detonator_widens_reaction_radius() {
+    use crate::combat::reaction::{PendingReactions, ReactionSeed};
+    use crate::systems::damage::apply_damage;
+    use crate::systems::reactions::resolve_reactions;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    fn neighbor_caught_at_150(detonator: u32) -> bool {
+        let mut app = test_app();
+        app.world_mut()
+            .resource_mut::<Upgrades>()
+            .set(UpgradeId::Detonator, detonator);
+        let world = app.world_mut();
+        let source = world
+            .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(0.0, 0.0, 0.0)))
+            .id();
+        let near = world
+            .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(1000.0), Transform::from_xyz(150.0, 0.0, 0.0)))
+            .id();
+        world
+            .resource_mut::<PendingReactions>()
+            .0
+            .push(ReactionSeed::Shatter { source, center: Vec2::ZERO, depth: 0 });
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.016));
+        world.insert_resource(time);
+        let mut step = Schedule::default();
+        step.add_systems((resolve_reactions, apply_damage).chain());
+        step.run(world);
+        world.get::<Health>(near).unwrap().current < 1000.0
+    }
+
+    assert!(!neighbor_caught_at_150(0), "150px is outside the 110px base radius");
+    assert!(neighbor_caught_at_150(4), "Detonator ×4 (+80% → 198px) reaches 150px");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

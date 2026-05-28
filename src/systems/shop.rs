@@ -50,12 +50,14 @@ pub enum UpgradeId {
     Whirlwind,
     /// Amplifies elemental-reaction (shatter / oil-flare) damage.
     Catalyst,
+    /// Widens the elemental-reaction (shatter / oil-flare) blast radius.
+    Detonator,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 27] = [
+    pub const ALL: [UpgradeId; 28] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -83,6 +85,7 @@ impl UpgradeId {
         Self::Momentum,
         Self::Whirlwind,
         Self::Catalyst,
+        Self::Detonator,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -117,6 +120,7 @@ impl UpgradeId {
             Self::Momentum => 24,
             Self::Whirlwind => 25,
             Self::Catalyst => 26,
+            Self::Detonator => 27,
         }
     }
 
@@ -149,6 +153,7 @@ impl UpgradeId {
             Self::Momentum => "Momentum      (+speed while moving)",
             Self::Whirlwind => "Whirlwind     (orbiting blade)",
             Self::Catalyst => "Catalyst      (+reaction dmg)",
+            Self::Detonator => "Detonator     (+reaction radius)",
         }
     }
 
@@ -182,6 +187,7 @@ impl UpgradeId {
             Self::Momentum => 2000,
             Self::Whirlwind => 2500,
             Self::Catalyst => 2400,
+            Self::Detonator => 2300,
         }
     }
 
@@ -214,6 +220,7 @@ impl UpgradeId {
             Self::Momentum => 4,
             Self::Whirlwind => 4,
             Self::Catalyst => 5,
+            Self::Detonator => 4,
         }
     }
 }
@@ -222,6 +229,12 @@ impl UpgradeId {
 /// multiplier applied to shatter / oil-flare damage in `systems::reactions`.
 pub fn catalyst_bonus(stacks: u32) -> f32 {
     0.25 * stacks as f32
+}
+
+/// Elemental-reaction *radius* bonus from `Detonator` stacks (+20%/stack):
+/// scales the shatter / oil-flare blast radius in `systems::reactions`.
+pub fn detonator_bonus(stacks: u32) -> f32 {
+    0.20 * stacks as f32
 }
 
 /// Stun chance applied by the `_STUN` bullet trait at `stacks` (spec III.6:
@@ -552,6 +565,7 @@ pub fn apply_upgrade(
         | UpgradeId::CombatMedic
         | UpgradeId::Momentum
         | UpgradeId::Whirlwind
-        | UpgradeId::Catalyst => {}
+        | UpgradeId::Catalyst
+        | UpgradeId::Detonator => {}
     }
 }
