@@ -83,6 +83,9 @@ pub struct BossPart {
     pub boss: Entity,
     /// Whether this part gates the core's damage while alive (vs. a bonus weak point).
     pub shields_core: bool,
+    /// Boss-local offset; `update_boss_parts` parks the part at `boss_pos + offset`
+    /// each tick (parts are top-level entities, so collision sees a world position).
+    pub offset: Vec2,
 }
 
 /// Marks a boss whose core is currently invulnerable because ≥1 `shields_core`

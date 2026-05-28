@@ -165,3 +165,25 @@ pub fn update_core_shield(
         }
     }
 }
+
+/// Keep each [`BossPart`] parked at its boss's position plus the part's local
+/// `offset` (parts are top-level entities so the bullet→collision path reads a
+/// world position). If the boss is gone, the orphaned part despawns.
+pub fn update_boss_parts(
+    mut commands: Commands,
+    bosses: Query<&Transform, (With<Boss>, Without<BossPart>)>,
+    mut parts: Query<(Entity, &BossPart, &mut Transform), Without<Boss>>,
+) {
+    for (pe, part, mut ptf) in &mut parts {
+        match bosses.get(part.boss) {
+            Ok(btf) => {
+                let p = btf.translation.truncate() + part.offset;
+                ptf.translation.x = p.x;
+                ptf.translation.y = p.y;
+            }
+            Err(_) => {
+                commands.entity(pe).despawn();
+            }
+        }
+    }
+}

@@ -463,8 +463,14 @@ impl Plugin for GamePlugin {
                     // Generic formations (spec IV.6): override bound members'
                     // movement toward their slot targets, after integrate.
                     systems::formations::update_formations,
-                    // Keep deflector orbs orbiting before collisions resolve.
-                    systems::skills::orbit_deflectors,
+                    // Pre-collision positioning (nested to keep the outer tuple
+                    // under Bevy's 20-element limit): deflector orbs orbit, and
+                    // boss weak-point parts park at their boss + offset (BO).
+                    (
+                        systems::skills::orbit_deflectors,
+                        systems::enemy::mechanics::update_boss_parts,
+                    )
+                        .chain(),
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,

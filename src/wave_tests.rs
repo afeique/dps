@@ -3997,7 +3997,7 @@ fn boss_core_shielded_while_parts_live() {
     let part = world
         .spawn((
             Enemy { kind: EnemyKind::Hunter },
-            BossPart { boss, shields_core: true },
+            BossPart { boss, shields_core: true, offset: Vec2::ZERO },
             Health::new(10.0),
             Transform::default(),
         ))
@@ -4048,6 +4048,42 @@ fn core_shielded_boss_takes_no_bullet_damage() {
 
     assert_eq!(hp_after(true), 100.0, "shielded core takes no damage");
     assert!(hp_after(false) < 100.0, "unshielded core takes damage");
+}
+
+/// `update_boss_parts` parks a part at boss-pos + offset, and despawns it once
+/// the boss is gone.
+#[test]
+fn boss_parts_track_their_boss_and_clean_up() {
+    use crate::components::{Boss, BossPart};
+    use crate::systems::enemy::mechanics::update_boss_parts;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let boss = world
+        .spawn((Enemy { kind: EnemyKind::Titan }, Boss { tier: 1 }, Transform::from_xyz(100.0, 0.0, 0.0)))
+        .id();
+    let part = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            BossPart { boss, shields_core: true, offset: Vec2::new(20.0, 10.0) },
+            Transform::default(),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(update_boss_parts);
+    step.run(world);
+    let p = world.get::<Transform>(part).unwrap().translation;
+    assert!((p.x - 120.0).abs() < 1e-4 && (p.y - 10.0).abs() < 1e-4, "part parks at boss + offset");
+
+    world.despawn(boss);
+    step.run(world);
+    let _ = part;
+    assert_eq!(
+        world.query::<&BossPart>().iter(world).count(),
+        0,
+        "orphaned part despawns when the boss is gone"
+    );
 }
 
 // ── 42. overheal_converts_to_tanks ────────────────────────────────────────────
