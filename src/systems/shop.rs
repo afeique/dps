@@ -72,12 +72,14 @@ pub enum UpgradeId {
     Berserker,
     /// Magnetism — widens the orb pickup-attraction radius.
     Magnetism,
+    /// Frenzy — a live kill-streak amplifies weapon damage further.
+    Frenzy,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 38] = [
+    pub const ALL: [UpgradeId; 39] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -116,6 +118,7 @@ impl UpgradeId {
         Self::Ricochet,
         Self::Berserker,
         Self::Magnetism,
+        Self::Frenzy,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -161,6 +164,7 @@ impl UpgradeId {
             Self::Ricochet => 35,
             Self::Berserker => 36,
             Self::Magnetism => 37,
+            Self::Frenzy => 38,
         }
     }
 
@@ -204,6 +208,7 @@ impl UpgradeId {
             Self::Ricochet => "Ricochet      (shots bounce +1)",
             Self::Berserker => "Berserker     (+dmg at low HP)",
             Self::Magnetism => "Magnetism     (+pickup range)",
+            Self::Frenzy => "Frenzy        (streak boosts dmg)",
         }
     }
 
@@ -248,6 +253,7 @@ impl UpgradeId {
             Self::Ricochet => 2600,
             Self::Berserker => 2400,
             Self::Magnetism => 1500,
+            Self::Frenzy => 2600,
         }
     }
 
@@ -291,6 +297,7 @@ impl UpgradeId {
             Self::Ricochet => 3,
             Self::Berserker => 4,
             Self::Magnetism => 4,
+            Self::Frenzy => 3,
         }
     }
 }
@@ -410,6 +417,14 @@ pub fn berserker_bonus(stacks: u32, hp_frac: f32) -> f32 {
 /// added to the base radius in `drops::attract_orbs`.
 pub fn magnetism_radius(stacks: u32) -> f32 {
     70.0 * stacks as f32
+}
+
+/// FRENZY passive: a *live* kill-streak adds `0.03 × stacks × kills` damage on top
+/// of the base streak multiplier (kills capped at [`FRENZY_KILL_CAP`]). Folded into
+/// the `amp` multiplier in `bullet_hits_enemy`; rewards sustained no-hit aggression.
+pub const FRENZY_KILL_CAP: u32 = 10;
+pub fn frenzy_bonus(stacks: u32, streak_kills: u32) -> f32 {
+    0.03 * stacks as f32 * streak_kills.min(FRENZY_KILL_CAP) as f32
 }
 
 /// GLASS CANNON (keystone, binary): +50% weapon damage multiplier when owned.
@@ -712,6 +727,7 @@ pub fn apply_upgrade(
         | UpgradeId::VampiricRounds
         | UpgradeId::Ricochet
         | UpgradeId::Berserker
-        | UpgradeId::Magnetism => {}
+        | UpgradeId::Magnetism
+        | UpgradeId::Frenzy => {}
     }
 }

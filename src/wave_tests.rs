@@ -1358,6 +1358,52 @@ fn berserker_scales_damage_with_missing_hp() {
     assert!(quarter > full * 1.7, "wounded (25% HP) hits ~1.75× a full-HP shot ({quarter} vs {full})");
 }
 
+/// Frenzy makes a live kill-streak hit harder: the helper is 0 without a streak
+/// or the passive and caps at 10 kills; in combat a streaking player deals more.
+#[test]
+fn frenzy_amplifies_with_kill_streak() {
+    use crate::resources::KillStreak;
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{frenzy_bonus, UpgradeId, Upgrades};
+
+    assert_eq!(frenzy_bonus(0, 10), 0.0, "not owned → no bonus");
+    assert_eq!(frenzy_bonus(3, 0), 0.0, "no streak → no bonus");
+    assert!((frenzy_bonus(3, 10) - 0.9).abs() < 1e-6, "x3, 10 kills → +90%");
+    assert!((frenzy_bonus(3, 20) - 0.9).abs() < 1e-6, "kills cap at 10");
+
+    // Same seed + one bullet across runs, so any crit roll is identical; an active
+    // 10-kill streak is set in both, so the base streak mult cancels in the ratio.
+    fn dmg(owns_frenzy: bool) -> f32 {
+        let mut app = test_app();
+        if owns_frenzy {
+            app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Frenzy, 3);
+        }
+        app.world_mut().insert_resource(KillStreak { kills: 10, timer: 5.0 });
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1.0e6),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1.0e6 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    assert!(dmg(true) > dmg(false) * 1.7, "Frenzy + 10-kill streak ≈ 1.9× the un-frenzied hit");
+}
+
 /// Magnetism widens the orb pickup-attraction radius: an orb just past the base
 /// reach is ignored without the passive, but pulled inward once it's owned.
 #[test]
