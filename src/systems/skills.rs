@@ -180,6 +180,9 @@ pub fn use_skills(
             rate: 3.0,
         });
         skills.repair_cd = 25.0;
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.ability.clone()), PlaybackSettings::DESPAWN));
+        }
     }
 
     // --- TRACTOR SHIELD (K) ----------------------------------------------
@@ -191,6 +194,9 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(TractorShield { seconds: 4.0 });
         skills.tractor_cd = 18.0;
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.ability.clone()), PlaybackSettings::DESPAWN));
+        }
     }
 }
 
@@ -306,6 +312,7 @@ pub fn cast_deflectors(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
     time: Res<Time>,
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut commands: Commands,
     mut skills: ResMut<Skills>,
     player: Query<&Transform, With<Ship>>,
@@ -321,6 +328,9 @@ pub fn cast_deflectors(
     };
     spawn_deflector_orbs(&mut commands, ptf.translation.truncate());
     skills.deflector_cd = 15.0;
+    if let Some(sfx) = &sfx {
+        commands.spawn((AudioPlayer::new(sfx.ability.clone()), PlaybackSettings::DESPAWN));
+    }
 }
 
 /// Spawn `DEFLECTOR_COUNT` orbs orbiting `center`, each absorbing
