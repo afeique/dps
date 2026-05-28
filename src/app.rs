@@ -143,6 +143,7 @@ impl Plugin for GamePlugin {
                     (
                         render::flash::trigger_screen_flash,
                         render::flash::trigger_last_stand_flash,
+                        render::flash::trigger_player_hurt_flash,
                         render::flash::apply_screen_flash,
                     )
                         .chain(),

@@ -1237,6 +1237,27 @@ fn engine_trail_emits_only_when_moving() {
     assert_eq!(motes_after_one_emit(10.0), 0, "an idle ship emits nothing");
 }
 
+/// Taking a hit (`PlayerHurt`) triggers a red screen flash (graphical parity).
+#[test]
+fn player_hurt_triggers_red_flash() {
+    use crate::messages::PlayerHurt;
+    use crate::render::flash::{trigger_player_hurt_flash, ScreenFlash};
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(ScreenFlash::default());
+    assert_eq!(app.world().resource::<ScreenFlash>().intensity, 0.0);
+    app.world_mut().write_message(PlayerHurt { amount: 10.0 });
+
+    let mut step = Schedule::default();
+    step.add_systems(trigger_player_hurt_flash);
+    step.run(app.world_mut());
+
+    assert!(
+        app.world().resource::<ScreenFlash>().intensity > 0.0,
+        "a player hit flashes the screen red"
+    );
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

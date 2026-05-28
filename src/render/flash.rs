@@ -8,6 +8,7 @@
 //! color wins) and `apply_screen_flash` drives the overlay color + alpha + decay.
 
 use crate::components::Raged;
+use crate::messages::PlayerHurt;
 use crate::resources::LastStandUsed;
 use bevy::prelude::*;
 
@@ -46,6 +47,10 @@ pub const RAGE_FLASH: f32 = 0.42;
 pub const LAST_STAND_FLASH: f32 = 0.7;
 /// Gold tint for the Last Stand flash (HDR-ish warm gold).
 pub const FLASH_GOLD: Color = Color::srgb(1.0, 0.82, 0.25);
+/// Player-hurt flash alpha — modest so chip damage doesn't strobe.
+pub const HURT_FLASH: f32 = 0.22;
+/// Red tint for the player-hurt flash.
+pub const FLASH_HURT: Color = Color::srgb(1.0, 0.15, 0.15);
 /// Flash decay (alpha/sec) — a 0.42 flash fades in ~0.2 s.
 const FLASH_DECAY: f32 = 2.2;
 /// Overlay edge length (px) — generously larger than any window so it always
@@ -89,6 +94,18 @@ pub fn trigger_last_stand_flash(
         flash.add(FLASH_GOLD, LAST_STAND_FLASH);
     }
     *prev = last_stand.0;
+}
+
+/// Flash **red** when the player takes a hit (`PlayerHurt`) — a brief damage
+/// vignette (graphical parity). Modest alpha so frequent chip-damage doesn't
+/// strobe; the stronger rage/Last-Stand flashes still win via `add`.
+pub fn trigger_player_hurt_flash(
+    mut flash: ResMut<ScreenFlash>,
+    mut hurt: MessageReader<PlayerHurt>,
+) {
+    if hurt.read().count() > 0 {
+        flash.add(FLASH_HURT, HURT_FLASH);
+    }
 }
 
 /// Drive the overlay color + alpha from the flash, then decay (spec I.2).
