@@ -74,12 +74,14 @@ pub enum UpgradeId {
     Magnetism,
     /// Frenzy — a live kill-streak amplifies weapon damage further.
     Frenzy,
+    /// Scavenger — gold orbs are worth more (economy keystone).
+    Scavenger,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 39] = [
+    pub const ALL: [UpgradeId; 40] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -119,6 +121,7 @@ impl UpgradeId {
         Self::Berserker,
         Self::Magnetism,
         Self::Frenzy,
+        Self::Scavenger,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -165,6 +168,7 @@ impl UpgradeId {
             Self::Berserker => 36,
             Self::Magnetism => 37,
             Self::Frenzy => 38,
+            Self::Scavenger => 39,
         }
     }
 
@@ -209,6 +213,7 @@ impl UpgradeId {
             Self::Berserker => "Berserker     (+dmg at low HP)",
             Self::Magnetism => "Magnetism     (+pickup range)",
             Self::Frenzy => "Frenzy        (streak boosts dmg)",
+            Self::Scavenger => "Scavenger     (+25% gold orbs)",
         }
     }
 
@@ -254,6 +259,7 @@ impl UpgradeId {
             Self::Berserker => 2400,
             Self::Magnetism => 1500,
             Self::Frenzy => 2600,
+            Self::Scavenger => 1800,
         }
     }
 
@@ -298,6 +304,7 @@ impl UpgradeId {
             Self::Berserker => 4,
             Self::Magnetism => 4,
             Self::Frenzy => 3,
+            Self::Scavenger => 4,
         }
     }
 }
@@ -417,6 +424,12 @@ pub fn berserker_bonus(stacks: u32, hp_frac: f32) -> f32 {
 /// added to the base radius in `drops::attract_orbs`.
 pub fn magnetism_radius(stacks: u32) -> f32 {
     70.0 * stacks as f32
+}
+
+/// SCAVENGER passive (economy): a gold-orb value multiplier — `1 + 0.25 × stacks`,
+/// applied to each orb's gold in `drops::collect_orbs`.
+pub fn scavenger_mult(stacks: u32) -> f32 {
+    1.0 + 0.25 * stacks as f32
 }
 
 /// FRENZY passive: a *live* kill-streak adds `0.03 × stacks × kills` damage on top
@@ -728,6 +741,7 @@ pub fn apply_upgrade(
         | UpgradeId::Ricochet
         | UpgradeId::Berserker
         | UpgradeId::Magnetism
-        | UpgradeId::Frenzy => {}
+        | UpgradeId::Frenzy
+        | UpgradeId::Scavenger => {}
     }
 }

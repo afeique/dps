@@ -1467,6 +1467,32 @@ fn collecting_an_orb_emits_pickup() {
     assert_eq!(world.resource::<PickupCount>().0, 1, "collection emits one Pickup");
 }
 
+/// Scavenger multiplies the gold value of collected orbs (+25%/stack).
+#[test]
+fn scavenger_boosts_orb_gold() {
+    use crate::resources::Score;
+    use crate::systems::drops::{collect_orbs, Orb};
+    use crate::systems::shop::{scavenger_mult, UpgradeId, Upgrades};
+
+    assert!((scavenger_mult(0) - 1.0).abs() < 1e-6, "not owned → ×1");
+    assert!((scavenger_mult(4) - 2.0).abs() < 1e-6, "x4 → ×2 gold");
+
+    fn gold_from_orb(scavenger: u32) -> u64 {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Scavenger, scavenger);
+        let world = app.world_mut();
+        world.spawn((Ship::default(), Collider { radius: 8.0 }, Health::new(40.0), Transform::default()));
+        world.spawn((Orb { gold: 100, points: 0, heal: 0.0 }, Collider { radius: 8.0 }, Transform::default()));
+        let mut step = Schedule::default();
+        step.add_systems(collect_orbs);
+        step.run(world);
+        world.resource::<Score>().gold
+    }
+
+    assert_eq!(gold_from_orb(0), 100, "base orb gold");
+    assert_eq!(gold_from_orb(2), 150, "Scavenger x2 → +50% (100 → 150)");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

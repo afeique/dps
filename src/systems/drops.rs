@@ -8,7 +8,7 @@ use crate::components::*;
 use crate::messages::Death;
 use crate::resources::{GameRng, KillStreak, Score};
 use crate::systems::enemy;
-use crate::systems::shop::{magnetism_radius, UpgradeId, Upgrades};
+use crate::systems::shop::{magnetism_radius, scavenger_mult, UpgradeId, Upgrades};
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -316,10 +316,13 @@ pub fn attract_orbs(
 pub fn collect_orbs(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    upgrades: Res<Upgrades>,
     mut pickup: MessageWriter<crate::messages::Pickup>,
     mut player: Query<(&Transform, &Collider, &mut Health), With<Ship>>,
     orbs: Query<(Entity, &Transform, &Collider, &Orb)>,
 ) {
+    // SCAVENGER passive scales the gold value of every orb collected this frame.
+    let gold_mult = scavenger_mult(upgrades.owned(UpgradeId::Scavenger));
     let Ok((ptf, pc, mut hp)) = player.single_mut() else {
         return; // no player — nothing to collect
     };
@@ -329,7 +332,8 @@ pub fn collect_orbs(
         let reach = pc.radius + oc.radius;
         let d2 = player_pos.distance_squared(otf.translation.truncate());
         if d2 <= reach * reach {
-            score.gold = score.gold.saturating_add(orb.gold);
+            let gold = (orb.gold as f32 * gold_mult).round() as u64;
+            score.gold = score.gold.saturating_add(gold);
             score.points = score.points.saturating_add(orb.points);
             if orb.heal > 0.0 {
                 // Over-fill allowed; `damage::overheal_to_tanks` converts the
