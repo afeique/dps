@@ -558,6 +558,8 @@ impl Plugin for GamePlugin {
                         systems::enemy::mechanics::decay_warden_resist,
                         // Boss core invulnerable while its weak-point parts live (BO).
                         systems::enemy::mechanics::update_core_shield,
+                        // Scale freshly-spawned enemies' HP by the run difficulty (X).
+                        systems::difficulty::apply_difficulty,
                         // Count down the Overdrive primary-buff (W).
                         systems::power_weapon::tick_overdrive,
                         // Expire an active Elemental Infusion (AB).

@@ -115,6 +115,10 @@ pub struct Meta {
     /// to the hull at spawn. `#[serde(default)]` → older saves use skin 0.
     #[serde(default)]
     pub skin: usize,
+    /// Selected run difficulty (index into `systems::difficulty::DIFFICULTIES`):
+    /// scales enemy HP for the run. `#[serde(default)]` → older saves = Normal (0).
+    #[serde(default)]
+    pub difficulty: u8,
 }
 
 impl Default for Meta {
@@ -132,6 +136,7 @@ impl Default for Meta {
             cores: 0,
             stash: Vec::new(),
             skin: 0,
+            difficulty: 0,
         }
     }
 }

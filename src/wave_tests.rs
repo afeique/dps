@@ -4086,6 +4086,34 @@ fn boss_parts_track_their_boss_and_clean_up() {
     );
 }
 
+/// Run difficulty (Phase X) scales freshly-spawned enemy HP; persists via RON.
+#[test]
+fn run_difficulty_scales_enemy_hp() {
+    use crate::meta::Meta;
+    use crate::systems::difficulty::{apply_difficulty, difficulty_hp_mult, difficulty_name};
+
+    assert_eq!(difficulty_hp_mult(0), 1.0, "Normal → ×1");
+    assert!((difficulty_hp_mult(2) - 2.2).abs() < 1e-6, "Brutal → ×2.2");
+    assert_eq!(difficulty_hp_mult(99), 1.0, "out of range → Normal");
+    assert_eq!(difficulty_name(1), "Hard");
+
+    fn hp_after(difficulty: u8) -> f32 {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Meta>().difficulty = difficulty;
+        let world = app.world_mut();
+        let e = world.spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(100.0))).id();
+        let mut step = Schedule::default();
+        step.add_systems(apply_difficulty);
+        step.run(world);
+        world.get::<Health>(e).unwrap().max
+    }
+    assert_eq!(hp_after(0), 100.0, "Normal → enemy HP unchanged");
+    assert!((hp_after(2) - 220.0).abs() < 1e-4, "Brutal → enemy HP ×2.2");
+
+    let m = Meta { difficulty: 2, ..Default::default() };
+    assert_eq!(Meta::from_ron(&m.to_ron()).difficulty, 2, "difficulty persists");
+}
+
 /// The boss healthbar picks the lowest-HP boss to display, and shows nothing
 /// when no boss is present.
 #[test]

@@ -12,6 +12,7 @@ pub mod cleanup;
 pub mod collision;
 pub mod cores;
 pub mod damage;
+pub mod difficulty;
 pub mod drops;
 pub mod enemy;
 pub mod enemy_ai;
