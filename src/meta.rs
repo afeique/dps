@@ -11,7 +11,7 @@ use crate::messages::Death;
 use crate::resources::Score;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Account level cap (`MAX_LEVEL`, sp-stats.js).
 pub const MAX_LEVEL: u32 = 100;
@@ -24,6 +24,42 @@ pub const XP_PER_KILL: u64 = 12;
 pub const WEAPON_UNLOCK_COST: u64 = 8_000;
 pub const ABILITY_UNLOCK_COST: u64 = 12_000;
 pub const ATTUNEMENT_UNLOCK_COST: u64 = 7_000;
+
+/// Points a single SP stat can hold; 1 SP = 1 point; per-point value = `max/20`
+/// (`SP_STAT_MAX_POINTS`, sp-stats.js).
+pub const SP_STAT_MAX_POINTS: u32 = 20;
+
+/// One SP-stat definition (`SP_STATS`, sp-stats.js): stable id, display name, the
+/// total bonus value at full allocation (20 points), and a UI suffix. Per-point
+/// value is `max / SP_STAT_MAX_POINTS`.
+pub struct SpStatDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub max: f32,
+    pub suffix: &'static str,
+}
+
+/// The twelve account SP stats (`SP_STATS`, sp-stats.js). Spent with banked SP to
+/// permanently buff the run; mirror the item-affix / upgrade effects.
+pub const SP_STATS: [SpStatDef; 12] = [
+    SpStatDef { id: "HEALTH", name: "Health", max: 400.0, suffix: "max HP" },
+    SpStatDef { id: "TOUGHNESS", name: "Toughness", max: 50.0, suffix: "% damage reduction" },
+    SpStatDef { id: "VAMPIRISM", name: "Vampirism", max: 50.0, suffix: "% lifesteal" },
+    SpStatDef { id: "THORNS", name: "Thorns", max: 100.0, suffix: "% reflected" },
+    SpStatDef { id: "CRIT_CHANCE", name: "Crit Chance", max: 50.0, suffix: "% crit chance" },
+    SpStatDef { id: "CRIT_DAMAGE", name: "Crit Damage", max: 200.0, suffix: "% crit damage" },
+    SpStatDef { id: "DODGE", name: "Evasion", max: 50.0, suffix: "% dodge" },
+    SpStatDef { id: "SPEED", name: "Speed", max: 100.0, suffix: "% thrust & top speed" },
+    SpStatDef { id: "CAPACITOR", name: "Capacitor", max: 100.0, suffix: "max energy" },
+    SpStatDef { id: "REACTOR", name: "Reactor", max: 100.0, suffix: "% energy regen" },
+    SpStatDef { id: "EFFICIENCY", name: "Efficiency", max: 50.0, suffix: "% power cost" },
+    SpStatDef { id: "REGENERATION", name: "Regeneration", max: 2.0, suffix: "HP/s regen" },
+];
+
+/// Look up an SP-stat definition by id.
+pub fn sp_stat_def(id: &str) -> Option<&'static SpStatDef> {
+    SP_STATS.iter().find(|s| s.id == id)
+}
 
 /// XP needed to advance *from* `level` to the next (`xpForLevel`, sp-stats.js):
 /// `500 + (level − 1) × 250`.
@@ -46,6 +82,10 @@ pub struct Meta {
     /// deterministic. `#[serde(default)]` so older saves (without the field) load.
     #[serde(default)]
     pub unlocked: BTreeSet<String>,
+    /// Allocated SP points per stat id (0..=[`SP_STAT_MAX_POINTS`]). Spent from
+    /// [`Meta::sp`]; the run reads effective bonuses via [`Meta::sp_value`].
+    #[serde(default)]
+    pub sp_alloc: BTreeMap<String, u32>,
 }
 
 impl Default for Meta {
@@ -56,6 +96,7 @@ impl Default for Meta {
             xp: 0,
             sp: 0,
             unlocked: BTreeSet::new(),
+            sp_alloc: BTreeMap::new(),
         }
     }
 }
@@ -98,6 +139,29 @@ impl Meta {
         self.account_gold -= cost;
         self.unlocked.insert(id.to_string());
         true
+    }
+
+    /// Points currently allocated to SP stat `id`.
+    pub fn sp_points(&self, id: &str) -> u32 {
+        self.sp_alloc.get(id).copied().unwrap_or(0)
+    }
+
+    /// Spend 1 banked SP on stat `id`. Returns `true` only on success — there was
+    /// unspent SP and the stat wasn't already at [`SP_STAT_MAX_POINTS`].
+    pub fn allocate_sp(&mut self, id: &str) -> bool {
+        if self.sp == 0 || sp_stat_def(id).is_none() || self.sp_points(id) >= SP_STAT_MAX_POINTS {
+            return false;
+        }
+        *self.sp_alloc.entry(id.to_string()).or_insert(0) += 1;
+        self.sp -= 1;
+        true
+    }
+
+    /// The current effective bonus value of SP stat `id` = `points × (max/20)`.
+    pub fn sp_value(&self, id: &str) -> f32 {
+        sp_stat_def(id).map_or(0.0, |d| {
+            self.sp_points(id) as f32 * (d.max / SP_STAT_MAX_POINTS as f32)
+        })
     }
 
     /// Serialize to RON (pure — used by the disk save + the round-trip test).

@@ -96,6 +96,60 @@ fn unlock_spends_gold_once_and_gates_on_affordability() {
 }
 
 #[test]
+fn sp_catalog_is_well_formed() {
+    use crate::meta::{sp_stat_def, SP_STATS};
+    use std::collections::HashSet;
+    assert_eq!(SP_STATS.len(), 12, "twelve SP stats");
+    let mut ids = HashSet::new();
+    for s in &SP_STATS {
+        assert!(s.max > 0.0, "{} has a positive cap", s.name);
+        assert!(ids.insert(s.id), "duplicate SP stat id {}", s.id);
+        assert!(sp_stat_def(s.id).is_some(), "{} is looked up by id", s.id);
+    }
+    assert!(sp_stat_def("NOPE").is_none());
+}
+
+#[test]
+fn allocate_sp_spends_points_and_caps() {
+    use crate::meta::SP_STAT_MAX_POINTS;
+    let mut m = Meta { sp: 5, ..Default::default() };
+
+    assert!(m.allocate_sp("HEALTH"));
+    assert_eq!(m.sp, 4);
+    assert_eq!(m.sp_points("HEALTH"), 1);
+    // Health max 400 over 20 points → +20 per point.
+    assert!((m.sp_value("HEALTH") - 20.0).abs() < 1e-3);
+
+    // Unknown stat → no spend.
+    assert!(!m.allocate_sp("BOGUS"));
+    assert_eq!(m.sp, 4);
+
+    // Out of SP → no spend.
+    let mut broke = Meta { sp: 0, ..Default::default() };
+    assert!(!broke.allocate_sp("HEALTH"));
+
+    // Caps at SP_STAT_MAX_POINTS even with plenty of SP.
+    let mut rich = Meta { sp: 100, ..Default::default() };
+    for _ in 0..SP_STAT_MAX_POINTS {
+        assert!(rich.allocate_sp("DODGE"));
+    }
+    assert_eq!(rich.sp_points("DODGE"), SP_STAT_MAX_POINTS);
+    assert!(!rich.allocate_sp("DODGE"), "a maxed stat takes no more points");
+    // Evasion (Dodge) max 50% at 20 points.
+    assert!((rich.sp_value("DODGE") - 50.0).abs() < 1e-3);
+}
+
+#[test]
+fn sp_alloc_survives_ron_round_trip() {
+    let mut m = Meta { sp: 3, ..Default::default() };
+    m.allocate_sp("CRIT_CHANCE");
+    m.allocate_sp("CRIT_CHANCE");
+    let restored = Meta::from_ron(&m.to_ron());
+    assert_eq!(m, restored);
+    assert_eq!(restored.sp_points("CRIT_CHANCE"), 2);
+}
+
+#[test]
 fn old_saves_without_unlocked_field_still_load() {
     // A pre-armory RON save (no `unlocked` field) must deserialize via serde
     // default rather than failing to Default.
