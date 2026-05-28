@@ -170,6 +170,27 @@ impl Meta {
         }
     }
 
+    /// Salvage the stash item at `index` (rainboids `cores.js`): remove it and
+    /// bank its [`crate::systems::cores::salvage_value`] in Cores. Returns the
+    /// Cores gained, or `None` if `index` is out of range.
+    pub fn salvage_item(&mut self, index: usize) -> Option<u64> {
+        if index >= self.stash.len() {
+            return None;
+        }
+        let item = self.stash.remove(index);
+        let gained = crate::systems::cores::salvage_value(&item);
+        self.add_cores(gained);
+        Some(gained)
+    }
+
+    /// Salvage the entire stash at once, banking the total Cores and clearing it.
+    pub fn salvage_all(&mut self) -> u64 {
+        let total = crate::systems::cores::total_salvage(&self.stash);
+        self.stash.clear();
+        self.add_cores(total);
+        total
+    }
+
     /// Whether `id` has been unlocked in the armory.
     pub fn is_unlocked(&self, id: &str) -> bool {
         self.unlocked.contains(id)

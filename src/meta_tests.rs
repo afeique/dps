@@ -95,6 +95,37 @@ fn cores_and_stash_survive_ron_round_trip() {
 }
 
 #[test]
+fn salvage_converts_stash_items_to_cores() {
+    use crate::systems::cores::salvage_value;
+    use crate::systems::items::{Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    let item = |rarity: Rarity, level: u32| Item {
+        slot: ItemSlot::Hull,
+        level,
+        rarity,
+        affixes: vec![Affix { kind: AffixKind::Hp, value: 1.0 }],
+        name: String::new(),
+    };
+
+    let mut m = Meta::default();
+    let a = item(Rarity::Common, 1);
+    let b = item(Rarity::Epic, 10);
+    let (va, vb) = (salvage_value(&a), salvage_value(&b));
+    m.stash = vec![a, b];
+
+    // Salvage one item: bank its value, drop it from the stash.
+    assert_eq!(m.salvage_item(0), Some(va), "gains the item's salvage value");
+    assert_eq!(m.cores, va);
+    assert_eq!(m.stash.len(), 1, "salvaged item removed");
+    assert_eq!(m.salvage_item(5), None, "out-of-range index → no-op");
+
+    // Salvage the rest: bank the total, clear the stash.
+    assert_eq!(m.salvage_all(), vb);
+    assert!(m.stash.is_empty(), "stash cleared");
+    assert_eq!(m.cores, va + vb, "all salvage cores banked");
+}
+
+#[test]
 fn unlock_spends_gold_once_and_gates_on_affordability() {
     use crate::meta::WEAPON_UNLOCK_COST;
     let mut m = Meta { account_gold: WEAPON_UNLOCK_COST, ..Default::default() };
