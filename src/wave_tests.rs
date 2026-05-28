@@ -1358,6 +1358,39 @@ fn berserker_scales_damage_with_missing_hp() {
     assert!(quarter > full * 1.7, "wounded (25% HP) hits ~1.75× a full-HP shot ({quarter} vs {full})");
 }
 
+/// Magnetism widens the orb pickup-attraction radius: an orb just past the base
+/// reach is ignored without the passive, but pulled inward once it's owned.
+#[test]
+fn magnetism_widens_pickup_radius() {
+    use crate::systems::drops::{attract_orbs, Orb};
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    // Does an orb 200u away gain velocity toward the player after one tick?
+    fn pulled(magnetism: u32) -> bool {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Magnetism, magnetism);
+        let world = app.world_mut();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.05));
+        world.insert_resource(time);
+        world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+        let orb = world
+            .spawn((
+                Orb { gold: 1, points: 1, heal: 0.0 },
+                Velocity::default(),
+                Transform::from_xyz(200.0, 0.0, 0.0), // outside the 140u base reach
+            ))
+            .id();
+        let mut step = Schedule::default();
+        step.add_systems(attract_orbs);
+        step.run(world);
+        world.get::<Velocity>(orb).unwrap().0.length() > 0.0
+    }
+
+    assert!(!pulled(0), "200u is outside the base 140u reach → orb ignored");
+    assert!(pulled(2), "Magnetism x2 widens reach to 280u → orb pulled in");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

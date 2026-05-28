@@ -70,12 +70,14 @@ pub enum UpgradeId {
     Ricochet,
     /// Berserker — weapon damage rises as the player's own HP drops.
     Berserker,
+    /// Magnetism — widens the orb pickup-attraction radius.
+    Magnetism,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 37] = [
+    pub const ALL: [UpgradeId; 38] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -113,6 +115,7 @@ impl UpgradeId {
         Self::VampiricRounds,
         Self::Ricochet,
         Self::Berserker,
+        Self::Magnetism,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -157,6 +160,7 @@ impl UpgradeId {
             Self::VampiricRounds => 34,
             Self::Ricochet => 35,
             Self::Berserker => 36,
+            Self::Magnetism => 37,
         }
     }
 
@@ -199,6 +203,7 @@ impl UpgradeId {
             Self::VampiricRounds => "Vampiric Rnd  (heal on crit)",
             Self::Ricochet => "Ricochet      (shots bounce +1)",
             Self::Berserker => "Berserker     (+dmg at low HP)",
+            Self::Magnetism => "Magnetism     (+pickup range)",
         }
     }
 
@@ -242,6 +247,7 @@ impl UpgradeId {
             Self::VampiricRounds => 2400,
             Self::Ricochet => 2600,
             Self::Berserker => 2400,
+            Self::Magnetism => 1500,
         }
     }
 
@@ -284,6 +290,7 @@ impl UpgradeId {
             Self::VampiricRounds => 4,
             Self::Ricochet => 3,
             Self::Berserker => 4,
+            Self::Magnetism => 4,
         }
     }
 }
@@ -397,6 +404,12 @@ pub fn opportunist_bonus(stacks: u32) -> f32 {
 /// comeback mechanic; folded into the `amp` multiplier in `bullet_hits_enemy`.
 pub fn berserker_bonus(stacks: u32, hp_frac: f32) -> f32 {
     0.25 * stacks as f32 * (1.0 - hp_frac.clamp(0.0, 1.0))
+}
+
+/// MAGNETISM passive: extra orb pickup-attraction radius — `+70 world u/stack`,
+/// added to the base radius in `drops::attract_orbs`.
+pub fn magnetism_radius(stacks: u32) -> f32 {
+    70.0 * stacks as f32
 }
 
 /// GLASS CANNON (keystone, binary): +50% weapon damage multiplier when owned.
@@ -698,6 +711,7 @@ pub fn apply_upgrade(
         | UpgradeId::Bloodlust
         | UpgradeId::VampiricRounds
         | UpgradeId::Ricochet
-        | UpgradeId::Berserker => {}
+        | UpgradeId::Berserker
+        | UpgradeId::Magnetism => {}
     }
 }

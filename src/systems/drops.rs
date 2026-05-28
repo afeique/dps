@@ -8,6 +8,7 @@ use crate::components::*;
 use crate::messages::Death;
 use crate::resources::{GameRng, KillStreak, Score};
 use crate::systems::enemy;
+use crate::systems::shop::{magnetism_radius, UpgradeId, Upgrades};
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -271,10 +272,13 @@ pub fn spawn_drops(
 /// `MAX_ATTRACT_SPEED`). The `integrate` system then moves them.
 pub fn attract_orbs(
     time: Res<Time>,
+    upgrades: Res<Upgrades>,
     player: Query<&Transform, With<Ship>>,
     mut q: Query<(&mut Velocity, &Transform), With<Orb>>,
 ) {
-    const ATTRACT_RADIUS: f32 = 140.0;
+    // Base attraction reach, widened by the MAGNETISM passive (spec utility).
+    const ATTRACT_RADIUS_BASE: f32 = 140.0;
+    let attract_radius = ATTRACT_RADIUS_BASE + magnetism_radius(upgrades.owned(UpgradeId::Magnetism));
     const MAX_ATTRACT_SPEED: f32 = 320.0;
     const ATTRACT_ACCEL: f32 = 480.0; // units / s²
 
@@ -288,11 +292,11 @@ pub fn attract_orbs(
         let orb_pos = orb_tf.translation.truncate();
         let to_player = player_pos - orb_pos;
         let dist = to_player.length();
-        if dist > ATTRACT_RADIUS || dist < 0.001 {
+        if dist > attract_radius || dist < 0.001 {
             continue;
         }
         // Strength ramps from 0 at the outer edge to full at contact.
-        let strength = (1.0 - dist / ATTRACT_RADIUS).powi(2);
+        let strength = (1.0 - dist / attract_radius).powi(2);
         let dir = to_player / dist;
         vel.0 += dir * ATTRACT_ACCEL * strength * dt;
 
