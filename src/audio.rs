@@ -368,6 +368,32 @@ fn synth_power_fire() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Bomb — a deep screen-clearing "whoomp + rumble": heavily low-passed noise
+/// over a descending sub-bass body (160→38 Hz), loud + ~0.45 s. Played once when
+/// the Bomb skill (X) detonates (`skills::use_skills`).
+fn synth_bomb() -> Vec<u8> {
+    let duration = 0.45_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.01) as usize;
+    let decay = (-4.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut noise_state: u64 = 0xBEEF_F00D_1234_5678;
+    let mut lp: f32 = 0.0;
+    let mut body_phase: f32 = 0.0;
+    for i in 0..n {
+        let (raw, next) = lcg_noise(noise_state);
+        noise_state = next;
+        lp += 0.08 * (raw - lp); // heavy low-pass → deep rumble
+        let amp = env_exp(i, attack, decay);
+        let body_freq = sweep_freq(160.0, 38.0, i, n);
+        let sig = 0.5 * lp + 0.5 * sine(body_phase);
+        samples.push((sig * amp * 0.60).clamp(-1.0, 1.0));
+        body_phase = advance_phase(body_phase, body_freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 /// Level-up — a triumphant rising C-major arpeggio (C5→E5→G5→C6) with a soft
 /// octave sparkle, ~0.4 s. Played when the account level increases mid-run.
 fn synth_levelup() -> Vec<u8> {
@@ -417,6 +443,7 @@ pub struct Sfx {
     pub levelup:      Handle<AudioSource>,
     pub dash:         Handle<AudioSource>,
     pub power_fire:   Handle<AudioSource>,
+    pub bomb:         Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -495,6 +522,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let levelup      = assets.add(make_synth(synth_levelup()));
     let dash         = assets.add(make_synth(synth_dash()));
     let power_fire   = assets.add(make_synth(synth_power_fire()));
+    let bomb         = assets.add(make_synth(synth_bomb()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -544,6 +572,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         levelup,
         dash,
         power_fire,
+        bomb,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed

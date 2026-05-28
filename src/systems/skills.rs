@@ -134,6 +134,9 @@ pub fn use_skills(
     // Clear the field: emit Death for every enemy (triggers FX + drops), then
     // despawn it. Also hard-despawn all enemy-faction bullets immediately.
     if (keys.just_pressed(KeyCode::KeyX) || bomb_btn) && skills.bomb_cd <= 0.0 {
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.bomb.clone()), PlaybackSettings::DESPAWN));
+        }
         for (enemy_entity, enemy_tf, enemy, boss, mini_boss) in &enemies {
             deaths.write(Death {
                 entity: enemy_entity,
