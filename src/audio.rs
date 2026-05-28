@@ -317,6 +317,28 @@ fn synth_crit() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Level-up — a triumphant rising C-major arpeggio (C5→E5→G5→C6) with a soft
+/// octave sparkle, ~0.4 s. Played when the account level increases mid-run.
+fn synth_levelup() -> Vec<u8> {
+    let duration = 0.40_f32;
+    let n = (SR * duration) as usize;
+    let notes = [523.25_f32, 659.25, 783.99, 1046.50];
+    let seg_len = (n / notes.len()).max(1);
+    let attack = (seg_len as f32 * 0.06) as usize;
+    let decay = (-7.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut phase: f32 = 0.0;
+    for i in 0..n {
+        let seg = (i / seg_len).min(notes.len() - 1);
+        let amp = env_exp(i % seg_len, attack, decay); // re-attack each note
+        let sig = 0.8 * sine(phase) + 0.2 * sine(2.0 * phase); // octave sparkle
+        samples.push(sig * amp * 0.34);
+        phase = advance_phase(phase, notes[seg]);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 // ── Resource ─────────────────────────────────────────────────────────────────
 
 /// Throttle interval in seconds (mirrors `SOUND_THROTTLE_MS = 30`).
@@ -341,6 +363,7 @@ pub struct Sfx {
     pub shatter:      Handle<AudioSource>,
     pub flare:        Handle<AudioSource>,
     pub crit:         Handle<AudioSource>,
+    pub levelup:      Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -416,6 +439,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let shatter      = assets.add(make_synth(synth_shatter()));
     let flare        = assets.add(make_synth(synth_flare()));
     let crit         = assets.add(make_synth(synth_crit()));
+    let levelup      = assets.add(make_synth(synth_levelup()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -462,6 +486,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         shatter,
         flare,
         crit,
+        levelup,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed
