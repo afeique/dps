@@ -9,6 +9,7 @@ use crate::meta::{save_meta, Meta, SP_STATS, SP_STAT_MAX_POINTS};
 use crate::resources::GameRng;
 use crate::states::GameState;
 use crate::systems::armory::armory_catalog;
+use crate::render::shapes::SKINS;
 use crate::systems::cores::{
     reroll_cost, reroll_stash_item, salvage_value, tier_up_cost, tier_up_stash_item,
 };
@@ -23,6 +24,7 @@ pub enum Tab {
     Skills,
     Loadout,
     Stash,
+    Skins,
 }
 
 /// A stash action queued by a button click this frame, applied after the list is
@@ -85,10 +87,44 @@ pub fn build_screen_ui(
             ui.selectable_value(&mut tab.0, Tab::Skills, "SKILLS");
             ui.selectable_value(&mut tab.0, Tab::Loadout, "LOADOUT");
             ui.selectable_value(&mut tab.0, Tab::Stash, "STASH");
+            ui.selectable_value(&mut tab.0, Tab::Skins, "SHIP");
         });
         ui.separator();
 
         match tab.0 {
+            Tab::Skins => {
+                ui.label("Ship skin (cosmetic — recolours the hull's glow edge):");
+                let current = meta.skin;
+                let mut pick: Option<usize> = None;
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (i, skin) in SKINS.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            // HDR edge → a hue-preserving swatch (brightest channel = 255).
+                            let (r, g, b) = skin.edge;
+                            let m = r.max(g).max(b).max(1.0);
+                            let swatch = egui::Color32::from_rgb(
+                                (r / m * 255.0) as u8,
+                                (g / m * 255.0) as u8,
+                                (b / m * 255.0) as u8,
+                            );
+                            ui.colored_label(swatch, "◆");
+                            ui.monospace(format!("{:<10}", skin.name));
+                            if i == current {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(120, 230, 140),
+                                    "EQUIPPED",
+                                );
+                            } else if ui.button("Select").clicked() {
+                                pick = Some(i);
+                            }
+                        });
+                    }
+                });
+                if let Some(i) = pick {
+                    meta.skin = i;
+                    save_meta(&meta);
+                }
+            }
             Tab::Stats => {
                 // Read-only account overview (backed by Meta::account_summary).
                 egui::Grid::new("stats_grid")

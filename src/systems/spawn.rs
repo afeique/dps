@@ -7,7 +7,9 @@ use crate::components::*;
 use crate::render::{charge_glow, shapes, shield_bubble};
 use bevy::prelude::*;
 
-pub fn spawn_player(mut commands: Commands) {
+pub fn spawn_player(mut commands: Commands, meta: Res<crate::meta::Meta>) {
+    // The hull wears the account's selected cosmetic skin (Phase UI).
+    let skin = shapes::skin_for(meta.skin);
     commands
         .spawn((
             Ship::default(),
@@ -27,7 +29,7 @@ pub fn spawn_player(mut commands: Commands) {
             // affixes populate them; read by `enemy_contact_player`.
             crate::combat::element::Resistances::new(),
             Faction::Player,
-            shapes::ship_hull(),
+            shapes::ship_hull_skin(skin),
             Transform::from_xyz(0.0, -140.0, 0.0),
         ))
         .with_children(|ship| {
