@@ -3,7 +3,9 @@
 //! (slot fires, empty/on-cooldown gating, Blink teleport).
 
 use crate::components::loadout::*;
-use crate::components::{Boss, Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Mark, Ship};
+use crate::components::{
+    Boss, Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Mark, SecondWindArmed, Ship,
+};
 use crate::systems::abilities::{activate_loadout, tick_ability_fields};
 use bevy::prelude::*;
 use std::time::Duration;
@@ -59,7 +61,7 @@ fn ability_catalog_is_complete_and_well_formed() {
         assert!(!a.name().is_empty());
     }
     let wired = Ability::ALL.iter().filter(|a| a.implemented()).count();
-    assert_eq!(wired, 11, "base + four fields + Gravity Snare + Designator");
+    assert_eq!(wired, 12, "base + fields + Snare + Designator + Second Wind");
 }
 
 #[test]
@@ -292,4 +294,17 @@ fn designator_marks_enemies_in_radius_only() {
 
     assert!(world.get::<Mark>(near).is_some(), "enemy within designator radius is marked");
     assert!(world.get::<Mark>(far).is_none(), "enemy outside the radius is not");
+}
+
+#[test]
+fn second_wind_arms_a_death_save() {
+    let (mut world, ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([Some(Ability::SecondWind), None, None, None]));
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+    assert!(
+        world.get::<SecondWindArmed>(ship).is_some(),
+        "casting Second Wind arms the death save"
+    );
+    assert!(!world.resource::<AbilityCooldowns>().is_ready(0), "slot 0 on cooldown");
 }

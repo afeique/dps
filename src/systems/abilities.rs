@@ -116,6 +116,11 @@ pub fn activate_loadout(
                 }
                 true
             }
+            Ability::SecondWind => {
+                // Arm a one-time death save; consumed by damage::apply_damage.
+                commands.entity(player_e).insert(SecondWindArmed);
+                true
+            }
             Ability::Blink => {
                 let dest = center + facing * BLINK_DISTANCE;
                 ptf.translation.x = dest.x;

@@ -13,8 +13,8 @@
 //! Phase 3 wires `Death` to drops, and explosion FX.
 
 use crate::components::{
-    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, Shield, Ship, Splitter,
-    BULWARK_RESIST, MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
+    Boss, Bulwark, Enemy, Health, Invulnerable, Lives, MiniBoss, SecondWindArmed, Shield, Ship,
+    Splitter, BULWARK_RESIST, MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
@@ -47,6 +47,7 @@ pub fn apply_damage(
         Option<&Bulwark>,
         Has<MiniBoss>,
         Option<&Splitter>,
+        Has<SecondWindArmed>,
     )>,
 ) {
     for ev in dmg.read() {
@@ -62,6 +63,7 @@ pub fn apply_damage(
             bulwark,
             mini_boss,
             splitter,
+            second_wind,
         )) = q.get_mut(ev.target)
         else {
             continue; // target already gone this tick
@@ -114,6 +116,20 @@ pub fn apply_damage(
         if hp.current <= 0.0 {
             let position = tf.translation.truncate();
             if is_player {
+                // Second Wind (AB ability): an armed one-time death save —
+                // consumed before Last Stand/tanks. Full-HP revive + a spare
+                // tank, run continues (lifecycle.js). A short i-frame buys space.
+                if second_wind {
+                    commands.entity(ev.target).remove::<SecondWindArmed>();
+                    hp.current = hp.max;
+                    if let Some(l) = lives.as_mut() {
+                        l.count = l.count.max(1);
+                    }
+                    commands
+                        .entity(ev.target)
+                        .insert(Invulnerable { seconds: 1.5 });
+                    continue;
+                }
                 // Last Stand: cheat death once per run — clamp to 1 HP + a 2.5 s
                 // invuln window (spec III.5, before tank/death).
                 if upgrades.owned(UpgradeId::LastStand) > 0 && !last_stand.0 {

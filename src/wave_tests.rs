@@ -2062,6 +2062,41 @@ fn bulwark_halves_player_damage() {
     assert!((hp - 950.0).abs() < 1e-3, "Bulwark halves 100 → 50 (hp now {hp})");
 }
 
+// ── 27b. second_wind_revives_once_on_lethal_hit ───────────────────────────────
+
+/// Second Wind (AB ability): an armed lethal hit is survived — full-HP revive +
+/// a spare tank, the arm consumed, and a brief i-frame (lifecycle.js).
+#[test]
+fn second_wind_revives_once_on_lethal_hit() {
+    use crate::components::{Invulnerable, Lives, SecondWindArmed};
+    use crate::messages::Damage;
+    use crate::systems::damage::apply_damage;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health::new(100.0),
+            Lives { count: 0, progress: 0.0 },
+            SecondWindArmed,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.write_message(Damage { target: player, amount: 999.0 });
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap();
+    assert!((hp.current - hp.max).abs() < 1e-3, "revived to full HP (got {})", hp.current);
+    assert!(world.get::<SecondWindArmed>(player).is_none(), "the death-save arm is consumed");
+    assert_eq!(world.get::<Lives>(player).unwrap().count, 1, "granted a spare tank");
+    assert!(world.get::<Invulnerable>(player).is_some(), "brief i-frames after the revive");
+}
+
 // ── 28. repair_nanites_regen_then_expires ─────────────────────────────────────
 
 /// Repair Nanites regenerates HP over its window (capped at max) and then

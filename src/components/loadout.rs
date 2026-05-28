@@ -134,6 +134,7 @@ impl Ability {
                 | Ability::Blink
                 | Ability::GravitySnare
                 | Ability::Designator
+                | Ability::SecondWind
                 | Ability::CryoField
                 | Ability::StasisField
                 | Ability::StormCell
@@ -183,6 +184,13 @@ pub struct AbilityField {
     /// Countdown to the next application (s).
     pub timer: f32,
 }
+
+/// Armed by the **Second Wind** ability — a one-time death save. When the player
+/// would take a lethal hit while this marker is present, `damage::apply_damage`
+/// consumes it instead of ending the run: full-HP revive + a spare tank
+/// (`lifecycle.js`). Re-armed by casting the ability again (after its cooldown).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SecondWindArmed;
 
 /// The player's equipped abilities — slot `i` is fired by ability key `i`. `None`
 /// is an empty slot. Defaults to the four abilities dps already implements.
