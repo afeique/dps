@@ -274,6 +274,8 @@ impl Plugin for GamePlugin {
                     // Localized hit-flash burst on the hull when the player is hit.
                     render::hit_flash::emit_player_hit_flash,
                     render::hit_flash::fade_hit_flash,
+                    // Energy charge-glow halo on the hull (tracks the energy meter).
+                    render::charge_glow::update_charge_glow,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

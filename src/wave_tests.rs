@@ -1434,6 +1434,53 @@ fn hit_flash_bursts_on_player_hurt() {
     assert!(world.get::<Transform>(e).unwrap().scale.x < 0.6, "fades toward zero");
 }
 
+/// The hull charge-glow grows with stored energy and shifts colour band: hidden
+/// when empty, ready-tier (1) once there's enough to fire, full-tier (2) at cap.
+#[test]
+fn charge_glow_tracks_energy() {
+    use crate::render::charge_glow::{glow_disc, update_charge_glow, ChargeGlow, GLOW_BASE_R};
+    use crate::resources::EnergyMeter;
+    use crate::systems::power_weapon::{PowerWeapon, PowerWeaponKind};
+
+    // (scale_x, tier) for a given stored energy. Pin a low-cost weapon (ChargeShot,
+    // 20) so 50 energy clears the fire threshold regardless of the default kind.
+    fn glow_at(current: f32) -> (f32, u8) {
+        let mut app = test_app();
+        app.insert_resource(PowerWeapon {
+            kind: PowerWeaponKind::ChargeShot,
+            ..default()
+        });
+        app.insert_resource(EnergyMeter { current, max: 100.0 });
+        let world = app.world_mut();
+        let e = world
+            .spawn((
+                ChargeGlow::default(),
+                glow_disc(GLOW_BASE_R, Color::WHITE),
+                Transform::default(),
+            ))
+            .id();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.016));
+        world.insert_resource(time);
+        let mut step = Schedule::default();
+        step.add_systems(update_charge_glow);
+        step.run(world);
+        (world.get::<Transform>(e).unwrap().scale.x, world.get::<ChargeGlow>(e).unwrap().tier)
+    }
+
+    let (empty_s, empty_t) = glow_at(0.0);
+    assert_eq!(empty_s, 0.0, "empty meter → halo hidden");
+    assert_eq!(empty_t, 0, "empty → building band");
+
+    let (ready_s, ready_t) = glow_at(50.0);
+    assert!(ready_s > empty_s, "more energy → larger halo");
+    assert_eq!(ready_t, 1, "above fire cost → ready band");
+
+    let (full_s, full_t) = glow_at(100.0);
+    assert!(full_s > 0.0, "full meter → visible halo");
+    assert_eq!(full_t, 2, "at cap → full band");
+}
+
 /// Taking a hit (`PlayerHurt`) triggers a red screen flash (graphical parity).
 #[test]
 fn player_hurt_triggers_red_flash() {
