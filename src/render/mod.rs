@@ -8,6 +8,7 @@
 pub mod bullets;
 pub mod cursor;
 pub mod damage_numbers;
+pub mod engine_trail;
 pub mod explosion;
 pub mod flash;
 pub mod gear_panel;

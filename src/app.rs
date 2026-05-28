@@ -259,6 +259,15 @@ impl Plugin for GamePlugin {
                 bevy_egui::EguiPrimaryContextPass,
                 systems::build_screen::build_screen_ui.run_if(in_state(GameState::Build)),
             )
+            // ── player engine thrust trail (graphical parity) ──────────────────
+            .add_systems(
+                Update,
+                (
+                    render::engine_trail::emit_engine_trail,
+                    render::engine_trail::fade_engine_exhaust,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)
             .add_systems(

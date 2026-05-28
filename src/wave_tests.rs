@@ -1214,6 +1214,29 @@ fn elemental_enemy_bullet_resisted_and_applies_status() {
     assert!(world.get::<PlayerBurn>(player).is_some(), "a Pyro bullet ignites the player");
 }
 
+/// The engine trail puffs exhaust only while the ship is actually moving.
+#[test]
+fn engine_trail_emits_only_when_moving() {
+    use crate::components::{Ship, Velocity};
+    use crate::render::engine_trail::{emit_engine_trail, EngineExhaust};
+
+    fn motes_after_one_emit(speed: f32) -> usize {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.1)); // > EMIT_INTERVAL
+        world.insert_resource(time);
+        world.spawn((Ship::default(), Velocity(Vec2::new(speed, 0.0)), Transform::default()));
+        let mut step = Schedule::default();
+        step.add_systems(emit_engine_trail);
+        step.run(&mut world);
+        let mut q = world.query::<&EngineExhaust>();
+        q.iter(&world).count()
+    }
+
+    assert_eq!(motes_after_one_emit(200.0), 1, "a moving ship emits an exhaust mote");
+    assert_eq!(motes_after_one_emit(10.0), 0, "an idle ship emits nothing");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]
