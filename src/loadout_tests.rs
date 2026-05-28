@@ -3,7 +3,7 @@
 //! (slot fires, empty/on-cooldown gating, Blink teleport).
 
 use crate::components::loadout::*;
-use crate::components::{Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Ship};
+use crate::components::{Boss, Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Mark, Ship};
 use crate::systems::abilities::{activate_loadout, tick_ability_fields};
 use bevy::prelude::*;
 use std::time::Duration;
@@ -59,7 +59,7 @@ fn ability_catalog_is_complete_and_well_formed() {
         assert!(!a.name().is_empty());
     }
     let wired = Ability::ALL.iter().filter(|a| a.implemented()).count();
-    assert_eq!(wired, 9, "five base abilities + the four drop-zone fields");
+    assert_eq!(wired, 11, "base + four fields + Gravity Snare + Designator");
 }
 
 #[test]
@@ -236,4 +236,60 @@ fn ability_field_despawns_when_lifetime_elapses() {
         world.get::<AbilityField>(field).is_none(),
         "the field despawns once its lifetime elapses"
     );
+}
+
+#[test]
+fn gravity_snare_yanks_nonboss_enemies_inward() {
+    let (mut world, _ship) = world_with_ship(); // ship at origin
+    world.insert_resource(EquippedAbilities([Some(Ability::GravitySnare), None, None, None]));
+    // Within r320, beyond minDist70: pull = min(200-70, 200*0.6) = 120 → x: 200→80.
+    let near = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(200.0, 0.0, 0.0)))
+        .id();
+    // Outside r320: unmoved.
+    let far = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(500.0, 0.0, 0.0)))
+        .id();
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+
+    let nx = world.get::<Transform>(near).unwrap().translation.x;
+    let fx = world.get::<Transform>(far).unwrap().translation.x;
+    assert!((nx - 80.0).abs() < 1e-3, "snared enemy pulled to x=80 (got {nx})");
+    assert!((fx - 500.0).abs() < 1e-3, "out-of-range enemy unmoved (got {fx})");
+}
+
+#[test]
+fn gravity_snare_ignores_bosses() {
+    let (mut world, _ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([Some(Ability::GravitySnare), None, None, None]));
+    let boss = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Boss { tier: 1 },
+            Transform::from_xyz(200.0, 0.0, 0.0),
+        ))
+        .id();
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+
+    let bx = world.get::<Transform>(boss).unwrap().translation.x;
+    assert!((bx - 200.0).abs() < 1e-3, "a boss is immune to the snare (got {bx})");
+}
+
+#[test]
+fn designator_marks_enemies_in_radius_only() {
+    let (mut world, _ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([Some(Ability::Designator), None, None, None]));
+    let near = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(300.0, 0.0, 0.0)))
+        .id(); // within r360
+    let far = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(400.0, 0.0, 0.0)))
+        .id(); // outside r360
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+
+    assert!(world.get::<Mark>(near).is_some(), "enemy within designator radius is marked");
+    assert!(world.get::<Mark>(far).is_none(), "enemy outside the radius is not");
 }

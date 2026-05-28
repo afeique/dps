@@ -27,6 +27,15 @@ const SLOT_KEYS: [KeyCode; 4] = [
 const BLINK_DISTANCE: f32 = 220.0;
 const BLINK_IFRAME: f32 = 0.35;
 
+/// Gravity Snare (`weapon-data.js`): yank non-boss enemies inward, no closer than
+/// `SNARE_MIN_DIST`, by `min(dist − minDist, dist × SNARE_PULL)`.
+const SNARE_RADIUS: f32 = 320.0;
+const SNARE_PULL: f32 = 0.6;
+const SNARE_MIN_DIST: f32 = 70.0;
+
+/// Designator (`weapon-data.js`): MARK every enemy within this radius.
+const DESIGNATOR_RADIUS: f32 = 360.0;
+
 /// Tick the loadout cooldowns and fire equipped abilities on their slot key.
 /// A press is consumed (cooldown spent) only if the slot holds an *implemented*
 /// ability that is off cooldown; empty/on-cooldown/deferred slots are no-ops.
@@ -37,7 +46,7 @@ pub fn activate_loadout(
     equipped: Res<EquippedAbilities>,
     mut cds: ResMut<AbilityCooldowns>,
     mut player: Query<(Entity, &mut Transform), With<Ship>>,
-    enemies: Query<(Entity, &Transform), (With<Enemy>, Without<Ship>)>,
+    mut enemies: Query<(Entity, &mut Transform, Has<Boss>), (With<Enemy>, Without<Ship>)>,
 ) {
     cds.tick(time.delta_secs());
 
@@ -75,9 +84,34 @@ pub fn activate_loadout(
                 true
             }
             Ability::EmpPulse => {
-                for (e, etf) in &enemies {
+                for (e, etf, _boss) in &enemies {
                     if etf.translation.truncate().distance(center) <= EMP_RADIUS {
                         commands.entity(e).insert(Stunned { secs: 2.0 });
+                    }
+                }
+                true
+            }
+            Ability::GravitySnare => {
+                // Yank non-boss enemies inward (instant position pull).
+                for (_e, mut etf, is_boss) in &mut enemies {
+                    if is_boss {
+                        continue;
+                    }
+                    let to_ship = center - etf.translation.truncate();
+                    let dist = to_ship.length();
+                    if dist > SNARE_MIN_DIST && dist <= SNARE_RADIUS {
+                        let pull = (dist - SNARE_MIN_DIST).min(dist * SNARE_PULL);
+                        let step = to_ship / dist * pull;
+                        etf.translation.x += step.x;
+                        etf.translation.y += step.y;
+                    }
+                }
+                true
+            }
+            Ability::Designator => {
+                for (e, etf, _boss) in &enemies {
+                    if etf.translation.truncate().distance(center) <= DESIGNATOR_RADIUS {
+                        commands.entity(e).insert(Mark { secs: MARK_SECS });
                     }
                 }
                 true

@@ -72,8 +72,8 @@ impl Ability {
             Ability::EmpPulse => 22.0,
             Ability::SentryDrone => 18.0,
             Ability::Blink => 6.0,
-            Ability::GravitySnare => 16.0,
-            Ability::Designator => 20.0,
+            Ability::GravitySnare => 14.0,
+            Ability::Designator => 16.0,
             Ability::SecondWind => 90.0,
             Ability::ElementalInfusion => 16.0,
             // Drop-zone fields (weapon-data.js): Cryo 18 s, the rest 16 s.
@@ -132,6 +132,8 @@ impl Ability {
                 | Ability::DeflectorOrbs
                 | Ability::EmpPulse
                 | Ability::Blink
+                | Ability::GravitySnare
+                | Ability::Designator
                 | Ability::CryoField
                 | Ability::StasisField
                 | Ability::StormCell
