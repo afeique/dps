@@ -116,6 +116,7 @@ pub fn collect_powerups(
     mut commands: Commands,
     mut score: ResMut<Score>,
     mut deaths: MessageWriter<Death>,
+    mut pickup: MessageWriter<crate::messages::Pickup>,
     mut player: Query<(&Transform, &Collider, &mut Health, &mut Lives), With<Ship>>,
     powerups: Query<(Entity, &Transform, &Collider, &Powerup)>,
     enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
@@ -163,5 +164,6 @@ pub fn collect_powerups(
         }
 
         commands.entity(gem_e).despawn();
+        pickup.write(crate::messages::Pickup);
     }
 }

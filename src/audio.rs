@@ -665,6 +665,28 @@ pub fn play_explosion(
     }
 }
 
+/// Play a pickup chime when the player collects an orb or powerup. Collapses a
+/// same-frame cluster into one sound and applies the standard per-event throttle.
+pub fn play_pickup(
+    mut commands: Commands,
+    mut sfx: ResMut<Sfx>,
+    mut pickups: MessageReader<crate::messages::Pickup>,
+    time: Res<Time>,
+) {
+    if pickups.read().count() == 0 {
+        return;
+    }
+    let now = time.elapsed_secs_f64();
+    if sfx.is_throttled("pickup", now) {
+        return;
+    }
+    // Try a "pickup" WAV; otherwise the synth chime.
+    if !try_play_file(&mut commands, &mut sfx, "pickup", now) {
+        commands.spawn((AudioPlayer::new(sfx.pickup.clone()), PlaybackSettings::DESPAWN));
+    }
+    sfx.record_played("pickup", now);
+}
+
 /// Play a player-hit sound whenever the player entity receives `Damage`.
 ///
 /// Tries `"playerHitEnemy"` WAV first, then `"hit"`, then synth fallback.

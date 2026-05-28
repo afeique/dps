@@ -59,6 +59,12 @@ pub struct PlayerHurt {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Crit;
 
+/// The player collected an orb or powerup this frame (emitted by `drops::collect_orbs`
+/// / `powerups::collect_powerups`). Drives the pickup chime (`audio::play_pickup`),
+/// which collapses a same-frame cluster + throttles. Carries nothing.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Pickup;
+
 /// A resolved elemental reaction (E4b), emitted by `systems::reactions` — drives
 /// a one-shot expanding-ring shockwave VFX (`render::reaction_fx`). Pure
 /// presentation signal; the gameplay AoE is already applied via `Damage`.

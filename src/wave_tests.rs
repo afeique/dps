@@ -37,6 +37,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Knockback>()
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
+        .add_message::<crate::messages::Pickup>()
         .add_message::<crate::messages::Shard>()
         .add_message::<crate::messages::Reaction>()
         .init_resource::<crate::meta::Meta>()
@@ -1435,6 +1436,35 @@ fn magnetism_widens_pickup_radius() {
 
     assert!(!pulled(0), "200u is outside the base 140u reach → orb ignored");
     assert!(pulled(2), "Magnetism x2 widens reach to 280u → orb pulled in");
+}
+
+/// Collecting an orb despawns it and emits a `Pickup` (which drives the chime).
+#[test]
+fn collecting_an_orb_emits_pickup() {
+    use crate::messages::Pickup;
+    use crate::systems::drops::{collect_orbs, Orb};
+
+    #[derive(Resource, Default)]
+    struct PickupCount(u32);
+    fn tally(mut r: MessageReader<Pickup>, mut c: ResMut<PickupCount>) {
+        c.0 += r.read().count() as u32;
+    }
+
+    let mut app = test_app();
+    app.init_resource::<PickupCount>();
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Collider { radius: 8.0 }, Health::new(40.0), Transform::default()));
+    world.spawn((
+        Orb { gold: 5, points: 1, heal: 0.0 },
+        Collider { radius: 8.0 },
+        Transform::default(), // overlapping the player
+    ));
+    let mut step = Schedule::default();
+    step.add_systems((collect_orbs, tally).chain());
+    step.run(world);
+
+    assert_eq!(world.query::<&Orb>().iter(world).count(), 0, "orb was collected");
+    assert_eq!(world.resource::<PickupCount>().0, 1, "collection emits one Pickup");
 }
 
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:

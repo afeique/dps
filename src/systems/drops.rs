@@ -316,6 +316,7 @@ pub fn attract_orbs(
 pub fn collect_orbs(
     mut commands: Commands,
     mut score: ResMut<Score>,
+    mut pickup: MessageWriter<crate::messages::Pickup>,
     mut player: Query<(&Transform, &Collider, &mut Health), With<Ship>>,
     orbs: Query<(Entity, &Transform, &Collider, &Orb)>,
 ) {
@@ -336,6 +337,7 @@ pub fn collect_orbs(
                 hp.current += orb.heal;
             }
             commands.entity(orb_e).despawn();
+            pickup.write(crate::messages::Pickup);
         }
     }
 }

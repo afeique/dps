@@ -70,6 +70,7 @@ impl Plugin for GamePlugin {
             .add_message::<Knockback>()
             .add_message::<PlayerHurt>()
             .add_message::<crate::messages::Crit>()
+            .add_message::<crate::messages::Pickup>()
             .add_message::<crate::messages::Shard>()
             .add_message::<crate::messages::Reaction>()
             // ── one-time setup ──────────────────────────────────────────
@@ -157,6 +158,7 @@ impl Plugin for GamePlugin {
                         audio::play_player_hit,
                         audio::play_reaction,
                         audio::play_crit,
+                        audio::play_pickup,
                     ),
                 ),
             )
