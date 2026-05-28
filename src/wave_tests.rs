@@ -1985,6 +1985,43 @@ fn sp_vampirism_heals_on_hit() {
     assert!(hp > 10.0, "SP vampirism heals the player on a hit (hp now {hp})");
 }
 
+/// Account SP TOUGHNESS feeds the player's shield damage-reduction (Phase ME):
+/// maxed (+50% DR) halves an incoming hit, even with a 0% base shield.
+#[test]
+fn sp_toughness_reduces_incoming_damage() {
+    use crate::components::Shield;
+    use crate::meta::Meta;
+    use crate::messages::Damage;
+    use crate::systems::damage::apply_damage;
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.sp = 20;
+        for _ in 0..20 {
+            meta.allocate_sp("TOUGHNESS"); // +50% damage reduction at the cap
+        }
+    }
+    let world = app.world_mut();
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health::new(1000.0),
+            Shield { reduction: 0.0 }, // isolate the SP toughness contribution
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.write_message(Damage { target: player, amount: 100.0 });
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_damage);
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    // 100 × (1 − 0.5) = 50 → 1000 − 50 = 950 (player damage is rounded).
+    assert!((hp - 950.0).abs() < 1.5, "SP toughness halves 100 → 50 (hp now {hp})");
+}
+
 // ── 23. dodge_ignores_about_half ──────────────────────────────────────────────
 
 /// DODGE: with 10 stacks (50% chance), roughly half of many incoming hits are

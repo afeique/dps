@@ -33,6 +33,7 @@ pub fn apply_damage(
     mut rng: ResMut<GameRng>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     mut last_stand: ResMut<LastStandUsed>,
     mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
@@ -77,7 +78,8 @@ pub fn apply_damage(
             // break (spec II.2 step 3 / III.5). Shop stacks + equipped item dodge
             // affixes, capped at 50 %.
             let dodge = (dodge_chance(upgrades.owned(UpgradeId::Dodge))
-                + equipment.affix_total(AffixKind::Dodge) / 100.0)
+                + equipment.affix_total(AffixKind::Dodge) / 100.0
+                + meta.sp_value("DODGE") / 100.0)
                 .min(0.5);
             if dodge > 0.0 && rng.next_f32() < dodge {
                 continue;
@@ -94,7 +96,9 @@ pub fn apply_damage(
             // Player shield = base %DR + equipped TOUGHNESS affixes, capped.
             let mut reduction = s.reduction;
             if is_player {
-                reduction = (reduction + equipment.affix_total(AffixKind::Toughness) / 100.0)
+                reduction = (reduction
+                    + equipment.affix_total(AffixKind::Toughness) / 100.0
+                    + meta.sp_value("TOUGHNESS") / 100.0)
                     .min(SHIELD_REDUCTION_CAP);
             }
             amount *= 1.0 - reduction;
@@ -215,6 +219,7 @@ pub fn passive_regen(
     mut hurt: MessageReader<PlayerHurt>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     mut player: Query<&mut Health, With<Ship>>,
 ) {
     let dt = time.delta_secs();
@@ -223,8 +228,10 @@ pub fn passive_regen(
     } else {
         clock.0 += dt;
     }
-    // Shop Repair Field + equipped REGEN affixes (flat HP/s).
-    let rate = regen_rate(upgrades.owned(UpgradeId::Regen)) + equipment.affix_total(AffixKind::Regen);
+    // Shop Repair Field + equipped REGEN affixes + account SP (all flat HP/s).
+    let rate = regen_rate(upgrades.owned(UpgradeId::Regen))
+        + equipment.affix_total(AffixKind::Regen)
+        + meta.sp_value("REGENERATION");
     if clock.0 >= REGEN_DELAY && rate > 0.0 {
         if let Ok(mut hp) = player.single_mut() {
             hp.current = (hp.current + rate * dt).min(hp.max);
