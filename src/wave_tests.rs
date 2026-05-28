@@ -1493,6 +1493,37 @@ fn scavenger_boosts_orb_gold() {
     assert_eq!(gold_from_orb(2), 150, "Scavenger x2 → +50% (100 → 150)");
 }
 
+/// XP Boost grants more account XP per kill (+20%/stack). A single kill never
+/// levels up (xp_for_level(1)=500 > a boosted kill), so meta.xp == the award.
+#[test]
+fn xp_boost_grants_more_account_xp() {
+    use crate::meta::{award_xp, Meta, XP_PER_KILL};
+    use crate::systems::shop::{xp_boost_mult, UpgradeId, Upgrades};
+
+    assert!((xp_boost_mult(0) - 1.0).abs() < 1e-6, "not owned → ×1");
+    assert!((xp_boost_mult(5) - 2.0).abs() < 1e-6, "x5 → ×2 XP");
+
+    fn xp_from_one_kill(boost: u32) -> u64 {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::XpBoost, boost);
+        let world = app.world_mut();
+        world.write_message(Death {
+            entity: Entity::PLACEHOLDER,
+            position: Vec2::ZERO,
+            kind: Some(EnemyKind::Hunter),
+            boss_tier: 0,
+            mini_boss: false,
+        });
+        let mut step = Schedule::default();
+        step.add_systems(award_xp);
+        step.run(world);
+        world.resource::<Meta>().xp
+    }
+
+    assert_eq!(xp_from_one_kill(0), XP_PER_KILL, "base kill XP");
+    assert_eq!(xp_from_one_kill(3), (XP_PER_KILL as f32 * 1.6).round() as u64, "x3 → +60% XP");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

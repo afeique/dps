@@ -238,10 +238,17 @@ pub fn save_meta(meta: &Meta) {
 
 /// Award account XP per enemy kill (boss 120 / regular 12) — reads `Death` in the
 /// FixedUpdate sim. Player deaths (`kind: None`) award nothing.
-pub fn award_xp(mut deaths: MessageReader<Death>, mut meta: ResMut<Meta>) {
+pub fn award_xp(
+    mut deaths: MessageReader<Death>,
+    mut meta: ResMut<Meta>,
+    upgrades: Res<crate::systems::shop::Upgrades>,
+) {
+    use crate::systems::shop::{xp_boost_mult, UpgradeId};
+    let mult = xp_boost_mult(upgrades.owned(UpgradeId::XpBoost));
     for d in deaths.read() {
         if d.kind.is_some() {
-            meta.add_xp(if d.boss_tier > 0 { XP_PER_BOSS } else { XP_PER_KILL });
+            let base = if d.boss_tier > 0 { XP_PER_BOSS } else { XP_PER_KILL };
+            meta.add_xp((base as f32 * mult).round() as u64);
         }
     }
 }
