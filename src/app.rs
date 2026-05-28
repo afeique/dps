@@ -268,6 +268,9 @@ impl Plugin for GamePlugin {
                 (
                     render::engine_trail::emit_engine_trail,
                     render::engine_trail::fade_engine_exhaust,
+                    // Muzzle flash at the nose on each player shot (graphical parity).
+                    render::muzzle_flash::emit_muzzle_flash,
+                    render::muzzle_flash::fade_muzzle_flash,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

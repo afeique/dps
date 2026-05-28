@@ -1367,6 +1367,36 @@ fn engine_trail_emits_only_when_moving() {
     assert_eq!(motes_after_one_emit(10.0), 0, "an idle ship emits nothing");
 }
 
+/// A *player* shot spawns a muzzle flash at the barrel; enemy fire doesn't.
+#[test]
+fn muzzle_flash_only_on_player_fire() {
+    use crate::combat::element::Element;
+    use crate::components::Faction;
+    use crate::render::muzzle_flash::{emit_muzzle_flash, MuzzleFlash};
+
+    let shot = |faction| Fire {
+        origin: Vec2::ZERO,
+        dir: Vec2::Y,
+        damage: 1.0,
+        speed: 600.0,
+        faction,
+        homing: false,
+        element: Element::Kinetic,
+    };
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.write_message(shot(Faction::Player));
+    world.write_message(shot(Faction::Enemy));
+
+    let mut step = Schedule::default();
+    step.add_systems(emit_muzzle_flash);
+    step.run(world);
+
+    let mut q = world.query::<&MuzzleFlash>();
+    assert_eq!(q.iter(world).count(), 1, "one flash per player shot, none for enemy fire");
+}
+
 /// Taking a hit (`PlayerHurt`) triggers a red screen flash (graphical parity).
 #[test]
 fn player_hurt_triggers_red_flash() {
