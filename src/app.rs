@@ -276,6 +276,9 @@ impl Plugin for GamePlugin {
                     render::hit_flash::fade_hit_flash,
                     // Energy charge-glow halo on the hull (tracks the energy meter).
                     render::charge_glow::update_charge_glow,
+                    // Dash afterimage: faint hull ghosts while dashing.
+                    render::dash_trail::emit_dash_trail,
+                    render::dash_trail::fade_dash_ghosts,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

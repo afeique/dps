@@ -1532,6 +1532,35 @@ fn charge_glow_tracks_energy() {
     assert_eq!(full_t, 2, "at cap → full band");
 }
 
+/// The dash afterimage stamps hull ghosts only while dashing (invulnerable AND
+/// fast); idle-invuln (Shield Burst) or fast-without-invuln flight makes none.
+#[test]
+fn dash_trail_emits_only_while_dashing() {
+    use crate::components::{Invulnerable, Ship, Velocity};
+    use crate::render::dash_trail::{emit_dash_trail, DashGhost};
+
+    fn ghosts(speed: f32, invuln: bool) -> usize {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.1)); // > EMIT_INTERVAL
+        world.insert_resource(time);
+        let mut e = world.spawn((Ship::default(), Velocity(Vec2::new(speed, 0.0)), Transform::default()));
+        if invuln {
+            e.insert(Invulnerable { seconds: 0.3 });
+        }
+        let mut step = Schedule::default();
+        step.add_systems(emit_dash_trail);
+        step.run(world);
+        let mut q = world.query::<&DashGhost>();
+        q.iter(world).count()
+    }
+
+    assert_eq!(ghosts(600.0, true), 1, "dashing (fast + invuln) → ghost");
+    assert_eq!(ghosts(600.0, false), 0, "fast but not invuln → no ghost");
+    assert_eq!(ghosts(100.0, true), 0, "invuln but slow (Shield Burst) → no ghost");
+}
+
 /// A landed hit on an enemy scatters impact sparks; player hits + sub-1 DoT
 /// ticks don't (the player has its own hit-flash; DoT shouldn't fizz).
 #[test]

@@ -16,7 +16,9 @@ pub const SHIP_R: f32 = 22.0;
 /// `player/renderer.js` (central hull + wings + wing tips), authored at
 /// `r = 15` and flipped into Bevy space so the nose points +Y — the ship's
 /// forward vector (`tf.rotation * Vec3::Y`).
-pub fn ship_hull() -> Shape {
+/// The closed 16-vertex hull outline (Bevy space, nose +Y), shared by the solid
+/// hull and the dash afterimage ghost so the silhouette stays single-sourced.
+fn hull_path() -> ShapePath {
     const R: f32 = SHIP_R;
     // (x, y) in Canvas space (+Y down); Y is negated when fed to lyon below.
     let pts = [
@@ -42,11 +44,21 @@ pub fn ship_hull() -> Shape {
     for &(x, y) in &pts[1..] {
         path = path.line_to(Vec2::new(x, -y));
     }
-    let path = path.close();
+    path.close()
+}
 
-    ShapeBuilder::with(&path)
+pub fn ship_hull() -> Shape {
+    ShapeBuilder::with(&hull_path())
         .fill(Color::linear_rgb(0.0, 0.03, 0.08)) // near-black navy hull, stays dark
         .stroke((Color::linear_rgb(0.2, 4.5, 7.5), 2.0)) // emissive cyan edge → bloom
+        .build()
+}
+
+/// A faint cyan hull silhouette for the dash afterimage trail (`render::dash_trail`).
+/// No dark fill — just a dim emissive edge that bloom softens into a ghost.
+pub fn ship_ghost() -> Shape {
+    ShapeBuilder::with(&hull_path())
+        .stroke((Color::linear_rgb(0.15, 1.6, 2.6), 1.5))
         .build()
 }
 
