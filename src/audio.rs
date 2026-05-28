@@ -22,7 +22,7 @@ use bevy::audio::{AudioSource, Volume};
 use bevy::prelude::*;
 
 use crate::components::Faction;
-use crate::messages::{Damage, Death, Fire};
+use crate::messages::{Crit, Damage, Death, Fire, Reaction, ReactionFx};
 
 // ── WAV encoder ─────────────────────────────────────────────────────────────
 
@@ -247,6 +247,76 @@ fn synth_pickup() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Shatter — an icy glass "crack": bright sine sweep 2400 → 700 Hz + a noise
+/// edge, ~0.16 s (CRYO reaction).
+fn synth_shatter() -> Vec<u8> {
+    let duration = 0.16_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.01) as usize;
+    let decay = (-9.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut phase: f32 = 0.0;
+    let mut noise_state: u64 = 0x1357_9BDF_2468_ACE0;
+    for i in 0..n {
+        let freq = sweep_freq(2400.0, 700.0, i, n);
+        let amp = env_exp(i, attack, decay);
+        let (noise, next) = lcg_noise(noise_state);
+        noise_state = next;
+        let sig = 0.7 * sine(phase) + 0.3 * noise;
+        samples.push(sig * amp * 0.35);
+        phase = advance_phase(phase, freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
+/// Oil flare — a fiery "fwoomp": rising filtered noise + a low rising body,
+/// ~0.22 s (PYRO-on-OIL reaction).
+fn synth_flare() -> Vec<u8> {
+    let duration = 0.22_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.04) as usize;
+    let decay = (-5.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut noise_state: u64 = 0x0FED_CBA9_8765_4321;
+    let mut lp: f32 = 0.0;
+    let mut body_phase: f32 = 0.0;
+    for i in 0..n {
+        let (raw, next) = lcg_noise(noise_state);
+        noise_state = next;
+        // Brighten as it builds (rising low-pass cutoff).
+        let coeff = 0.05 + 0.30 * (i as f32 / n as f32);
+        lp += coeff * (raw - lp);
+        let amp = env_exp(i, attack, decay);
+        let body_freq = sweep_freq(120.0, 320.0, i, n);
+        let sig = 0.6 * lp + 0.4 * sine(body_phase);
+        samples.push((sig * amp * 0.40).clamp(-1.0, 1.0));
+        body_phase = advance_phase(body_phase, body_freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
+/// Crit — a sharp bright "ting": a high sine + overtone, very short ~0.09 s.
+fn synth_crit() -> Vec<u8> {
+    let duration = 0.09_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.02) as usize;
+    let decay = (-12.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut p1: f32 = 0.0;
+    let mut p2: f32 = 0.0;
+    for i in 0..n {
+        let amp = env_exp(i, attack, decay);
+        let sig = 0.6 * sine(p1) + 0.4 * sine(p2);
+        samples.push(sig * amp * 0.32);
+        p1 = advance_phase(p1, 1760.0);
+        p2 = advance_phase(p2, 2640.0); // a bright overtone above
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 // ── Resource ─────────────────────────────────────────────────────────────────
 
 /// Throttle interval in seconds (mirrors `SOUND_THROTTLE_MS = 30`).
@@ -268,6 +338,9 @@ pub struct Sfx {
     pub explosion:    Handle<AudioSource>,
     pub player_hit:   Handle<AudioSource>,
     pub pickup:       Handle<AudioSource>,
+    pub shatter:      Handle<AudioSource>,
+    pub flare:        Handle<AudioSource>,
+    pub crit:         Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -340,6 +413,9 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let explosion    = assets.add(make_synth(synth_explosion()));
     let player_hit   = assets.add(make_synth(synth_player_hit()));
     let pickup       = assets.add(make_synth(synth_pickup()));
+    let shatter      = assets.add(make_synth(synth_shatter()));
+    let flare        = assets.add(make_synth(synth_flare()));
+    let crit         = assets.add(make_synth(synth_crit()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -383,6 +459,9 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         explosion,
         player_hit,
         pickup,
+        shatter,
+        flare,
+        crit,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed
@@ -554,6 +633,54 @@ pub fn play_player_hit(
                     PlaybackSettings::DESPAWN,
                 ));
             }
+        }
+    }
+}
+
+/// Play an elemental-reaction sound for each `Reaction` (E4b): an icy crack for
+/// SHATTER, a fiery fwoomp for FLARE. Capped per frame so a shatter chain doesn't
+/// stack into a wall of sound.
+pub fn play_reaction(
+    mut commands: Commands,
+    sfx: Res<Sfx>,
+    mut reactions: MessageReader<Reaction>,
+) {
+    const CAP: u32 = 3;
+    let mut count = 0u32;
+    for r in reactions.read() {
+        if count >= CAP {
+            break;
+        }
+        let handle = match r.kind {
+            ReactionFx::Shatter => sfx.shatter.clone(),
+            ReactionFx::Flare => sfx.flare.clone(),
+        };
+        commands.spawn((AudioPlayer::new(handle), PlaybackSettings::DESPAWN));
+        count += 1;
+    }
+}
+
+/// Play one bright crit "ting" per frame in which any `Crit` fired (multiple
+/// crits in a tick collapse to a single ding — avoids a machine-gun of pings).
+pub fn play_crit(mut commands: Commands, sfx: Res<Sfx>, mut crits: MessageReader<Crit>) {
+    if crits.read().count() > 0 {
+        commands.spawn((AudioPlayer::new(sfx.crit.clone()), PlaybackSettings::DESPAWN));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every synth produces a non-empty, even-length PCM-16 WAV (44-byte header
+    /// + samples) — a smoke test that the new reaction/crit synths are wired and
+    /// don't panic.
+    #[test]
+    fn reaction_and_crit_synths_produce_wav_buffers() {
+        for bytes in [synth_shatter(), synth_flare(), synth_crit()] {
+            assert!(bytes.len() > 44, "WAV has a header + samples (got {})", bytes.len());
+            assert_eq!(bytes.len() % 2, 0, "PCM-16 byte count is even");
+            assert_eq!(&bytes[0..4], b"RIFF", "WAV RIFF magic");
         }
     }
 }

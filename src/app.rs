@@ -140,9 +140,15 @@ impl Plugin for GamePlugin {
                         render::flash::apply_screen_flash,
                     )
                         .chain(),
-                    audio::play_shoot,
-                    audio::play_explosion,
-                    audio::play_player_hit,
+                    // SFX playback, nested as one element so the outer Update
+                    // tuple stays within Bevy's 20-element limit.
+                    (
+                        audio::play_shoot,
+                        audio::play_explosion,
+                        audio::play_player_hit,
+                        audio::play_reaction,
+                        audio::play_crit,
+                    ),
                 ),
             )
             // ── title screen ────────────────────────────────────────────
