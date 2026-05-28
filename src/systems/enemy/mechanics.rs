@@ -144,8 +144,9 @@ pub fn decay_warden_resist(
 /// normal enemy-death path, so it simply drops out of the live-parts set here.
 pub fn update_core_shield(
     mut commands: Commands,
+    sfx: Option<Res<crate::audio::Sfx>>,
     parts: Query<&BossPart>,
-    bosses: Query<(Entity, Has<CoreShielded>), With<Boss>>,
+    bosses: Query<(Entity, &Transform, Has<CoreShielded>), With<Boss>>,
 ) {
     use std::collections::HashSet;
     let shielded: HashSet<Entity> = parts
@@ -153,13 +154,27 @@ pub fn update_core_shield(
         .filter(|p| p.shields_core)
         .map(|p| p.boss)
         .collect();
-    for (boss, has_marker) in &bosses {
+    for (boss, tf, has_marker) in &bosses {
         match (shielded.contains(&boss), has_marker) {
             (true, false) => {
                 commands.entity(boss).insert(CoreShielded);
             }
             (false, true) => {
+                // Last shielding part just died → the core is exposed. A one-shot
+                // cyan "shield down" ring + the boss roar signal "hit it now".
                 commands.entity(boss).remove::<CoreShielded>();
+                commands.spawn((
+                    crate::render::reaction_fx::Shockwave { age: 0.0, peak: 70.0 },
+                    crate::render::reaction_fx::unit_ring(Color::linear_rgb(2.0, 7.0, 9.0)),
+                    Transform::from_translation(tf.translation.truncate().extend(0.3))
+                        .with_scale(Vec3::splat(1.0)),
+                ));
+                if let Some(sfx) = &sfx {
+                    commands.spawn((
+                        AudioPlayer::new(sfx.boss_roar.clone()),
+                        PlaybackSettings::DESPAWN,
+                    ));
+                }
             }
             _ => {}
         }

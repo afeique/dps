@@ -4011,6 +4011,11 @@ fn boss_core_shielded_while_parts_live() {
     world.despawn(part); // destroyed parts despawn via the normal death path
     step.run(world);
     assert!(world.get::<CoreShielded>(boss).is_none(), "core exposed once parts are gone");
+    assert_eq!(
+        world.query::<&crate::render::reaction_fx::Shockwave>().iter(world).count(),
+        1,
+        "a one-shot shield-down ring cue fires when the core is exposed"
+    );
 }
 
 /// A `CoreShielded` boss core takes no bullet damage (the shot passes through);
