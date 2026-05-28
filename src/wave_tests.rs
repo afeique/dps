@@ -1561,6 +1561,33 @@ fn dash_trail_emits_only_while_dashing() {
     assert_eq!(ghosts(100.0, true), 0, "invuln but slow (Shield Burst) → no ghost");
 }
 
+/// The shield bubble is visible (scale > 0) only while the ship is invulnerable.
+#[test]
+fn shield_bubble_visible_only_when_invulnerable() {
+    use crate::components::{Invulnerable, Ship};
+    use crate::render::shield_bubble::{bubble_ring, update_shield_bubble, ShieldBubble};
+
+    fn bubble_scale(invuln: bool) -> f32 {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.016));
+        world.insert_resource(time);
+        let mut ship = world.spawn(Ship::default());
+        if invuln {
+            ship.insert(Invulnerable { seconds: 0.5 });
+        }
+        let b = world.spawn((ShieldBubble, bubble_ring(), Transform::default())).id();
+        let mut step = Schedule::default();
+        step.add_systems(update_shield_bubble);
+        step.run(world);
+        world.get::<Transform>(b).unwrap().scale.x
+    }
+
+    assert!(bubble_scale(true) > 0.5, "invulnerable → bubble shows");
+    assert_eq!(bubble_scale(false), 0.0, "normal play → bubble hidden");
+}
+
 /// A landed hit on an enemy scatters impact sparks; player hits + sub-1 DoT
 /// ticks don't (the player has its own hit-flash; DoT shouldn't fizz).
 #[test]

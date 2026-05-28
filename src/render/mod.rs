@@ -25,6 +25,7 @@ pub mod reaction_fx;
 pub mod screenshot;
 pub mod shake;
 pub mod shapes;
+pub mod shield_bubble;
 pub mod status_fx;
 pub mod starfield;
 pub mod telegraph_fx;

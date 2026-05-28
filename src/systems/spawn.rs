@@ -4,7 +4,7 @@
 //! `js/modules/render/shapes.js` (see `crate::render::shapes`).
 
 use crate::components::*;
-use crate::render::{charge_glow, shapes};
+use crate::render::{charge_glow, shapes, shield_bubble};
 use bevy::prelude::*;
 
 pub fn spawn_player(mut commands: Commands) {
@@ -44,6 +44,12 @@ pub fn spawn_player(mut commands: Commands) {
                 ),
                 Transform::from_translation(Vec3::new(0.0, 0.0, -0.05))
                     .with_scale(Vec3::ZERO),
+            ));
+            // Invuln shield-bubble ring (hidden until update_shield_bubble shows it).
+            ship.spawn((
+                shield_bubble::ShieldBubble,
+                shield_bubble::bubble_ring(),
+                Transform::from_translation(Vec3::new(0.0, 0.0, 0.3)).with_scale(Vec3::ZERO),
             ));
         });
 }

@@ -279,6 +279,8 @@ impl Plugin for GamePlugin {
                     // Dash afterimage: faint hull ghosts while dashing.
                     render::dash_trail::emit_dash_trail,
                     render::dash_trail::fade_dash_ghosts,
+                    // Invuln shield bubble: pulses into view during i-frames.
+                    render::shield_bubble::update_shield_bubble,
                 )
                     .run_if(in_state(GameState::Playing)),
             )
