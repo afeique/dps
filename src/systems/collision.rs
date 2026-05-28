@@ -16,8 +16,8 @@ use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
-    executioner_bonus, explosion_radius, knock_chance, stun_chance, vampirism_frac, UpgradeId,
-    Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
+    amplifier_mult, executioner_bonus, explosion_radius, knock_chance, stun_chance, vampirism_frac,
+    UpgradeId, Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
 };
 use bevy::prelude::*;
 
@@ -133,6 +133,8 @@ pub fn bullet_hits_enemy(
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
     let crit_dmg_bonus =
         equipment.affix_total(AffixKind::CritDamage) / 100.0 + meta.sp_value("CRIT_DAMAGE") / 100.0;
+    // AMPLIFIER passive: flat +% to all weapon damage.
+    let amp = amplifier_mult(upgrades.owned(UpgradeId::Amplifier));
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
@@ -203,7 +205,7 @@ pub fn bullet_hits_enemy(
                 // Lumen Drone ally-shield: incoming damage ×(1 − amount) (EN).
                 let ally = eshield.map_or(1.0, |s| 1.0 - s.amount);
                 let amount = enemy_defense_damage(
-                    bullet.damage * streak_mult * crit_mult * exec * resist_mult * ally,
+                    bullet.damage * amp * streak_mult * crit_mult * exec * resist_mult * ally,
                     ecorrode.map_or(0, |c| c.stacks),
                     econduct.is_some(),
                     has_volt,
@@ -275,7 +277,7 @@ pub fn bullet_hits_enemy(
                 // damage to every other enemy within the blast radius.
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
-                    let splash = bullet.damage * streak_mult;
+                    let splash = bullet.damage * amp * streak_mult;
                     for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;

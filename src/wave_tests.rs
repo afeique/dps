@@ -1093,6 +1093,44 @@ fn detonator_widens_reaction_radius() {
     assert!(neighbor_caught_at_150(4), "Detonator ×4 (+80% → 198px) reaches 150px");
 }
 
+/// The Amplifier passive scales all weapon damage: a 10-dmg hit lands harder
+/// with Amplifier stacked (+12%/stack), against a clean (no-resist) enemy.
+#[test]
+fn amplifier_raises_weapon_damage() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    fn damage_dealt(amp_stacks: u32) -> f32 {
+        let mut app = test_app();
+        app.world_mut()
+            .resource_mut::<Upgrades>()
+            .set(UpgradeId::Amplifier, amp_stacks);
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1000.0),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1000.0 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    assert!((damage_dealt(0) - 10.0).abs() < 0.01, "base hit is 10");
+    assert!((damage_dealt(5) - 16.0).abs() < 0.01, "Amplifier ×5 (+60%) → 16");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]
