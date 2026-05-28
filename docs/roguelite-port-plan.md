@@ -6,6 +6,31 @@
 
 ---
 
+## Progress snapshot — 2026-05-28 (~45 commits in, 200 tests green)
+
+The roguelite spine is **substantially complete and functional end-to-end.** Per-phase:
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| **E** — elements/resist/status/reactions | ✅ **DONE** | 7 elements, resist math, 9 statuses (incl. player burn/chill/corrode), shatter + oil-flare reactions. |
+| **W** — weapons/attunements | ✅ **DONE** (mods deferred) | 11 primaries + 11 power weapons, per-weapon element, attunement cycle, Overdrive; per-weapon upgrade *trees* + mechanic *mods* not ported. |
+| **EN** — enemy roster | ✅ **DONE** | all 20 kinds + special mechanics (Hydra split, Spore drones, Plaguebearer hazard, Lumen aura, Warden adapt, Ashen flare) + generic formations. |
+| **AB** — 4-slot abilities | ✅ **DONE** | all 14 abilities wired, loadout picker, HUD ability bar; Numpad 1–4 (Digit rebinding + per-ability attunements deferred to a future input/UI pass). |
+| **ME** — meta/persistence/economy | ✅ **DONE** | XP→account level→SP (12 stats, ALL wired into gameplay); armory gold-unlocks (weapons/abilities/attunements) + cycle/loadout gating; RON persistence of gold/level/sp/sp_alloc/unlocks/ability-loadout/weapon/attunement; run banking; 3 native-UI menu overlays (armory / skills / loadout). |
+| **POL** — vfx/audio | ✅ mostly **DONE** | status auras (all 9, enemy + player), reaction shockwaves, reaction/crit SFX, hitstop, gold flash, telegraph pulse, loot feed, damage numbers. Balance pass not done. |
+| **PA** — 44 passives + card draft | 🟡 **PARTIAL** | dps uses a unified `UpgradeId` catalog (now 27, incl. Catalyst) as BOTH the shop AND the wave-clear `survivor::POOL` card draft — functionally covers PA per "align to what's built"; NOT a separate 44-entry keystone registry. |
+| **IT** — item v2 | 🟡 **PARTIAL** | 8-tier rarity + 9 affixes (HP/toughness/vamp/thorns/crit/dodge/speed/regen) + equip/HP reconciliation done; **elemental-resist affixes** blocked on typed *player* damage (enemy contact only stamps status); cores + stash not built. |
+| **PU** — powerup catalog | 🟡 **PARTIAL** | `powerups.rs` drops 3 kinds; the ~25-entry permanent catalog is largely subsumed by `UpgradeId` per the acquisition-model decision. |
+| **UI** — BUILD tree / overlays / skins | 🟡 **PARTIAL** | HUD ability bar + 4 native-Bevy-UI overlays (shop/armory/skills/loadout) shipped. The unified **egui BUILD tree** + inventory/hangar/stats overlays + radial menu + 12 skins are **the largest remaining item** — wants USER aesthetic/layout direction (egui not yet added to Cargo.toml). |
+| **BO** — boss chassis | ⬜ **NOT STARTED** | dps live bosses = TITAN + tier-rage; rainboids' phase-script/weak-point chassis is shipped-but-UNUSED in the JS too, so low priority. |
+| **X** — run configurator / adaptive difficulty | ⬜ **NOT STARTED** | forward-looking; not shipped in rainboids either. |
+
+**Biggest remaining piece:** the egui BUILD-tree UI (Phase UI) — needs the user's
+look/layout input. Everything the user named as in-scope ("cards every stage, gold for
+unlocking weapons/abilities/attunements") is built and functional.
+
+---
+
 ## 0. Why this document exists
 
 `dps` is a faithful Rust+Bevy port of Rainboids **~v6.55** (the `exact-port-spec.md`
