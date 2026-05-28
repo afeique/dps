@@ -8,18 +8,25 @@ use crate::components::{Enemy, Health};
 use crate::meta::Meta;
 use bevy::prelude::*;
 
-/// The selectable difficulties: `(name, enemy-HP multiplier)`. Index 0 (Normal)
-/// is the default and leaves HP unchanged.
-pub const DIFFICULTIES: [(&str, f32); 3] = [("Normal", 1.0), ("Hard", 1.5), ("Brutal", 2.2)];
+/// The selectable difficulties: `(name, enemy-HP multiplier, gold-reward
+/// multiplier)`. Index 0 (Normal) is the default and changes nothing; harder
+/// tiers raise enemy HP *and* the gold payout (risk ↔ reward).
+pub const DIFFICULTIES: [(&str, f32, f32); 3] =
+    [("Normal", 1.0, 1.0), ("Hard", 1.5, 1.3), ("Brutal", 2.2, 1.7)];
 
 /// Enemy-HP multiplier for difficulty `level`, clamped to the table (default 1.0).
 pub fn difficulty_hp_mult(level: u8) -> f32 {
-    DIFFICULTIES.get(level as usize).map(|(_, m)| *m).unwrap_or(1.0)
+    DIFFICULTIES.get(level as usize).map(|(_, m, _)| *m).unwrap_or(1.0)
+}
+
+/// Gold-reward multiplier for difficulty `level`, clamped to the table (default 1.0).
+pub fn difficulty_reward_mult(level: u8) -> f32 {
+    DIFFICULTIES.get(level as usize).map(|(_, _, r)| *r).unwrap_or(1.0)
 }
 
 /// Display name for difficulty `level` (clamped to the table).
 pub fn difficulty_name(level: u8) -> &'static str {
-    DIFFICULTIES.get(level as usize).map(|(n, _)| *n).unwrap_or("Normal")
+    DIFFICULTIES.get(level as usize).map(|(n, _, _)| *n).unwrap_or("Normal")
 }
 
 /// Scale each freshly-spawned enemy's HP by the run difficulty (once, via

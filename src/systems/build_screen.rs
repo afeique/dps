@@ -143,9 +143,9 @@ pub fn build_screen_ui(
                 // Run difficulty selector (Phase X) — scales the run's enemy HP.
                 ui.horizontal(|ui| {
                     ui.monospace("Difficulty:");
-                    for (i, (name, mult)) in DIFFICULTIES.iter().enumerate() {
+                    for (i, (name, hp, reward)) in DIFFICULTIES.iter().enumerate() {
                         let i = i as u8;
-                        let label = format!("{name} (×{mult} HP)");
+                        let label = format!("{name} (×{hp} HP, ×{reward} gold)");
                         if ui.selectable_label(meta.difficulty == i, label).clicked() {
                             meta.difficulty = i;
                             save_meta(&meta);

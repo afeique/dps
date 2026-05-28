@@ -4090,12 +4090,17 @@ fn boss_parts_track_their_boss_and_clean_up() {
 #[test]
 fn run_difficulty_scales_enemy_hp() {
     use crate::meta::Meta;
-    use crate::systems::difficulty::{apply_difficulty, difficulty_hp_mult, difficulty_name};
+    use crate::systems::difficulty::{
+        apply_difficulty, difficulty_hp_mult, difficulty_name, difficulty_reward_mult,
+    };
 
     assert_eq!(difficulty_hp_mult(0), 1.0, "Normal → ×1");
     assert!((difficulty_hp_mult(2) - 2.2).abs() < 1e-6, "Brutal → ×2.2");
     assert_eq!(difficulty_hp_mult(99), 1.0, "out of range → Normal");
     assert_eq!(difficulty_name(1), "Hard");
+    // Risk/reward: harder tiers pay more gold.
+    assert_eq!(difficulty_reward_mult(0), 1.0, "Normal → ×1 gold");
+    assert!((difficulty_reward_mult(2) - 1.7).abs() < 1e-6, "Brutal → ×1.7 gold");
 
     fn hp_after(difficulty: u8) -> f32 {
         let mut app = test_app();

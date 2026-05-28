@@ -317,12 +317,15 @@ pub fn collect_orbs(
     mut commands: Commands,
     mut score: ResMut<Score>,
     upgrades: Res<Upgrades>,
+    meta: Res<crate::meta::Meta>,
     mut pickup: MessageWriter<crate::messages::Pickup>,
     mut player: Query<(&Transform, &Collider, &mut Health), With<Ship>>,
     orbs: Query<(Entity, &Transform, &Collider, &Orb)>,
 ) {
-    // SCAVENGER passive scales the gold value of every orb collected this frame.
-    let gold_mult = scavenger_mult(upgrades.owned(UpgradeId::Scavenger));
+    // Orb gold scales by the SCAVENGER passive × the run difficulty's reward mult
+    // (harder runs pay more — the risk/reward half of Phase X).
+    let gold_mult = scavenger_mult(upgrades.owned(UpgradeId::Scavenger))
+        * crate::systems::difficulty::difficulty_reward_mult(meta.difficulty);
     let Ok((ptf, pc, mut hp)) = player.single_mut() else {
         return; // no player — nothing to collect
     };
