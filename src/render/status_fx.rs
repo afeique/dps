@@ -6,7 +6,8 @@
 //! or the target — is gone. It never touches sim state.
 
 use crate::components::{
-    Bleed, Burning, Chill, Collider, Conduct, Corrode, Frozen, Mark, Oil, Stunned,
+    Bleed, Burning, Chill, Collider, Conduct, Corrode, Frozen, Mark, Oil, PlayerBurn, PlayerChill,
+    PlayerCorrode, Stunned,
 };
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -100,6 +101,10 @@ pub fn spawn_status_auras(
     mark: Query<(Entity, &Collider), Added<Mark>>,
     oil: Query<(Entity, &Collider), Added<Oil>>,
     bleed: Query<(Entity, &Collider), Added<Bleed>>,
+    // The player's own statuses reuse the matching aura visual.
+    player_burn: Query<(Entity, &Collider), Added<PlayerBurn>>,
+    player_chill: Query<(Entity, &Collider), Added<PlayerChill>>,
+    player_corrode: Query<(Entity, &Collider), Added<PlayerCorrode>>,
 ) {
     let mut spawn = |e: Entity, col: &Collider, kind: AuraKind| {
         commands.spawn((
@@ -135,6 +140,15 @@ pub fn spawn_status_auras(
     for (e, col) in &bleed {
         spawn(e, col, AuraKind::Bleed);
     }
+    for (e, col) in &player_burn {
+        spawn(e, col, AuraKind::Burn);
+    }
+    for (e, col) in &player_chill {
+        spawn(e, col, AuraKind::Chill);
+    }
+    for (e, col) in &player_corrode {
+        spawn(e, col, AuraKind::Corrode);
+    }
 }
 
 /// Follow each aura's target and pulse/spin it; despawn when the status (or the
@@ -156,6 +170,9 @@ pub fn update_status_auras(
             Has<Mark>,
             Has<Oil>,
             Has<Bleed>,
+            Has<PlayerBurn>,
+            Has<PlayerChill>,
+            Has<PlayerCorrode>,
         ),
         Without<StatusAura>,
     >,
@@ -163,19 +180,34 @@ pub fn update_status_auras(
 ) {
     let t = time.elapsed_secs();
     for (ae, aura, mut atf) in &mut auras {
-        let Ok((ttf, burning, stunned, chill, frozen, conduct, corrode, mark, oil, bleed)) =
-            targets.get(aura.target)
+        let Ok((
+            ttf,
+            burning,
+            stunned,
+            chill,
+            frozen,
+            conduct,
+            corrode,
+            mark,
+            oil,
+            bleed,
+            player_burn,
+            player_chill,
+            player_corrode,
+        )) = targets.get(aura.target)
         else {
             commands.entity(ae).despawn(); // target gone
             continue;
         };
+        // Burn/Chill/Corrode auras are shared by the enemy status and the
+        // player's own version of that status.
         let active = match aura.kind {
-            AuraKind::Burn => burning,
+            AuraKind::Burn => burning || player_burn,
             AuraKind::Stun => stunned,
-            AuraKind::Chill => chill,
+            AuraKind::Chill => chill || player_chill,
             AuraKind::Frozen => frozen,
             AuraKind::Conduct => conduct,
-            AuraKind::Corrode => corrode,
+            AuraKind::Corrode => corrode || player_corrode,
             AuraKind::Mark => mark,
             AuraKind::Oil => oil,
             AuraKind::Bleed => bleed,

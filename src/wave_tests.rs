@@ -3847,6 +3847,44 @@ fn elemental_status_auras_stack_and_despawn_independently() {
     }
 }
 
+/// The player's own statuses (PlayerBurn/Chill/Corrode) get the same aura: it
+/// spawns when afflicted and despawns when the status clears.
+#[test]
+fn player_status_gets_an_aura() {
+    use crate::components::PlayerChill;
+    use crate::render::status_fx::{spawn_status_auras, update_status_auras, StatusAura};
+
+    let mut app = test_app();
+    app.world_mut().insert_resource(Time::<()>::default());
+
+    let player = app
+        .world_mut()
+        .spawn((
+            Ship::default(),
+            Collider { radius: 14.0 },
+            PlayerChill { secs: 2.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut spawn = Schedule::default();
+    spawn.add_systems(spawn_status_auras);
+    spawn.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 1, "a chilled player gets an aura");
+    }
+
+    let mut update = Schedule::default();
+    update.add_systems(update_status_auras);
+    app.world_mut().entity_mut(player).remove::<PlayerChill>();
+    update.run(app.world_mut());
+    {
+        let mut q = app.world_mut().query::<&StatusAura>();
+        assert_eq!(q.iter(app.world()).count(), 0, "aura clears when the player un-chills");
+    }
+}
+
 // ── 75. survivor_pick_chains_into_shop ────────────────────────────────────────
 
 /// A stage-clear survivor-card pick applies the card and chains into the Shop
