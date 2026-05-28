@@ -687,14 +687,20 @@ pub fn apply_item_hp(
 /// (the only resist source), so unequipping clears it.
 pub fn apply_item_resist(
     equipment: Res<Equipment>,
+    upgrades: Res<crate::systems::shop::Upgrades>,
     mut q: Query<&mut crate::combat::element::Resistances, With<Ship>>,
 ) {
     let Ok(mut res) = q.single_mut() else {
         return;
     };
+    // Warding passive adds flat resist to EVERY element, on top of per-element
+    // resist affixes.
+    let warding = crate::systems::shop::warding_bonus(
+        upgrades.owned(crate::systems::shop::UpgradeId::Warding),
+    );
     for kind in AffixKind::RESISTS {
         if let Some(e) = kind.resist_element() {
-            res.set(e, equipment.affix_total(kind) / 100.0);
+            res.set(e, equipment.affix_total(kind) / 100.0 + warding);
         }
     }
 }

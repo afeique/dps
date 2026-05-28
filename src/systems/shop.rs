@@ -54,12 +54,14 @@ pub enum UpgradeId {
     Detonator,
     /// Flat +% to all weapon damage.
     Amplifier,
+    /// Flat +% elemental resistance to ALL elements (feeds player Resistances).
+    Warding,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 29] = [
+    pub const ALL: [UpgradeId; 30] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -89,6 +91,7 @@ impl UpgradeId {
         Self::Catalyst,
         Self::Detonator,
         Self::Amplifier,
+        Self::Warding,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -125,6 +128,7 @@ impl UpgradeId {
             Self::Catalyst => 26,
             Self::Detonator => 27,
             Self::Amplifier => 28,
+            Self::Warding => 29,
         }
     }
 
@@ -159,6 +163,7 @@ impl UpgradeId {
             Self::Catalyst => "Catalyst      (+reaction dmg)",
             Self::Detonator => "Detonator     (+reaction radius)",
             Self::Amplifier => "Amplifier     (+12% damage)",
+            Self::Warding => "Warding       (+8% all resist)",
         }
     }
 
@@ -194,6 +199,7 @@ impl UpgradeId {
             Self::Catalyst => 2400,
             Self::Detonator => 2300,
             Self::Amplifier => 2000,
+            Self::Warding => 2200,
         }
     }
 
@@ -228,6 +234,7 @@ impl UpgradeId {
             Self::Catalyst => 5,
             Self::Detonator => 4,
             Self::Amplifier => 5,
+            Self::Warding => 5,
         }
     }
 }
@@ -248,6 +255,12 @@ pub fn detonator_bonus(stacks: u32) -> f32 {
 /// player bullet damage in `collision::bullet_hits_enemy`.
 pub fn amplifier_mult(stacks: u32) -> f32 {
     1.0 + 0.12 * stacks as f32
+}
+
+/// All-element resist fraction from `Warding` stacks (+8%/stack): added to the
+/// player's per-element `Resistances` in `items::apply_item_resist`.
+pub fn warding_bonus(stacks: u32) -> f32 {
+    0.08 * stacks as f32
 }
 
 /// Stun chance applied by the `_STUN` bullet trait at `stacks` (spec III.6:
@@ -580,6 +593,7 @@ pub fn apply_upgrade(
         | UpgradeId::Whirlwind
         | UpgradeId::Catalyst
         | UpgradeId::Detonator
-        | UpgradeId::Amplifier => {}
+        | UpgradeId::Amplifier
+        | UpgradeId::Warding => {}
     }
 }

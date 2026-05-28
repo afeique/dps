@@ -4480,6 +4480,31 @@ fn resist_affixes_populate_player_resistances() {
     assert_eq!(res.get(Element::Cryo), 0.0, "other elements stay neutral");
 }
 
+/// The Warding passive grants flat resist to EVERY element via apply_item_resist.
+#[test]
+fn warding_passive_grants_all_element_resist() {
+    use crate::combat::element::{Element, Resistances};
+    use crate::systems::items::apply_item_resist;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    let mut app = test_app();
+    app.world_mut()
+        .resource_mut::<Upgrades>()
+        .set(UpgradeId::Warding, 5); // +8%/stack → +40% all elements
+    let player = app
+        .world_mut()
+        .spawn((Ship::default(), Resistances::new(), Transform::default()))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_item_resist);
+    step.run(app.world_mut());
+
+    let res = app.world().get::<Resistances>(player).unwrap();
+    assert!((res.get(Element::Pyro) - 0.40).abs() < 1e-4, "Warding ×5 → 0.40 Pyro resist");
+    assert!((res.get(Element::Void) - 0.40).abs() < 1e-4, "Warding covers every element");
+}
+
 // ── 78. item_drop_rates_and_determinism ───────────────────────────────────────
 
 /// Per-category drop rates match the spec (boss strictly higher); `roll_item_drops`
