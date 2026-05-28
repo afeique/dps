@@ -28,6 +28,7 @@ pub mod powerups;
 pub mod reactions;
 pub mod shop;
 pub mod skills;
+pub mod sp_alloc;
 pub mod spawn;
 pub mod status;
 pub mod survivor;

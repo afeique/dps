@@ -196,6 +196,28 @@ impl Plugin for GamePlugin {
                 )
                     .run_if(in_state(GameState::Armory)),
             )
+            // ── skill points (allocate account SP; opened with S on title) ─────
+            .init_resource::<systems::sp_alloc::SpAllocSel>()
+            .add_systems(
+                Update,
+                systems::sp_alloc::open_sp_alloc.run_if(in_state(GameState::Title)),
+            )
+            .add_systems(
+                OnEnter(GameState::SpAllocation),
+                systems::sp_alloc::spawn_sp_ui,
+            )
+            .add_systems(
+                OnExit(GameState::SpAllocation),
+                systems::flow::despawn_screen::<systems::sp_alloc::SpPanel>,
+            )
+            .add_systems(
+                Update,
+                (
+                    systems::sp_alloc::sp_ui_update,
+                    systems::sp_alloc::sp_input,
+                )
+                    .run_if(in_state(GameState::SpAllocation)),
+            )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)
             .add_systems(

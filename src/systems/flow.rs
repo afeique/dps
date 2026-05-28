@@ -87,7 +87,7 @@ pub fn enter_title(mut commands: Commands) {
         &mut commands,
         TitleScreen,
         "DARK PRISM SOLID",
-        "ENTER  launch          A  armory",
+        "ENTER  launch     A  armory     S  skills",
         Color::srgb(0.55, 0.85, 1.0),
     );
 }

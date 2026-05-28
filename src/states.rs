@@ -21,6 +21,9 @@ pub enum GameState {
     /// Armory — spend persistent account-gold on permanent unlocks. Opened with
     /// `A` from the title; `Esc` → `Title`.
     Armory,
+    /// Skill-points screen — allocate banked account SP across the 12 stats.
+    /// Opened with `S` from the title; `Esc` → `Title`.
+    SpAllocation,
     /// Wave-clear survivor-card pick (pauses the sim); 1/2/3 → `Playing`.
     Survivor,
     /// Death / results screen; ENTER → `Title`.
