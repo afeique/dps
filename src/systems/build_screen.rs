@@ -60,6 +60,18 @@ pub fn build_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<G
     }
 }
 
+/// A cohesive dark-space theme for the BUILD screen: deep-navy panels, soft
+/// cyan-white text, and cyan selection/links to match the game's HDR palette.
+/// Only touches widely-stable `Visuals` fields, set fresh each frame.
+fn apply_build_theme(ctx: &egui::Context) {
+    let mut v = egui::Visuals::dark();
+    v.panel_fill = egui::Color32::from_rgb(8, 12, 20); // deep space navy
+    v.override_text_color = Some(egui::Color32::from_rgb(200, 225, 240));
+    v.selection.bg_fill = egui::Color32::from_rgb(20, 72, 98); // cyan-tinted highlight
+    v.hyperlink_color = egui::Color32::from_rgb(120, 220, 255);
+    ctx.set_visuals(v);
+}
+
 /// Draw the BUILD screen (runs in `EguiPrimaryContextPass` while in `Build`).
 pub fn build_screen_ui(
     mut contexts: EguiContexts,
@@ -69,6 +81,7 @@ pub fn build_screen_ui(
     mut rng: ResMut<GameRng>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
+    apply_build_theme(ctx);
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.add_space(8.0);
         ui.heading(egui::RichText::new("◆ BUILD ◆").color(egui::Color32::from_rgb(120, 220, 255)));
