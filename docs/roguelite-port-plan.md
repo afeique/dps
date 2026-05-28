@@ -17,17 +17,22 @@ The roguelite spine is **substantially complete and functional end-to-end.** Per
 | **EN** — enemy roster | ✅ **DONE** | all 20 kinds + special mechanics (Hydra split, Spore drones, Plaguebearer hazard, Lumen aura, Warden adapt, Ashen flare) + generic formations. |
 | **AB** — 4-slot abilities | ✅ **DONE** | all 14 abilities wired, loadout picker, HUD ability bar; Numpad 1–4 (Digit rebinding + per-ability attunements deferred to a future input/UI pass). |
 | **ME** — meta/persistence/economy | ✅ **DONE** | XP→account level→SP (12 stats, ALL wired into gameplay); armory gold-unlocks (weapons/abilities/attunements) + cycle/loadout gating; RON persistence of gold/level/sp/sp_alloc/unlocks/ability-loadout/weapon/attunement; run banking; 3 native-UI menu overlays (armory / skills / loadout). |
-| **POL** — vfx/audio | ✅ mostly **DONE** | status auras (all 9, enemy + player), reaction shockwaves, reaction/crit SFX, hitstop, gold flash, telegraph pulse, loot feed, damage numbers. Balance pass not done. |
-| **PA** — 44 passives + card draft | 🟡 **PARTIAL** | dps uses a unified `UpgradeId` catalog (now 27, incl. Catalyst) as BOTH the shop AND the wave-clear `survivor::POOL` card draft — functionally covers PA per "align to what's built"; NOT a separate 44-entry keystone registry. |
-| **IT** — item v2 | 🟡 **PARTIAL** | 8-tier rarity + 9 affixes (HP/toughness/vamp/thorns/crit/dodge/speed/regen) + equip/HP reconciliation done; **elemental-resist affixes** blocked on typed *player* damage (enemy contact only stamps status); cores + stash not built. |
+| **POL** — vfx/audio | ✅ mostly **DONE** | status auras (all 9, enemy + player), reaction shockwaves, hitstop, gold flash, telegraph pulse, loot feed, damage numbers; player VFX (engine trail, muzzle flash, hit-flash, charge-glow, impact sparks, dash afterimage, shield bubble, low-HP pulse, level-up aura), enemy-element halos; **comprehensive synth SFX** (shoot, power-fire, explosion, hit, pickup, reactions, crit, level-up, dash, bomb, shield, ability-cast). Balance pass not done. |
+| **PA** — 44 passives + card draft | ✅ **DONE** (align-to-built) | unified `UpgradeId` catalog (now **41**) is BOTH the shop AND the wave-clear `survivor::POOL` card draft (22 cards) — covers PA per "align to what's built"; near rainboids' ~44 target. NOT a separate keystone registry. |
+| **IT** — item v2 | 🟡 **PARTIAL** | 8-tier rarity + 15 affixes (HP/toughness/vamp/thorns/crit/dodge/speed/regen + **6 per-element resists**) + equip/HP/resist reconciliation done. **Typed player damage is now COMPLETE** (contact + ranged carry elements; resist affixes + Warding feed player `Resistances`) — the old resist-affix blocker is RESOLVED. cores + stash still not built. |
 | **PU** — powerup catalog | 🟡 **PARTIAL** | `powerups.rs` drops 3 kinds; the ~25-entry permanent catalog is largely subsumed by `UpgradeId` per the acquisition-model decision. |
-| **UI** — BUILD tree / overlays / skins | 🟡 **PARTIAL** | HUD ability bar + 4 native-Bevy-UI overlays (shop/armory/skills/loadout) shipped. The unified **egui BUILD tree** + inventory/hangar/stats overlays + radial menu + 12 skins are **the largest remaining item** — wants USER aesthetic/layout direction (egui not yet added to Cargo.toml). |
+| **UI** — BUILD tree / overlays / skins | 🟡 **PARTIAL** | egui **IS** in Cargo.toml; the unified **egui BUILD tree is built** (`build_screen.rs`, B on title — Skills/Armory/Loadout tabs all interactive) alongside the HUD ability bar + 4 native overlays. Remaining: inventory/hangar/stats overlays, radial menu, 12 skins, and egui **aesthetic/layout polish** — wants USER direction. |
 | **BO** — boss chassis | ⬜ **NOT STARTED** | dps live bosses = TITAN + tier-rage; rainboids' phase-script/weak-point chassis is shipped-but-UNUSED in the JS too, so low priority. |
 | **X** — run configurator / adaptive difficulty | ⬜ **NOT STARTED** | forward-looking; not shipped in rainboids either. |
 
-**Biggest remaining piece:** the egui BUILD-tree UI (Phase UI) — needs the user's
-look/layout input. Everything the user named as in-scope ("cards every stage, gold for
-unlocking weapons/abilities/attunements") is built and functional.
+**Biggest remaining piece:** egui BUILD-tree **aesthetic/layout polish** + the extra
+overlays (inventory/hangar/stats), radial menu, and 12 skins (Phase UI) — these need the
+user's look/layout input. The functional spine (combat, weapons, enemies, abilities, meta,
+41-passive catalog + card draft, comprehensive VFX/SFX) is **built and functional**;
+everything the user named as in-scope ("cards every stage, gold for unlocking weapons/
+abilities/attunements", typed damage + resist affixes, the egui BUILD screen) is done.
+Remaining beyond UI polish: item cores/stash, boss chassis (BO), run configurator (X) —
+all lower-priority or not shipped in the JS either.
 
 ---
 
