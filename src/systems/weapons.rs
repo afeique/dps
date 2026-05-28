@@ -143,6 +143,11 @@ impl WeaponKind {
         }
     }
 
+    /// Parse a stable [`WeaponKind::id`] back into the variant (save data).
+    pub fn from_id(s: &str) -> Option<WeaponKind> {
+        Self::ALL.into_iter().find(|w| w.id() == s)
+    }
+
     /// The five Digit-bound weapons are the free base loadout; the six exotic
     /// (Tab/Q-only) weapons are gated behind armory gold-unlocks.
     pub fn base_unlocked(self) -> bool {
@@ -594,6 +599,54 @@ pub fn cycle_attunement(
 ) {
     if keys.just_pressed(KeyCode::KeyT) {
         attune.0 = next_attunement_avail(attune.0, &meta);
+    }
+}
+
+/// The single attuned element, if exactly one is set (else `None`).
+fn single_attunement(set: ElementSet) -> Option<Element> {
+    if set.len() != 1 {
+        return None;
+    }
+    [
+        Element::Pyro,
+        Element::Cryo,
+        Element::Volt,
+        Element::Toxic,
+        Element::Void,
+        Element::Radiant,
+    ]
+    .into_iter()
+    .find(|e| set.contains(*e))
+}
+
+/// Save the current weapon + attunement into `Meta` at run end (ME persistence)
+/// so the next run starts on the player's last build. One disk write per run end.
+pub fn persist_build(
+    mut meta: ResMut<crate::meta::Meta>,
+    cur: Res<CurrentWeapon>,
+    attune: Res<Attunements>,
+) {
+    meta.weapon = Some(cur.0.id().to_string());
+    meta.attunement = single_attunement(attune.0).map(|e| e.id().to_string());
+    crate::meta::save_meta(&meta);
+}
+
+/// Restore the saved weapon + attunement at startup — each gated by its unlock
+/// (a saved choice that's since locked falls back to the default).
+pub fn apply_saved_build(
+    meta: Res<crate::meta::Meta>,
+    mut cur: ResMut<CurrentWeapon>,
+    mut attune: ResMut<Attunements>,
+) {
+    if let Some(w) = meta.weapon.as_deref().and_then(WeaponKind::from_id) {
+        if w.is_available(&meta) {
+            cur.0 = w;
+        }
+    }
+    if let Some(e) = meta.attunement.as_deref().and_then(Element::from_id) {
+        if attunement_unlocked(e, &meta) {
+            attune.0 = ElementSet::single(e);
+        }
     }
 }
 

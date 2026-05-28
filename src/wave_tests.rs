@@ -4102,6 +4102,41 @@ fn weapon_cycle_skips_locked_exotics() {
     );
 }
 
+/// A saved weapon + attunement are restored at startup, but only when still
+/// unlocked (a locked saved choice falls back to the default).
+#[test]
+fn saved_build_restores_only_when_unlocked() {
+    use crate::combat::element::{Element, ElementSet};
+    use crate::meta::Meta;
+    use crate::systems::weapons::{apply_saved_build, Attunements, CurrentWeapon, WeaponKind};
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.weapon = Some(WeaponKind::FlakCannon.id().to_string());
+        meta.attunement = Some(Element::Pyro.id().to_string());
+        meta.unlock(WeaponKind::FlakCannon.id(), 0); // weapon unlocked
+        // Pyro attunement deliberately NOT unlocked.
+    }
+    app.world_mut().init_resource::<CurrentWeapon>();
+    app.world_mut().init_resource::<Attunements>();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_saved_build);
+    step.run(app.world_mut());
+
+    assert_eq!(
+        app.world().resource::<CurrentWeapon>().0,
+        WeaponKind::FlakCannon,
+        "the unlocked saved weapon is restored"
+    );
+    assert_eq!(
+        app.world().resource::<Attunements>().0,
+        ElementSet::EMPTY,
+        "the locked saved attunement is ignored"
+    );
+}
+
 /// The player's own statuses (PlayerBurn/Chill/Corrode) get the same aura: it
 /// spawns when afflicted and despawns when the status clears.
 #[test]

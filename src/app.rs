@@ -88,6 +88,8 @@ impl Plugin for GamePlugin {
                     audio::setup_sfx,
                     // Apply the saved ability loadout from Meta (ME persistence).
                     systems::loadout_screen::apply_saved_loadout,
+                    // Restore the saved weapon + attunement (ME persistence).
+                    systems::weapons::apply_saved_build,
                 ),
             )
             // ── presentation: death FX + parallax starfield ─────────────
@@ -284,7 +286,11 @@ impl Plugin for GamePlugin {
             // ── death → GameOver → title flow ───────────────────────────
             .add_systems(
                 OnEnter(GameState::GameOver),
-                (systems::flow::enter_game_over, crate::meta::bank_run),
+                (
+                    systems::flow::enter_game_over,
+                    crate::meta::bank_run,
+                    systems::weapons::persist_build,
+                ),
             )
             .add_systems(
                 OnExit(GameState::GameOver),
@@ -322,7 +328,11 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 OnEnter(GameState::GameComplete),
-                (systems::flow::enter_game_complete, crate::meta::bank_run),
+                (
+                    systems::flow::enter_game_complete,
+                    crate::meta::bank_run,
+                    systems::weapons::persist_build,
+                ),
             )
             .add_systems(
                 OnExit(GameState::GameComplete),

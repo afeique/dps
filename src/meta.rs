@@ -92,6 +92,13 @@ pub struct Meta {
     /// `EquippedAbilities` at startup; rewritten by the loadout picker.
     #[serde(default)]
     pub abilities: Vec<String>,
+    /// Last-used primary weapon id (`WeaponKind::id`); `None` = default. Saved at
+    /// run end, restored at startup (gated by unlock availability).
+    #[serde(default)]
+    pub weapon: Option<String>,
+    /// Last-used attunement element id (`Element::id`); `None` = no attunement.
+    #[serde(default)]
+    pub attunement: Option<String>,
 }
 
 impl Default for Meta {
@@ -104,6 +111,8 @@ impl Default for Meta {
             unlocked: BTreeSet::new(),
             sp_alloc: BTreeMap::new(),
             abilities: Vec::new(),
+            weapon: None,
+            attunement: None,
         }
     }
 }
