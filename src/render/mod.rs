@@ -12,6 +12,7 @@ pub mod engine_trail;
 pub mod explosion;
 pub mod flash;
 pub mod gear_panel;
+pub mod hit_flash;
 pub mod hud;
 pub mod loot_feed;
 pub mod minimap;

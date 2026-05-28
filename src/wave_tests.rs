@@ -1397,6 +1397,43 @@ fn muzzle_flash_only_on_player_fire() {
     assert_eq!(q.iter(world).count(), 1, "one flash per player shot, none for enemy fire");
 }
 
+/// A player hit spawns one localized hull burst; no hit spawns nothing.
+#[test]
+fn hit_flash_bursts_on_player_hurt() {
+    use crate::components::Ship;
+    use crate::messages::PlayerHurt;
+    use crate::render::hit_flash::{emit_player_hit_flash, fade_hit_flash, HitFlash};
+
+    fn bursts_after(hits: &[f32]) -> usize {
+        let mut app = test_app();
+        let world = app.world_mut();
+        world.spawn((Ship::default(), Transform::default()));
+        for &amount in hits {
+            world.write_message(PlayerHurt { amount });
+        }
+        let mut step = Schedule::default();
+        step.add_systems(emit_player_hit_flash);
+        step.run(world);
+        let mut q = world.query::<&HitFlash>();
+        q.iter(world).count()
+    }
+
+    assert_eq!(bursts_after(&[]), 0, "no hit → no burst");
+    // Several hits in one frame collapse into a single burst.
+    assert_eq!(bursts_after(&[10.0, 5.0]), 1, "hits this frame → one burst");
+
+    // The burst shrinks as its lifetime drains.
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((HitFlash { max_life: 0.13 }, Transform::default(), Lifetime { seconds: 0.065 }))
+        .id();
+    let mut step = Schedule::default();
+    step.add_systems(fade_hit_flash);
+    step.run(world);
+    assert!(world.get::<Transform>(e).unwrap().scale.x < 0.6, "fades toward zero");
+}
+
 /// Taking a hit (`PlayerHurt`) triggers a red screen flash (graphical parity).
 #[test]
 fn player_hurt_triggers_red_flash() {
