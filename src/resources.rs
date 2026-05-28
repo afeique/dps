@@ -86,18 +86,30 @@ pub struct LastStandUsed(pub bool);
 /// Power-weapon energy (spec III.3, 6.29.0): built by landing hits (+4 each,
 /// `ENERGY_PER_HIT`), capped at `ENERGY_MAX`, spent to fire power weapons,
 /// reset to 0 each run.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct EnergyMeter {
     pub current: f32,
+    /// Usable cap — `ENERGY_MAX` + the SP CAPACITOR bonus, set per run by
+    /// `power_weapon::reset_energy`. Defaults to the base cap.
+    pub max: f32,
 }
 
 pub const ENERGY_MAX: f32 = 100.0;
 pub const ENERGY_PER_HIT: f32 = 4.0;
 
+impl Default for EnergyMeter {
+    fn default() -> Self {
+        Self {
+            current: 0.0,
+            max: ENERGY_MAX,
+        }
+    }
+}
+
 impl EnergyMeter {
-    /// Add energy (e.g. on a landed hit), clamped to the cap.
+    /// Add energy (e.g. on a landed hit), clamped to the live cap.
     pub fn gain(&mut self, amount: f32) {
-        self.current = (self.current + amount).min(ENERGY_MAX);
+        self.current = (self.current + amount).min(self.max);
     }
     /// Spend `cost` if affordable; returns whether the spend happened.
     pub fn try_spend(&mut self, cost: f32) -> bool {

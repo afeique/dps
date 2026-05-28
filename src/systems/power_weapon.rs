@@ -658,8 +658,14 @@ pub fn beam_ray_hit_dist(
 // ─── Systems ─────────────────────────────────────────────────────────────────
 
 /// Reset energy to 0 at the start of a run (`OnEnter(Playing)`).
-pub fn reset_energy(mut energy: ResMut<EnergyMeter>, mut pw: ResMut<PowerWeapon>) {
+pub fn reset_energy(
+    mut energy: ResMut<EnergyMeter>,
+    mut pw: ResMut<PowerWeapon>,
+    meta: Res<crate::meta::Meta>,
+) {
     energy.current = 0.0;
+    // SP CAPACITOR raises the usable energy cap (flat).
+    energy.max = crate::resources::ENERGY_MAX + meta.sp_value("CAPACITOR");
     pw.cooldown = 0.0;
 }
 
@@ -693,6 +699,7 @@ pub fn fire_power_weapon(
     time: Res<Time>,
     mut pw: ResMut<PowerWeapon>,
     mut energy: ResMut<EnergyMeter>,
+    meta: Res<crate::meta::Meta>,
     mut commands: Commands,
     player: Query<(Entity, &Transform), With<Ship>>,
     beams: Query<(), With<Beam>>,
@@ -722,7 +729,8 @@ pub fn fire_power_weapon(
         return;
     }
 
-    let cost = pw.kind.energy_cost();
+    // SP EFFICIENCY shaves the power-weapon energy cost (up to −50%).
+    let cost = pw.kind.energy_cost() * (1.0 - meta.sp_value("EFFICIENCY") / 100.0).max(0.0);
     if !energy.try_spend(cost) {
         return; // not enough energy
     }

@@ -253,8 +253,9 @@ pub fn bullet_hits_enemy(
                         hp.current += amount * vamp;
                     }
                 }
-                // Landing a hit charges the power-weapon energy meter (spec III.3).
-                energy.gain(ENERGY_PER_HIT);
+                // Landing a hit charges the power-weapon energy meter (spec III.3);
+                // SP REACTOR boosts the gain (% energy regen).
+                energy.gain(ENERGY_PER_HIT * (1.0 + meta.sp_value("REACTOR") / 100.0));
                 // `_STUN` trait proc: briefly stun the enemy (spec III.6).
                 if stun_p > 0.0 && rng.next_f32() < stun_p {
                     commands.entity(enemy_e).insert(Stunned { secs: 1.0 });

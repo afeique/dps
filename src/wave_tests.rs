@@ -399,6 +399,39 @@ fn energy_meter_gain_and_spend() {
     assert!(!e.try_spend(60.0), "Lance Beam (60) not affordable with 45");
 }
 
+/// Account SP CAPACITOR raises the energy cap (Phase ME): reset_energy sets the
+/// per-run max to ENERGY_MAX + the SP bonus, and `gain` then fills past the base.
+#[test]
+fn sp_capacitor_raises_energy_cap() {
+    use crate::meta::Meta;
+    use crate::resources::{EnergyMeter, ENERGY_MAX};
+    use crate::systems::power_weapon::{reset_energy, PowerWeapon};
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.sp = 20;
+        for _ in 0..20 {
+            meta.allocate_sp("CAPACITOR"); // +100 max energy at the cap
+        }
+    }
+    app.world_mut().init_resource::<EnergyMeter>();
+    app.world_mut().init_resource::<PowerWeapon>();
+
+    let mut step = Schedule::default();
+    step.add_systems(reset_energy);
+    step.run(app.world_mut());
+
+    let target = ENERGY_MAX + 100.0;
+    assert!(
+        (app.world().resource::<EnergyMeter>().max - target).abs() < 1e-3,
+        "CAPACITOR lifts the cap to {target}"
+    );
+    // gain now fills past the base 100 cap.
+    app.world_mut().resource_mut::<EnergyMeter>().gain(1000.0);
+    assert!((app.world().resource::<EnergyMeter>().current - target).abs() < 1e-3);
+}
+
 // ── 8. nova_ring_band_hit ─────────────────────────────────────────────────────
 
 /// A Nova ring damages an enemy only while its expanding front (a 30 px band

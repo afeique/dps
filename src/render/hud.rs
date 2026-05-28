@@ -347,7 +347,7 @@ pub fn update_hud(
                      ENERGY {}/{}  [{}]{}\n\
                      WEAPON {}",
                     energy.current.round() as i32,
-                    crate::resources::ENERGY_MAX as i32,
+                    energy.max.round() as i32,
                     pw.kind.name(),
                     if ready { " READY" } else { "" },
                     cur.0.name(),
