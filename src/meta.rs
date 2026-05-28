@@ -7,6 +7,7 @@
 //! kills across runs) only grants SP. Run-gold is banked into `account_gold` at
 //! run end. The unlock sets, cores, and stash join this struct as those land.
 
+use crate::components::loadout::Ability;
 use crate::messages::Death;
 use crate::resources::Score;
 use bevy::prelude::*;
@@ -86,6 +87,11 @@ pub struct Meta {
     /// [`Meta::sp`]; the run reads effective bonuses via [`Meta::sp_value`].
     #[serde(default)]
     pub sp_alloc: BTreeMap<String, u32>,
+    /// The saved 4-slot ability loadout as stable ability ids (`""` = empty
+    /// slot). Empty vec = "no saved loadout, use the default". Applied to
+    /// `EquippedAbilities` at startup; rewritten by the loadout picker.
+    #[serde(default)]
+    pub abilities: Vec<String>,
 }
 
 impl Default for Meta {
@@ -97,6 +103,7 @@ impl Default for Meta {
             sp: 0,
             unlocked: BTreeSet::new(),
             sp_alloc: BTreeMap::new(),
+            abilities: Vec::new(),
         }
     }
 }
@@ -162,6 +169,27 @@ impl Meta {
         sp_stat_def(id).map_or(0.0, |d| {
             self.sp_points(id) as f32 * (d.max / SP_STAT_MAX_POINTS as f32)
         })
+    }
+
+    /// Persist the 4-slot ability loadout (empty slot → `""`) for cross-run memory.
+    pub fn set_ability_loadout(&mut self, slots: &[Option<Ability>; 4]) {
+        self.abilities = slots
+            .iter()
+            .map(|s| s.map_or(String::new(), |a| a.id().to_string()))
+            .collect();
+    }
+
+    /// The saved loadout parsed back to abilities, or `None` if nothing's saved
+    /// (the vec isn't exactly 4 long). Empty/unknown ids → an empty slot.
+    pub fn ability_loadout(&self) -> Option<[Option<Ability>; 4]> {
+        if self.abilities.len() != 4 {
+            return None;
+        }
+        let mut out = [None; 4];
+        for (i, id) in self.abilities.iter().enumerate() {
+            out[i] = if id.is_empty() { None } else { Ability::from_id(id) };
+        }
+        Some(out)
     }
 
     /// Serialize to RON (pure — used by the disk save + the round-trip test).

@@ -150,6 +150,27 @@ fn sp_alloc_survives_ron_round_trip() {
 }
 
 #[test]
+fn ability_loadout_persists_round_trip() {
+    use crate::components::loadout::Ability;
+
+    let mut m = Meta::default();
+    assert!(m.ability_loadout().is_none(), "no saved loadout by default");
+
+    let slots = [
+        Some(Ability::Blink),
+        None,
+        Some(Ability::SentryDrone),
+        Some(Ability::Bulwark),
+    ];
+    m.set_ability_loadout(&slots);
+    assert_eq!(m.ability_loadout(), Some(slots), "saved loadout reads back");
+
+    // Survives a RON save/load.
+    let restored = Meta::from_ron(&m.to_ron());
+    assert_eq!(restored.ability_loadout(), Some(slots));
+}
+
+#[test]
 fn old_saves_without_unlocked_field_still_load() {
     // A pre-armory RON save (no `unlocked` field) must deserialize via serde
     // default rather than failing to Default.

@@ -5,9 +5,17 @@
 //! mirroring the armory / skill-points screens.
 
 use crate::components::loadout::{cycle_slot_ability, EquippedAbilities};
-use crate::meta::Meta;
+use crate::meta::{save_meta, Meta};
 use crate::states::GameState;
 use bevy::prelude::*;
+
+/// Apply the saved ability loadout from `Meta` to `EquippedAbilities` at
+/// startup (no-op if nothing's saved → the default 4-base loadout stands).
+pub fn apply_saved_loadout(meta: Res<Meta>, mut equipped: ResMut<EquippedAbilities>) {
+    if let Some(slots) = meta.ability_loadout() {
+        equipped.0 = slots;
+    }
+}
 
 /// Cursor over the 4 ability slots.
 #[derive(Resource, Default)]
@@ -92,7 +100,7 @@ pub fn loadout_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut next: ResMut<NextState<GameState>>,
     mut sel: ResMut<LoadoutSel>,
-    meta: Res<Meta>,
+    mut meta: ResMut<Meta>,
     mut equipped: ResMut<EquippedAbilities>,
 ) {
     if keys.just_pressed(KeyCode::Escape) {
@@ -106,10 +114,18 @@ pub fn loadout_input(
         sel.0 = (sel.0 + 1) % 4;
     }
     let slot = sel.0.min(3);
+    let mut changed = false;
     if keys.just_pressed(KeyCode::ArrowRight) {
         equipped.0[slot] = cycle_slot_ability(equipped.0[slot], &meta, true);
+        changed = true;
     }
     if keys.just_pressed(KeyCode::ArrowLeft) {
         equipped.0[slot] = cycle_slot_ability(equipped.0[slot], &meta, false);
+        changed = true;
+    }
+    if changed {
+        // Persist the build across runs.
+        meta.set_ability_loadout(&equipped.0);
+        save_meta(&meta);
     }
 }

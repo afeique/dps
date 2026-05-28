@@ -86,6 +86,8 @@ impl Plugin for GamePlugin {
                     render::flash::setup_screen_flash.after(render::spawn_camera),
                     systems::asteroids::setup_asteroid_material,
                     audio::setup_sfx,
+                    // Apply the saved ability loadout from Meta (ME persistence).
+                    systems::loadout_screen::apply_saved_loadout,
                 ),
             )
             // ── presentation: death FX + parallax starfield ─────────────

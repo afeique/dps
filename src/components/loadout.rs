@@ -122,6 +122,11 @@ impl Ability {
         }
     }
 
+    /// Parse a stable [`Ability::id`] back into the variant (save data).
+    pub fn from_id(s: &str) -> Option<Ability> {
+        Ability::ALL.into_iter().find(|a| a.id() == s)
+    }
+
     /// The four abilities of the default loadout are free; the other ten are
     /// armory-unlocked (mirrors the weapon base/exotic split).
     pub fn base_unlocked(self) -> bool {
