@@ -126,6 +126,49 @@ fn salvage_converts_stash_items_to_cores() {
 }
 
 #[test]
+fn cores_crafting_reroll_and_tier_up() {
+    use crate::resources::GameRng;
+    use crate::systems::cores::{reroll_cost, reroll_stash_item, tier_up_cost, tier_up_stash_item};
+    use crate::systems::items::{Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    let mut rng = GameRng::default();
+    let base = || Item {
+        slot: ItemSlot::Hull,
+        level: 5,
+        rarity: Rarity::Rare,
+        affixes: vec![Affix { kind: AffixKind::Hp, value: 1.0 }],
+        name: String::new(),
+    };
+
+    // Reroll: affordable → spends reroll_cost, keeps the tier.
+    let mut m = Meta { cores: 100, ..Default::default() };
+    m.stash.push(base());
+    let rcost = reroll_cost(&m.stash[0]);
+    assert!(reroll_stash_item(&mut m, &mut rng, 0), "afford a reroll");
+    assert_eq!(m.cores, 100 - rcost);
+    assert_eq!(m.stash[0].rarity, Rarity::Rare, "reroll keeps the tier");
+
+    // Tier-up: bumps the rarity one rung, spends tier_up_cost.
+    let tcost = tier_up_cost(&m.stash[0]).unwrap();
+    let before = m.cores;
+    assert!(tier_up_stash_item(&mut m, &mut rng, 0), "afford a tier-up");
+    assert_eq!(m.stash[0].rarity, Rarity::Exceptional, "Rare → Exceptional");
+    assert_eq!(m.cores, before - tcost);
+
+    // Unaffordable reroll → no-op (Cores unspent, item unchanged).
+    let mut poor = Meta { cores: 0, ..Default::default() };
+    poor.stash.push(base());
+    assert!(!reroll_stash_item(&mut poor, &mut rng, 0), "no cores → no reroll");
+    assert_eq!(poor.cores, 0);
+
+    // Max tier → tier-up refused even with Cores to spare.
+    let mut maxed = Meta { cores: 1000, ..Default::default() };
+    maxed.stash.push(Item { rarity: Rarity::Transcendental, ..base() });
+    assert!(!tier_up_stash_item(&mut maxed, &mut rng, 0), "transcendental can't tier up");
+    assert_eq!(maxed.cores, 1000, "no spend at max tier");
+}
+
+#[test]
 fn unlock_spends_gold_once_and_gates_on_affordability() {
     use crate::meta::WEAPON_UNLOCK_COST;
     let mut m = Meta { account_gold: WEAPON_UNLOCK_COST, ..Default::default() };
