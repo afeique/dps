@@ -700,6 +700,8 @@ pub fn fire_power_weapon(
     mut pw: ResMut<PowerWeapon>,
     mut energy: ResMut<EnergyMeter>,
     meta: Res<crate::meta::Meta>,
+    // Optional so headless tests run without the audio assets.
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut commands: Commands,
     player: Query<(Entity, &Transform), With<Ship>>,
     beams: Query<(), With<Beam>>,
@@ -735,6 +737,13 @@ pub fn fire_power_weapon(
         return; // not enough energy
     }
     pw.cooldown = pw.kind.cooldown();
+    // A successful release: every power weapon shares one punchy fire sound.
+    if let Some(sfx) = &sfx {
+        commands.spawn((
+            AudioPlayer::new(sfx.power_fire.clone()),
+            PlaybackSettings::DESPAWN,
+        ));
+    }
 
     let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
     let nose = tf.translation.truncate() + fwd * 22.0;
