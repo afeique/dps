@@ -24,13 +24,14 @@ use crate::messages::Death;
 use crate::resources::GameRng;
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 // ─── Rarity ────────────────────────────────────────────────────────────────
 
 /// Item rarity — the v6.161 **8-tier ladder** (`item-names.js` RARITY_TIERS).
 /// Drives the affix count, the roll multiplier band, the loot-card glow color,
 /// and the name adjective.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Rarity {
     Common,
     Rare,
@@ -148,7 +149,7 @@ impl Rarity {
 
 /// A rollable stat affix (the spec VI.5 pool, which mirrors the passive stat set
 /// — the v6.83 per-element resist affixes are out of scope).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum AffixKind {
     Hp,
     Toughness,
@@ -284,7 +285,7 @@ impl AffixKind {
 }
 
 /// One rolled affix on a finished item.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Affix {
     pub kind: AffixKind,
     pub value: f32,
@@ -315,7 +316,7 @@ fn affix_value(def: &AffixDef, level: u32, mult: f32) -> f32 {
 
 /// A concrete equipment slot (`item-names.js` keys). Five slots grouped into the
 /// three drop categories the spec rolls over.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ItemSlot {
     Cockpit,
     Hull,
@@ -416,7 +417,7 @@ impl SlotCategory {
 // ─── Item ──────────────────────────────────────────────────────────────────
 
 /// A generated item (acquisition-only in this slice — not yet equippable).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Item {
     pub slot: ItemSlot,
     pub level: u32,

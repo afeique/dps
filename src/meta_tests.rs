@@ -75,6 +75,26 @@ fn ron_round_trips() {
 }
 
 #[test]
+fn cores_and_stash_survive_ron_round_trip() {
+    use crate::systems::items::{Affix, AffixKind, Item, ItemSlot, Rarity};
+
+    let mut m = Meta { cores: 77, ..Default::default() };
+    m.stash.push(Item {
+        slot: ItemSlot::Hull,
+        level: 7,
+        rarity: Rarity::Epic,
+        affixes: vec![Affix { kind: AffixKind::Hp, value: 12.5 }],
+        name: "Test Hull".to_string(),
+    });
+
+    let restored = Meta::from_ron(&m.to_ron());
+    assert_eq!(m, restored, "cores + stash round-trip exactly");
+    assert_eq!(restored.cores, 77);
+    assert_eq!(restored.stash.len(), 1);
+    assert_eq!(restored.stash[0].rarity, Rarity::Epic);
+}
+
+#[test]
 fn unlock_spends_gold_once_and_gates_on_affordability() {
     use crate::meta::WEAPON_UNLOCK_COST;
     let mut m = Meta { account_gold: WEAPON_UNLOCK_COST, ..Default::default() };

@@ -70,7 +70,9 @@ pub fn xp_for_level(level: u32) -> u64 {
 
 /// The persistent account profile (RON in the config dir). `PartialEq` for the
 /// round-trip test.
-#[derive(Resource, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+// NB: no `Eq` — the persistent `stash` holds `Item`s whose `Affix.value` is an
+// f32 (PartialEq only). Nothing keys a HashMap/HashSet on Meta, so PartialEq suffices.
+#[derive(Resource, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Meta {
     /// The persistent unlock wallet (spent in the ARMORY). Run-gold banks here.
     pub account_gold: u64,
@@ -104,6 +106,11 @@ pub struct Meta {
     /// `#[serde(default)]` so older saves (without the field) load as 0.
     #[serde(default)]
     pub cores: u64,
+    /// The persistent gear stash (rainboids `meta.stash`): dropped items bank
+    /// here across runs, to equip or salvage for Cores. `#[serde(default)]` so
+    /// older saves load with an empty stash.
+    #[serde(default)]
+    pub stash: Vec<crate::systems::items::Item>,
 }
 
 impl Default for Meta {
@@ -119,6 +126,7 @@ impl Default for Meta {
             weapon: None,
             attunement: None,
             cores: 0,
+            stash: Vec::new(),
         }
     }
 }
