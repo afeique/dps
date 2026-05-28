@@ -272,12 +272,15 @@ pub fn apply_thorns(
     mut dmg: MessageWriter<Damage>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     player: Query<&Transform, With<Ship>>,
     enemies: Query<(Entity, &Transform), With<Enemy>>,
 ) {
-    // Shop Thorns + equipped THORNS affixes (% of taken damage reflected).
-    let thorns =
-        thorns_frac(upgrades.owned(UpgradeId::Thorns)) + equipment.affix_total(AffixKind::Thorns) / 100.0;
+    // Shop Thorns + equipped THORNS affixes + account SP (% of taken damage
+    // reflected to the nearest enemy).
+    let thorns = thorns_frac(upgrades.owned(UpgradeId::Thorns))
+        + equipment.affix_total(AffixKind::Thorns) / 100.0
+        + meta.sp_value("THORNS") / 100.0;
     let ppos = player.single().ok().map(|t| t.translation.truncate());
     for h in hurt.read() {
         if thorns <= 0.0 {
