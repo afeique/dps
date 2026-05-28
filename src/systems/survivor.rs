@@ -17,7 +17,7 @@ use crate::systems::wave::Wave;
 use bevy::prelude::*;
 
 /// The wave-clear card pool (`PASSIVE_REWARD_IDS`, spec III.5).
-pub const POOL: [UpgradeId; 13] = [
+pub const POOL: [UpgradeId; 14] = [
     UpgradeId::CritChance,
     UpgradeId::CritDamage,
     UpgradeId::HealthBoost,
@@ -31,6 +31,7 @@ pub const POOL: [UpgradeId; 13] = [
     UpgradeId::Amplifier,
     UpgradeId::Warding,
     UpgradeId::Predator,
+    UpgradeId::Opportunist,
 ];
 
 /// The three cards currently on offer.

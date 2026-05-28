@@ -58,12 +58,14 @@ pub enum UpgradeId {
     Warding,
     /// Bonus damage vs healthy (>75% HP) enemies — the Executioner counterpart.
     Predator,
+    /// Bonus damage vs status-afflicted enemies (frozen/oiled/corroded/conducting).
+    Opportunist,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 31] = [
+    pub const ALL: [UpgradeId; 32] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -95,6 +97,7 @@ impl UpgradeId {
         Self::Amplifier,
         Self::Warding,
         Self::Predator,
+        Self::Opportunist,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -133,6 +136,7 @@ impl UpgradeId {
             Self::Amplifier => 28,
             Self::Warding => 29,
             Self::Predator => 30,
+            Self::Opportunist => 31,
         }
     }
 
@@ -169,6 +173,7 @@ impl UpgradeId {
             Self::Amplifier => "Amplifier     (+12% damage)",
             Self::Warding => "Warding       (+8% all resist)",
             Self::Predator => "Predator      (+dmg vs healthy)",
+            Self::Opportunist => "Opportunist   (+dmg vs afflicted)",
         }
     }
 
@@ -206,6 +211,7 @@ impl UpgradeId {
             Self::Amplifier => 2000,
             Self::Warding => 2200,
             Self::Predator => 2400,
+            Self::Opportunist => 2400,
         }
     }
 
@@ -242,6 +248,7 @@ impl UpgradeId {
             Self::Amplifier => 5,
             Self::Warding => 5,
             Self::Predator => 4,
+            Self::Opportunist => 4,
         }
     }
 }
@@ -337,6 +344,11 @@ pub fn predator_bonus(stacks: u32) -> f32 {
 
 /// HP fraction above which `predator_bonus` applies (>75%).
 pub const PREDATOR_THRESHOLD: f32 = 0.75;
+
+/// OPPORTUNIST passive: bonus damage vs a status-afflicted enemy — `0.20 × stacks`.
+pub fn opportunist_bonus(stacks: u32) -> f32 {
+    0.20 * stacks as f32
+}
 
 /// PHASE ECHO passive (spec VI.3): extra post-dash invulnerability, `2.0 ×
 /// stacks` seconds added on top of the dash's base i-frames.
@@ -611,6 +623,7 @@ pub fn apply_upgrade(
         | UpgradeId::Detonator
         | UpgradeId::Amplifier
         | UpgradeId::Warding
-        | UpgradeId::Predator => {}
+        | UpgradeId::Predator
+        | UpgradeId::Opportunist => {}
     }
 }
