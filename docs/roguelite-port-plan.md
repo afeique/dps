@@ -21,18 +21,18 @@ The roguelite spine is **substantially complete and functional end-to-end.** Per
 | **PA** — 44 passives + card draft | ✅ **DONE** (align-to-built) | unified `UpgradeId` catalog (now **41**) is BOTH the shop AND the wave-clear `survivor::POOL` card draft (22 cards) — covers PA per "align to what's built"; near rainboids' ~44 target. NOT a separate keystone registry. |
 | **IT** — item v2 | ✅ **DONE** (UI polish aside) | 8-tier rarity + 15 affixes (incl. 6 per-element resists) + equip/HP/resist reconciliation; typed player damage COMPLETE (contact + ranged). **Cores + stash now built** (`systems/cores.rs` + `Meta.cores`/`Meta.stash`): salvage value/reroll/tier-up math, persisted stash that unequipped drops bank into (capped), salvage + crafting APIs, and a functional **STASH tab** in the egui BUILD screen. Only aesthetic polish remains. |
 | **PU** — powerup catalog | 🟡 **PARTIAL** | `powerups.rs` drops 3 kinds; the ~25-entry permanent catalog is largely subsumed by `UpgradeId` per the acquisition-model decision. |
-| **UI** — BUILD tree / overlays / skins | 🟡 **PARTIAL** | egui **IS** in Cargo.toml; the unified **egui BUILD tree is built** (`build_screen.rs`, B on title — Skills/Armory/Loadout tabs all interactive) alongside the HUD ability bar + 4 native overlays. Remaining: inventory/hangar/stats overlays, radial menu, 12 skins, and egui **aesthetic/layout polish** — wants USER direction. |
+| **UI** — BUILD tree / overlays / skins | ✅ mostly **DONE** | egui **BUILD tree** (`build_screen.rs`, B on title) now has **6 interactive tabs** — Stats / Armory / Skills / Loadout / Stash / Ship — under a cohesive dark-space theme, plus the HUD ability bar + 4 native overlays. **12 cosmetic ship skins** (picked in the SHIP tab, applied at spawn). Remaining: the radial menu + deeper aesthetic/layout refinement (wants USER direction); inventory/hangar are subsumed by the Stash/Loadout/Armory tabs. |
 | **BO** — boss chassis | ⬜ **NOT STARTED** | dps live bosses = TITAN + tier-rage; rainboids' phase-script/weak-point chassis is shipped-but-UNUSED in the JS too, so low priority. |
 | **X** — run configurator / adaptive difficulty | ⬜ **NOT STARTED** | forward-looking; not shipped in rainboids either. |
 
-**Biggest remaining piece:** egui BUILD-tree **aesthetic/layout polish** + the extra
-overlays (inventory/hangar/stats), radial menu, and 12 skins (Phase UI) — these need the
-user's look/layout input. The functional spine (combat, weapons, enemies, abilities, meta,
-41-passive catalog + card draft, comprehensive VFX/SFX) is **built and functional**;
-everything the user named as in-scope ("cards every stage, gold for unlocking weapons/
-abilities/attunements", typed damage + resist affixes, the egui BUILD screen) is done.
-Remaining beyond UI polish: item cores/stash, boss chassis (BO), run configurator (X) —
-all lower-priority or not shipped in the JS either.
+**State:** every gameplay phase is **DONE** — combat/elements, 11+11 weapons,
+20 enemies, 14 abilities, meta/economy/persistence, typed damage + resist affixes,
+the **44-passive** catalog + card draft, the **cores/stash** economy (math · stash ·
+salvage · crafting · STASH tab), comprehensive **VFX/SFX**, and the egui **BUILD
+screen** (6 tabs + theme + 12 ship skins). **Biggest remaining piece:** the radial
+menu + deeper egui aesthetic/layout refinement (Phase UI — wants the user's look
+direction), then the boss-phase chassis (BO) and run configurator (X) — both
+shipped-but-unused or unshipped in rainboids itself, so lowest priority.
 
 ---
 
