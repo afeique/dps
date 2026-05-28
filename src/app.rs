@@ -515,6 +515,8 @@ impl Plugin for GamePlugin {
                         systems::damage::passive_regen,
                         // Reconcile MAX HP against equipped HP affixes (spec VI.5).
                         systems::items::apply_item_hp,
+                        // Reconcile player elemental resist from resist affixes (E7).
+                        systems::items::apply_item_resist,
                         systems::damage::overheal_to_tanks,
                     )
                         .chain(),

@@ -4414,8 +4414,9 @@ fn item_affix_value_invariants() {
     let mut seen_regen = false;
     for wave in [1u32, 5, 15, 30] {
         for rarity in [Rarity::Common, Rarity::Rare, Rarity::Epic] {
-            // Roll the whole pool so we exercise every affix kind.
-            let affixes = roll_affix_set(&mut rng, wave, rarity, 9);
+            // Roll the whole pool so we exercise every affix kind (over-request;
+            // roll_affix_set caps to the pool size).
+            let affixes = roll_affix_set(&mut rng, wave, rarity, 64);
             for a in &affixes {
                 assert!(a.value > 0.0, "{:?} value positive", a.kind);
                 match a.kind {
@@ -4447,6 +4448,36 @@ fn item_affix_value_invariants() {
     assert_eq!(Affix { kind: AffixKind::Toughness, value: 3.0 }.label(), "+3% DEF");
     assert_eq!(Affix { kind: AffixKind::Regen, value: 0.3 }.label(), "+0.3/s REGEN");
     assert_eq!(Affix { kind: AffixKind::CritDamage, value: 8.5 }.label(), "+8.5% CRIT DMG");
+    assert_eq!(Affix { kind: AffixKind::ResistPyro, value: 8.0 }.label(), "+8% PYRO RES");
+}
+
+/// Equipped per-element resist affixes reconcile into the player's `Resistances`
+/// (E7): `apply_item_resist` sets `resist[element] = Σ affix / 100`.
+#[test]
+fn resist_affixes_populate_player_resistances() {
+    use crate::combat::element::{Element, Resistances};
+    use crate::systems::items::{apply_item_resist, Affix, AffixKind, Equipment, Item, ItemSlot, Rarity};
+
+    let mut app = test_app();
+    app.world_mut().resource_mut::<Equipment>().try_equip(Item {
+        slot: ItemSlot::Nanites,
+        level: 1,
+        rarity: Rarity::Epic,
+        affixes: vec![Affix { kind: AffixKind::ResistPyro, value: 30.0 }],
+        name: "Pyrelace Ward".to_string(),
+    });
+    let player = app
+        .world_mut()
+        .spawn((Ship::default(), Resistances::new(), Transform::default()))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_item_resist);
+    step.run(app.world_mut());
+
+    let res = app.world().get::<Resistances>(player).unwrap();
+    assert!((res.get(Element::Pyro) - 0.30).abs() < 1e-4, "30% Pyro-res affix → 0.30 resist");
+    assert_eq!(res.get(Element::Cryo), 0.0, "other elements stay neutral");
 }
 
 // ── 78. item_drop_rates_and_determinism ───────────────────────────────────────

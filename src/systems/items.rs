@@ -159,6 +159,40 @@ pub enum AffixKind {
     Dodge,
     Speed,
     Regen,
+    // Per-element resist affixes (E7) — reduce incoming damage of that element;
+    // summed into the player's `Resistances` by `apply_item_resist`.
+    ResistPyro,
+    ResistCryo,
+    ResistVolt,
+    ResistToxic,
+    ResistVoid,
+    ResistRadiant,
+}
+
+impl AffixKind {
+    /// The element a resist affix protects against (`None` for non-resist kinds).
+    pub fn resist_element(self) -> Option<crate::combat::element::Element> {
+        use crate::combat::element::Element;
+        Some(match self {
+            AffixKind::ResistPyro => Element::Pyro,
+            AffixKind::ResistCryo => Element::Cryo,
+            AffixKind::ResistVolt => Element::Volt,
+            AffixKind::ResistToxic => Element::Toxic,
+            AffixKind::ResistVoid => Element::Void,
+            AffixKind::ResistRadiant => Element::Radiant,
+            _ => return None,
+        })
+    }
+
+    /// Every per-element resist affix kind (drives `apply_item_resist`).
+    pub const RESISTS: [AffixKind; 6] = [
+        AffixKind::ResistPyro,
+        AffixKind::ResistCryo,
+        AffixKind::ResistVolt,
+        AffixKind::ResistToxic,
+        AffixKind::ResistVoid,
+        AffixKind::ResistRadiant,
+    ];
 }
 
 /// Static roll parameters for one affix kind (spec VI.5: `value = (base +
@@ -181,8 +215,9 @@ enum PrefixGroup {
     Regen,
 }
 
-/// The spec VI.5 affix pool (base / perWave / pct / min), verbatim.
-const AFFIX_POOL: [AffixDef; 9] = [
+/// The spec VI.5 affix pool (base / perWave / pct / min), verbatim, plus the six
+/// per-element resist affixes (E7).
+const AFFIX_POOL: [AffixDef; 15] = [
     AffixDef { kind: AffixKind::Hp,         base: 8.0, per_wave: 2.0,  pct: false, min: 1.0, prefix: PrefixGroup::Hp },
     AffixDef { kind: AffixKind::Toughness,  base: 3.0, per_wave: 0.3,  pct: true,  min: 1.0, prefix: PrefixGroup::Toughness },
     AffixDef { kind: AffixKind::Vampirism,  base: 2.0, per_wave: 0.1,  pct: true,  min: 1.0, prefix: PrefixGroup::Regen },
@@ -192,6 +227,12 @@ const AFFIX_POOL: [AffixDef; 9] = [
     AffixDef { kind: AffixKind::Dodge,      base: 2.0, per_wave: 0.1,  pct: true,  min: 1.0, prefix: PrefixGroup::Toughness },
     AffixDef { kind: AffixKind::Speed,      base: 6.0, per_wave: 0.3,  pct: true,  min: 2.0, prefix: PrefixGroup::Regen },
     AffixDef { kind: AffixKind::Regen,      base: 0.3, per_wave: 0.05, pct: false, min: 0.1, prefix: PrefixGroup::Regen },
+    AffixDef { kind: AffixKind::ResistPyro,    base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
+    AffixDef { kind: AffixKind::ResistCryo,    base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
+    AffixDef { kind: AffixKind::ResistVolt,    base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
+    AffixDef { kind: AffixKind::ResistToxic,   base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
+    AffixDef { kind: AffixKind::ResistVoid,    base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
+    AffixDef { kind: AffixKind::ResistRadiant, base: 4.0, per_wave: 0.2, pct: true, min: 2.0, prefix: PrefixGroup::Toughness },
 ];
 
 impl AffixKind {
@@ -209,6 +250,13 @@ impl AffixKind {
             AffixKind::Dodge => 8.0,
             AffixKind::Speed => 3.0,
             AffixKind::Regen => 16.0,
+            // Per-element resist — defensive, weighted like Toughness.
+            AffixKind::ResistPyro
+            | AffixKind::ResistCryo
+            | AffixKind::ResistVolt
+            | AffixKind::ResistToxic
+            | AffixKind::ResistVoid
+            | AffixKind::ResistRadiant => 7.0,
         }
     }
 
@@ -225,6 +273,12 @@ impl AffixKind {
             AffixKind::Dodge => format!("+{n}% DODGE"),
             AffixKind::Speed => format!("+{n}% SPEED"),
             AffixKind::Regen => format!("+{n}/s REGEN"),
+            AffixKind::ResistPyro => format!("+{n}% PYRO RES"),
+            AffixKind::ResistCryo => format!("+{n}% CRYO RES"),
+            AffixKind::ResistVolt => format!("+{n}% VOLT RES"),
+            AffixKind::ResistToxic => format!("+{n}% TOXIC RES"),
+            AffixKind::ResistVoid => format!("+{n}% VOID RES"),
+            AffixKind::ResistRadiant => format!("+{n}% RADIANT RES"),
         }
     }
 }
@@ -626,6 +680,23 @@ pub fn apply_item_hp(
         hp.current = hp.current.min(hp.max);
     }
     bonus.0 = target;
+}
+
+/// Reconcile the player's per-element `Resistances` against equipped resist
+/// affixes (E7) each tick — `resist = Σ ResistX affixes / 100`. Overwrites
+/// (the only resist source), so unequipping clears it.
+pub fn apply_item_resist(
+    equipment: Res<Equipment>,
+    mut q: Query<&mut crate::combat::element::Resistances, With<Ship>>,
+) {
+    let Ok(mut res) = q.single_mut() else {
+        return;
+    };
+    for kind in AffixKind::RESISTS {
+        if let Some(e) = kind.resist_element() {
+            res.set(e, equipment.affix_total(kind) / 100.0);
+        }
+    }
 }
 
 // ─── Small formatting helper ─────────────────────────────────────────────────
