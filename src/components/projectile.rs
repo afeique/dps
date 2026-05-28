@@ -37,6 +37,12 @@ pub struct Bounce {
     pub seek_radius: f32,
 }
 
+/// A **Mitosis** bullet's remaining split generations: on impact it fragments
+/// into shards carrying `gen − 1` until 0 (`collision::bullet_hits_enemy` emits
+/// `Shard`s). The shards are smaller + half-damage.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MitosisGen(pub u32);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,

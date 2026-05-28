@@ -28,6 +28,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Knockback>()
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
+        .add_message::<crate::messages::Shard>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()

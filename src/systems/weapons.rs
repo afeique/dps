@@ -24,7 +24,7 @@
 
 use crate::combat::element::{Element, ElementSet};
 use crate::components::*;
-use crate::messages::Fire;
+use crate::messages::{Fire, Shard};
 use crate::render::bullets::BulletAssets;
 use crate::systems::power_weapon::Homing;
 use crate::systems::shop::{homing_turn_rate, overcharge_interval, UpgradeId, Upgrades};
@@ -58,6 +58,8 @@ pub enum WeaponKind {
     Boomerang,
     /// Bullet that caroms between enemies (W).
     Caroms,
+    /// Bullet that fragments into shards on impact (W).
+    MitosisRounds,
 }
 
 impl WeaponKind {
@@ -71,7 +73,8 @@ impl WeaponKind {
             Self::GravityLance => Self::SpinCannon,
             Self::SpinCannon => Self::Boomerang,
             Self::Boomerang => Self::Caroms,
-            Self::Caroms => Self::PulseCannon,
+            Self::Caroms => Self::MitosisRounds,
+            Self::MitosisRounds => Self::PulseCannon,
         }
     }
 
@@ -87,6 +90,7 @@ impl WeaponKind {
             Self::SpinCannon => "Spin Cannon",
             Self::Boomerang => "Boomerang Discs",
             Self::Caroms => "Caroms",
+            Self::MitosisRounds => "Mitosis Rounds",
         }
     }
 
@@ -167,8 +171,24 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             cooldown: 0.34, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
             radius: BASE_BULLET_RADIUS * 0.8, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
+        // Splitter (weapon-data.js: splitCount 2, splitDamageFactor 0.5,
+        // splitSpeed 0.85, splitGenerations 2). Splits ride on `MitosisGen`.
+        WeaponKind::MitosisRounds => WeaponStats {
+            cooldown: 0.38, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+        },
     }
 }
+
+/// Mitosis split params (weapon-data.js): 2 shards at ±this angle, ×0.5 damage,
+/// ×0.85 speed, 2 generations.
+pub const MITOSIS_GENERATIONS: u32 = 2;
+pub const MITOSIS_SPLIT_COUNT: u32 = 2;
+pub const MITOSIS_DMG_FACTOR: f32 = 0.5;
+pub const MITOSIS_SPEED_FACTOR: f32 = 0.85;
+pub const MITOSIS_SPREAD: f32 = 0.4;
+/// Shard bullet radius (px).
+pub const SHARD_RADIUS: f32 = 4.0;
 
 /// Caroms bounce count + the radius it seeks the next enemy within (weapon-data.js).
 pub const CAROMS_BOUNCES: u32 = 3;
@@ -277,6 +297,33 @@ pub fn gravity_pull(
                 etf.translation.x += step.x;
                 etf.translation.y += step.y;
             }
+        }
+    }
+}
+
+/// Spawn the player **shard** bullets requested by `Shard` messages (Mitosis
+/// fragments; Flak shrapnel later) — the path that needs `BulletAssets`, kept
+/// out of `bullet_hits_enemy`. A shard with `gen > 0` keeps a `MitosisGen` so it
+/// splits again. Runs after `bullet_hits_enemy` in the collision group.
+pub fn spawn_shards(
+    mut commands: Commands,
+    assets: Res<BulletAssets>,
+    mut shards: MessageReader<Shard>,
+) {
+    for s in shards.read() {
+        let mut e = commands.spawn((
+            Bullet { kind: BulletKind::Player, damage: s.damage, pierce: 0 },
+            BulletElements(s.element),
+            Velocity(s.dir.normalize_or_zero() * s.speed),
+            Collider { radius: SHARD_RADIUS },
+            Faction::Player,
+            Lifetime { seconds: 1.0 },
+            Mesh2d(assets.circle.clone()),
+            MeshMaterial2d(assets.player_body.clone()),
+            Transform::from_translation(s.origin.extend(0.0)).with_scale(Vec3::splat(SHARD_RADIUS)),
+        ));
+        if s.generation > 0 {
+            e.insert(MitosisGen(s.generation));
         }
     }
 }
@@ -514,6 +561,10 @@ pub fn spawn_bullets(
             // Caroms bullets ricochet between enemies (W).
             if cur.0 == WeaponKind::Caroms {
                 bullet.insert(Bounce { remaining: CAROMS_BOUNCES, seek_radius: CAROMS_SEEK_RADIUS });
+            }
+            // Mitosis bullets fragment on impact (W).
+            if cur.0 == WeaponKind::MitosisRounds {
+                bullet.insert(MitosisGen(MITOSIS_GENERATIONS));
             }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {

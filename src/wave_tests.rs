@@ -37,6 +37,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Knockback>()
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
+        .add_message::<crate::messages::Shard>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -1218,6 +1219,42 @@ fn gravity_lance_is_void_and_pulls() {
     step.run(world);
 
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
+}
+
+/// W: a Mitosis bullet, on impact, emits 2 shards at half damage carrying gen−1.
+#[test]
+fn mitosis_splits_into_shards_on_hit() {
+    use crate::components::{Bullet, BulletKind, MitosisGen, Velocity};
+    use crate::messages::Shard;
+    use crate::systems::collision::bullet_hits_enemy;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 16.0 }, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 1.0, pierce: 0 },
+        Collider { radius: 5.0 },
+        Velocity(Vec2::new(0.0, 300.0)),
+        MitosisGen(2),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    #[derive(Resource, Default)]
+    struct Shards(Vec<(f32, u32)>);
+    world.insert_resource(Shards::default());
+    fn collect(mut r: MessageReader<Shard>, mut s: ResMut<Shards>) {
+        for sh in r.read() {
+            s.0.push((sh.damage, sh.generation));
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((bullet_hits_enemy, collect).chain());
+    step.run(world);
+
+    let shards = &world.resource::<Shards>().0;
+    assert_eq!(shards.len(), 2, "Mitosis emitted 2 shards");
+    assert!(shards.iter().all(|(d, g)| (*d - 0.5).abs() < 1e-6 && *g == 1), "half damage, gen 1: {shards:?}");
 }
 
 /// W: a Caroms bullet, on hitting an enemy, survives and redirects toward the

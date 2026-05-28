@@ -69,6 +69,7 @@ pub fn bullet_hits_enemy(
     mut dmg: MessageWriter<Damage>,
     mut knock: MessageWriter<Knockback>,
     mut crits: MessageWriter<crate::messages::Crit>,
+    mut shards: MessageWriter<crate::messages::Shard>,
     streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
@@ -82,6 +83,7 @@ pub fn bullet_hits_enemy(
         Option<&BulletElements>,
         Option<&mut Velocity>,
         Option<&mut Bounce>,
+        Option<&MitosisGen>,
     )>,
     // `Without<Ship>` keeps this immut `&Health` disjoint from `player_hp`'s mut.
     // The element components (E2/E4) are optional so test-spawned enemies (no
@@ -133,7 +135,7 @@ pub fn bullet_hits_enemy(
     let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
     // EXECUTIONER passive: bonus damage vs enemies below the execute threshold.
     let exec_bonus = executioner_bonus(upgrades.owned(UpgradeId::Executioner));
-    for (bullet_e, btf, bc, mut bullet, belems, bvel, bounce) in &mut bullets {
+    for (bullet_e, btf, bc, mut bullet, belems, bvel, bounce, mgen) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
@@ -280,6 +282,32 @@ pub fn bullet_hits_enemy(
                             dmg.write(Damage {
                                 target: e2,
                                 amount: splash * smult,
+                            });
+                        }
+                    }
+                }
+                // Mitosis (W): fragment into shards on impact, carrying gen−1
+                // (read the velocity here, before the bounce match consumes it).
+                if let Some(mg) = mgen {
+                    if mg.0 > 0 {
+                        let vdir = bvel.as_ref().map_or(Vec2::Y, |v| v.0.normalize_or_zero());
+                        let vspeed = bvel.as_ref().map_or(300.0, |v| v.0.length());
+                        let elem = belem_set.unwrap_or(crate::combat::element::ElementSet::kinetic());
+                        let n = crate::systems::weapons::MITOSIS_SPLIT_COUNT;
+                        for i in 0..n {
+                            // Even fan across ±MITOSIS_SPREAD around the travel dir.
+                            let f = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.5 };
+                            let off = -crate::systems::weapons::MITOSIS_SPREAD
+                                + f * (2.0 * crate::systems::weapons::MITOSIS_SPREAD);
+                            let (s, c) = off.sin_cos();
+                            let dir = Vec2::new(c * vdir.x - s * vdir.y, s * vdir.x + c * vdir.y);
+                            shards.write(crate::messages::Shard {
+                                origin: btf.translation.truncate(),
+                                dir,
+                                speed: vspeed * crate::systems::weapons::MITOSIS_SPEED_FACTOR,
+                                damage: bullet.damage * crate::systems::weapons::MITOSIS_DMG_FACTOR,
+                                element: elem,
+                                generation: mg.0 - 1,
                             });
                         }
                     }

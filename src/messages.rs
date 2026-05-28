@@ -11,6 +11,7 @@
 
 use bevy::prelude::*;
 
+use crate::combat::element::ElementSet;
 use crate::components::{EnemyKind, Faction};
 
 /// Broadphase/narrowphase output: entity `a` overlapped entity `b` this tick.
@@ -65,6 +66,21 @@ pub struct Crit;
 pub struct Knockback {
     pub target: Entity,
     pub impulse: Vec2,
+}
+
+/// Spawn a mid-flight player **shard** bullet — the reusable path for Mitosis
+/// (split-on-impact) and Flak (airburst shrapnel), which can't spawn bullets
+/// directly (the visual needs `BulletAssets`). `gen > 0` means the shard can
+/// split again (Mitosis). Consumed by `systems::weapons::spawn_shards`.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Shard {
+    pub origin: Vec2,
+    pub dir: Vec2,
+    pub speed: f32,
+    pub damage: f32,
+    pub element: ElementSet,
+    /// Remaining split generations (Mitosis); 0 = a terminal shard.
+    pub generation: u32,
 }
 
 /// A weapon fired: spawn a bullet from `origin` along unit `dir`. `faction`

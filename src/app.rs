@@ -62,6 +62,7 @@ impl Plugin for GamePlugin {
             .add_message::<Knockback>()
             .add_message::<PlayerHurt>()
             .add_message::<crate::messages::Crit>()
+            .add_message::<crate::messages::Shard>()
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,
@@ -302,6 +303,8 @@ impl Plugin for GamePlugin {
                     // Collisions → Damage.
                     (
                         systems::collision::bullet_hits_enemy,
+                        // Mitosis/Flak shards from the hits above (needs BulletAssets).
+                        systems::weapons::spawn_shards,
                         // Elemental reactions (E4b): resolve shatter/oil-flare
                         // seeds from the hit above (writes Damage + statuses).
                         systems::reactions::resolve_reactions,
