@@ -13,6 +13,7 @@ use crate::render::shapes::SKINS;
 use crate::systems::cores::{
     reroll_cost, reroll_stash_item, salvage_value, tier_up_cost, tier_up_stash_item,
 };
+use crate::systems::difficulty::DIFFICULTIES;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
@@ -139,6 +140,19 @@ pub fn build_screen_ui(
                 }
             }
             Tab::Stats => {
+                // Run difficulty selector (Phase X) — scales the run's enemy HP.
+                ui.horizontal(|ui| {
+                    ui.monospace("Difficulty:");
+                    for (i, (name, mult)) in DIFFICULTIES.iter().enumerate() {
+                        let i = i as u8;
+                        let label = format!("{name} (×{mult} HP)");
+                        if ui.selectable_label(meta.difficulty == i, label).clicked() {
+                            meta.difficulty = i;
+                            save_meta(&meta);
+                        }
+                    }
+                });
+                ui.separator();
                 // Read-only account overview (backed by Meta::account_summary).
                 egui::Grid::new("stats_grid")
                     .num_columns(2)
