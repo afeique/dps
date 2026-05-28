@@ -101,6 +101,42 @@ impl Ability {
         }
     }
 
+    /// Stable armory unlock id (namespaced `ABL_` so it can't collide with
+    /// weapon / attunement ids in `Meta.unlocked`).
+    pub fn id(self) -> &'static str {
+        match self {
+            Ability::Bulwark => "ABL_BULWARK",
+            Ability::FieldMedic => "ABL_FIELD_MEDIC",
+            Ability::DeflectorOrbs => "ABL_DEFLECTOR_ORBS",
+            Ability::EmpPulse => "ABL_EMP_PULSE",
+            Ability::SentryDrone => "ABL_SENTRY_DRONE",
+            Ability::Blink => "ABL_BLINK",
+            Ability::GravitySnare => "ABL_GRAVITY_SNARE",
+            Ability::Designator => "ABL_DESIGNATOR",
+            Ability::SecondWind => "ABL_SECOND_WIND",
+            Ability::ElementalInfusion => "ABL_ELEMENTAL_INFUSION",
+            Ability::CryoField => "ABL_CRYO_FIELD",
+            Ability::StasisField => "ABL_STASIS_FIELD",
+            Ability::StormCell => "ABL_STORM_CELL",
+            Ability::PyreAura => "ABL_PYRE_AURA",
+        }
+    }
+
+    /// The four abilities of the default loadout are free; the other ten are
+    /// armory-unlocked (mirrors the weapon base/exotic split).
+    pub fn base_unlocked(self) -> bool {
+        matches!(
+            self,
+            Ability::Bulwark | Ability::FieldMedic | Ability::DeflectorOrbs | Ability::EmpPulse
+        )
+    }
+
+    /// Whether this ability is available to equip — a free base ability or one
+    /// unlocked in the armory.
+    pub fn is_available(self, meta: &crate::meta::Meta) -> bool {
+        self.base_unlocked() || meta.is_unlocked(self.id())
+    }
+
     /// A 3-char tag for the HUD ability-bar slot.
     pub fn short(self) -> &'static str {
         match self {

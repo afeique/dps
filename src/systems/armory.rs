@@ -8,7 +8,8 @@
 //! their own unlock-gating lands.
 
 use crate::combat::element::Element;
-use crate::meta::{save_meta, Meta, ATTUNEMENT_UNLOCK_COST, WEAPON_UNLOCK_COST};
+use crate::components::loadout::Ability;
+use crate::meta::{save_meta, Meta, ABILITY_UNLOCK_COST, ATTUNEMENT_UNLOCK_COST, WEAPON_UNLOCK_COST};
 use crate::states::GameState;
 use crate::systems::weapons::{attunement_unlock_id, WeaponKind};
 use bevy::prelude::*;
@@ -51,7 +52,16 @@ pub fn armory_catalog() -> Vec<ArmoryEntry> {
         name: format!("{} Attunement", e.name()),
         cost: ATTUNEMENT_UNLOCK_COST,
     });
-    weapons.chain(attunes).collect()
+    // The non-base abilities (the four default-loadout ones are free).
+    let abilities = Ability::ALL
+        .iter()
+        .filter(|a| !a.base_unlocked())
+        .map(|a| ArmoryEntry {
+            id: a.id(),
+            name: a.name().to_string(),
+            cost: ABILITY_UNLOCK_COST,
+        });
+    weapons.chain(attunes).chain(abilities).collect()
 }
 
 /// Cursor over the armory catalog.
@@ -100,7 +110,9 @@ pub fn spawn_armory_ui(mut commands: Commands) {
                 ArmoryText,
                 Text::new(""),
                 TextFont {
-                    font_size: 20.0,
+                    // Small enough to fit the full catalog (weapons + attunements
+                    // + abilities) without clipping.
+                    font_size: 14.0,
                     ..default()
                 },
                 TextColor(Color::srgb(1.0, 0.88, 0.45)),

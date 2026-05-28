@@ -4041,7 +4041,7 @@ fn armory_catalog_has_exotics_and_attunements() {
     use crate::systems::weapons::WeaponKind;
 
     let catalog = armory_catalog();
-    assert_eq!(catalog.len(), 12, "6 exotic weapons + 6 attunements");
+    assert_eq!(catalog.len(), 22, "6 exotic weapons + 6 attunements + 10 abilities");
     let meta = Meta::default();
 
     // No duplicate ids, every cost positive, nothing unlocked by default.
@@ -4062,8 +4062,10 @@ fn armory_catalog_has_exotics_and_attunements() {
     for wid in weapon_ids {
         assert!(ids.contains(wid), "exotic weapon {wid} missing from catalog");
     }
-    // The six attunement entries use the ATT_ id namespace.
+    // The six attunement entries use the ATT_ id namespace; the ten ability
+    // entries use ABL_ (the four base-loadout abilities are free, not sold).
     assert_eq!(catalog.iter().filter(|e| e.id.starts_with("ATT_")).count(), 6);
+    assert_eq!(catalog.iter().filter(|e| e.id.starts_with("ABL_")).count(), 10);
 }
 
 /// Weapon armory-gating: the five base weapons are always available, the six
