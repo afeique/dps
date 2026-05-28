@@ -1524,6 +1524,52 @@ fn xp_boost_grants_more_account_xp() {
     assert_eq!(xp_from_one_kill(3), (XP_PER_KILL as f32 * 1.6).round() as u64, "x3 → +60% XP");
 }
 
+/// Overflow (rainboids OVERFLOW_SPARK) buffs primary damage only while the energy
+/// meter is full: the helper is +0.25/stack, and in combat a full meter hits harder.
+#[test]
+fn overflow_buffs_damage_at_full_energy() {
+    use crate::resources::EnergyMeter;
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{overflow_bonus, UpgradeId, Upgrades};
+
+    assert_eq!(overflow_bonus(0), 0.0, "not owned → no bonus");
+    assert!((overflow_bonus(3) - 0.75).abs() < 1e-6, "x3 → +75%");
+
+    // Same seed + one bullet, so any crit is identical across runs; the only
+    // difference is the energy state, isolating Overflow in the ratio.
+    fn dmg(full: bool) -> f32 {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Overflow, 3);
+        {
+            let mut e = app.world_mut().resource_mut::<EnergyMeter>();
+            e.max = 100.0;
+            e.current = if full { 100.0 } else { 0.0 };
+        }
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1.0e6),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1.0e6 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    assert!(dmg(true) > dmg(false) * 1.5, "full energy + Overflow x3 ≈ 1.75× the empty-meter hit");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

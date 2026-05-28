@@ -78,12 +78,14 @@ pub enum UpgradeId {
     Scavenger,
     /// XP Boost — kills grant more account XP (progression keystone).
     XpBoost,
+    /// Overflow — primaries hit harder while energy is full (rainboids OVERFLOW_SPARK).
+    Overflow,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 41] = [
+    pub const ALL: [UpgradeId; 42] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -125,6 +127,7 @@ impl UpgradeId {
         Self::Frenzy,
         Self::Scavenger,
         Self::XpBoost,
+        Self::Overflow,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -173,6 +176,7 @@ impl UpgradeId {
             Self::Frenzy => 38,
             Self::Scavenger => 39,
             Self::XpBoost => 40,
+            Self::Overflow => 41,
         }
     }
 
@@ -219,6 +223,7 @@ impl UpgradeId {
             Self::Frenzy => "Frenzy        (streak boosts dmg)",
             Self::Scavenger => "Scavenger     (+25% gold orbs)",
             Self::XpBoost => "XP Boost      (+20% account XP)",
+            Self::Overflow => "Overflow      (+25% dmg at full NRG)",
         }
     }
 
@@ -266,6 +271,7 @@ impl UpgradeId {
             Self::Frenzy => 2600,
             Self::Scavenger => 1800,
             Self::XpBoost => 2000,
+            Self::Overflow => 2400,
         }
     }
 
@@ -312,6 +318,7 @@ impl UpgradeId {
             Self::Frenzy => 3,
             Self::Scavenger => 4,
             Self::XpBoost => 4,
+            Self::Overflow => 3,
         }
     }
 }
@@ -443,6 +450,13 @@ pub fn scavenger_mult(stacks: u32) -> f32 {
 /// `1 + 0.20 × stacks`, applied to the award in `meta::award_xp`.
 pub fn xp_boost_mult(stacks: u32) -> f32 {
     1.0 + 0.20 * stacks as f32
+}
+
+/// OVERFLOW passive (rainboids OVERFLOW_SPARK): while the energy meter is full,
+/// primaries deal `+0.25 × stacks` bonus damage — an additive folded into the
+/// `amp` multiplier in `bullet_hits_enemy`. 0 when not full / not owned.
+pub fn overflow_bonus(stacks: u32) -> f32 {
+    0.25 * stacks as f32
 }
 
 /// FRENZY passive: a *live* kill-streak adds `0.03 × stacks × kills` damage on top
@@ -756,6 +770,7 @@ pub fn apply_upgrade(
         | UpgradeId::Magnetism
         | UpgradeId::Frenzy
         | UpgradeId::Scavenger
-        | UpgradeId::XpBoost => {}
+        | UpgradeId::XpBoost
+        | UpgradeId::Overflow => {}
     }
 }

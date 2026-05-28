@@ -17,8 +17,8 @@ use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak,
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
-    berserker_bonus, frenzy_bonus, opportunist_bonus, predator_bonus, stun_chance,
-    vampiric_rounds_heal, vampirism_frac, UpgradeId, Upgrades,
+    berserker_bonus, frenzy_bonus, opportunist_bonus, overflow_bonus, predator_bonus,
+    stun_chance, vampiric_rounds_heal, vampirism_frac, UpgradeId, Upgrades,
     EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
@@ -148,12 +148,21 @@ pub fn bullet_hits_enemy(
     // FRENZY reads the *live* kill-streak count (0 when the buff window lapsed),
     // so its bonus rides on the same streak the multiplier above uses.
     let frenzy_kills = if streak.timer > 0.0 { streak.kills } else { 0 };
+    // OVERFLOW: a full energy meter buffs primary damage (rewards holding charge).
+    let energy_full = energy.current >= energy.max * 0.999;
+    let overflow = if energy_full {
+        overflow_bonus(upgrades.owned(UpgradeId::Overflow))
+    } else {
+        0.0
+    };
     // AMPLIFIER (+%/stack) + GLASS CANNON (+50% flat) + BERSERKER (+%/stack scaled
-    // by missing HP) + FRENZY (+%/stack scaled by streak) damage multipliers.
+    // by missing HP) + FRENZY (+%/stack scaled by streak) + OVERFLOW (+%/stack at
+    // full energy) damage multipliers.
     let amp = amplifier_mult(upgrades.owned(UpgradeId::Amplifier))
         + glass_cannon_dmg(upgrades.owned(UpgradeId::GlassCannon))
         + berserker_bonus(upgrades.owned(UpgradeId::Berserker), player_hp_frac)
-        + frenzy_bonus(upgrades.owned(UpgradeId::Frenzy), frenzy_kills);
+        + frenzy_bonus(upgrades.owned(UpgradeId::Frenzy), frenzy_kills)
+        + overflow;
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
