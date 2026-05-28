@@ -4,8 +4,10 @@
 //! the first egui surface in dps — the native overlays (armory/skills/loadout)
 //! stay as-is for now; tabs here are fleshed out increment by increment.
 
+use crate::components::loadout::{cycle_slot_ability, EquippedAbilities};
 use crate::meta::{save_meta, Meta, SP_STATS, SP_STAT_MAX_POINTS};
 use crate::states::GameState;
+use crate::systems::armory::armory_catalog;
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
@@ -46,6 +48,7 @@ pub fn build_screen_ui(
     mut contexts: EguiContexts,
     mut meta: ResMut<Meta>,
     mut tab: ResMut<BuildTab>,
+    mut equipped: ResMut<EquippedAbilities>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     egui::CentralPanel::default().show(ctx, |ui| {
@@ -93,10 +96,54 @@ pub fn build_screen_ui(
                 }
             }
             Tab::Armory => {
-                ui.label("Armory unlocks — use the native A screen for now (egui tab next).");
+                let catalog = armory_catalog();
+                let mut bought = false;
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for entry in &catalog {
+                        ui.horizontal(|ui| {
+                            ui.monospace(format!("{:<20}", entry.name));
+                            if meta.is_unlocked(entry.id) {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(120, 230, 140),
+                                    "UNLOCKED",
+                                );
+                            } else {
+                                let afford = meta.account_gold >= entry.cost;
+                                let btn = egui::Button::new(format!("{} g", entry.cost));
+                                if ui.add_enabled(afford, btn).clicked()
+                                    && meta.unlock(entry.id, entry.cost)
+                                {
+                                    bought = true;
+                                }
+                            }
+                        });
+                    }
+                });
+                if bought {
+                    save_meta(&meta);
+                }
             }
             Tab::Loadout => {
-                ui.label("Ability loadout — use the native L screen for now (egui tab next).");
+                let mut changed = false;
+                ui.label("4 ability slots (◀ ▶ cycle through unlocked abilities):");
+                for slot in 0..4usize {
+                    ui.horizontal(|ui| {
+                        let name = equipped.0[slot].map_or("— empty —", |a| a.name());
+                        ui.monospace(format!("Slot {}:  {:<18}", slot + 1, name));
+                        if ui.button("◀").clicked() {
+                            equipped.0[slot] = cycle_slot_ability(equipped.0[slot], &meta, false);
+                            changed = true;
+                        }
+                        if ui.button("▶").clicked() {
+                            equipped.0[slot] = cycle_slot_ability(equipped.0[slot], &meta, true);
+                            changed = true;
+                        }
+                    });
+                }
+                if changed {
+                    meta.set_ability_loadout(&equipped.0);
+                    save_meta(&meta);
+                }
             }
         }
 
