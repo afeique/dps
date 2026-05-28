@@ -368,6 +368,27 @@ fn synth_power_fire() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Ability cast — a crisp techy "blip-bloop" (two square-edged tones, 700 then
+/// 1050 Hz), ~0.11 s. Played when any 4-slot loadout ability fires.
+fn synth_ability() -> Vec<u8> {
+    let duration = 0.11_f32;
+    let n = (SR * duration) as usize;
+    let half = n / 2;
+    let attack = (half as f32 * 0.08) as usize;
+    let decay = (-14.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut phase: f32 = 0.0;
+    for i in 0..n {
+        let freq = if i < half { 700.0 } else { 1050.0 };
+        let amp = env_exp(i % half, attack, decay); // re-attack on the second tone
+        let sig = 0.6 * sine(phase) + 0.4 * square(phase);
+        samples.push(sig * amp * 0.26);
+        phase = advance_phase(phase, freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 /// Shield engage — an airy rising shimmer (a 320→780 Hz sweep + an octave
 /// sparkle, soft attack), ~0.26 s. Played on a defensive pop (Shield Burst /
 /// Bulwark) to pair with the shield-bubble VFX.
@@ -466,6 +487,7 @@ pub struct Sfx {
     pub power_fire:   Handle<AudioSource>,
     pub bomb:         Handle<AudioSource>,
     pub shield:       Handle<AudioSource>,
+    pub ability:      Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -546,6 +568,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let power_fire   = assets.add(make_synth(synth_power_fire()));
     let bomb         = assets.add(make_synth(synth_bomb()));
     let shield       = assets.add(make_synth(synth_shield()));
+    let ability      = assets.add(make_synth(synth_ability()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -597,6 +620,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         power_fire,
         bomb,
         shield,
+        ability,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed

@@ -53,6 +53,8 @@ const SENTRY_COUNT: u32 = 1;
 pub fn activate_loadout(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    // Optional so headless tests run without the audio assets.
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut commands: Commands,
     equipped: Res<EquippedAbilities>,
     mut cds: ResMut<AbilityCooldowns>,
@@ -177,6 +179,9 @@ pub fn activate_loadout(
 
         if fired {
             cds.trigger(slot, ability.cooldown());
+            if let Some(sfx) = &sfx {
+                commands.spawn((AudioPlayer::new(sfx.ability.clone()), PlaybackSettings::DESPAWN));
+            }
         }
     }
 }
