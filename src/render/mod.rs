@@ -15,6 +15,7 @@ pub mod flash;
 pub mod gear_panel;
 pub mod hit_flash;
 pub mod hud;
+pub mod impact_spark;
 pub mod loot_feed;
 pub mod minimap;
 pub mod muzzle_flash;

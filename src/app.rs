@@ -279,6 +279,15 @@ impl Plugin for GamePlugin {
                 )
                     .run_if(in_state(GameState::Playing)),
             )
+            // ── bullet-impact sparks on every landed hit (graphical parity) ────
+            .add_systems(
+                Update,
+                (
+                    render::impact_spark::spawn_impact_sparks,
+                    render::impact_spark::fade_impact_sparks,
+                )
+                    .run_if(in_state(GameState::Playing)),
+            )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)
             .add_systems(

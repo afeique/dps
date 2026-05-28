@@ -1481,6 +1481,45 @@ fn charge_glow_tracks_energy() {
     assert_eq!(full_t, 2, "at cap → full band");
 }
 
+/// A landed hit on an enemy scatters impact sparks; player hits + sub-1 DoT
+/// ticks don't (the player has its own hit-flash; DoT shouldn't fizz).
+#[test]
+fn impact_sparks_on_enemy_hits_only() {
+    use crate::components::Ship;
+    use crate::render::impact_spark::{fade_impact_sparks, spawn_impact_sparks, ImpactSpark};
+
+    fn sparks(target_is_player: bool, amount: f32) -> usize {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let target = if target_is_player {
+            world.spawn((Ship::default(), Transform::default())).id()
+        } else {
+            world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::default())).id()
+        };
+        world.write_message(Damage { target, amount });
+        let mut step = Schedule::default();
+        step.add_systems(spawn_impact_sparks);
+        step.run(world);
+        let mut q = world.query::<&ImpactSpark>();
+        q.iter(world).count()
+    }
+
+    assert!(sparks(false, 8.0) > 0, "an enemy hit scatters sparks");
+    assert_eq!(sparks(true, 8.0), 0, "a player hit makes no sparks");
+    assert_eq!(sparks(false, 0.4), 0, "a sub-1 DoT tick makes no sparks");
+
+    // Sparks shrink as their lifetime drains.
+    let mut app = test_app();
+    let world = app.world_mut();
+    let e = world
+        .spawn((ImpactSpark { max_life: 0.18 }, Transform::default(), Lifetime { seconds: 0.045 }))
+        .id();
+    let mut step = Schedule::default();
+    step.add_systems(fade_impact_sparks);
+    step.run(world);
+    assert!(world.get::<Transform>(e).unwrap().scale.x < 0.5, "fades toward zero");
+}
+
 /// Taking a hit (`PlayerHurt`) triggers a red screen flash (graphical parity).
 #[test]
 fn player_hurt_triggers_red_flash() {
