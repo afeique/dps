@@ -27,7 +27,9 @@ use crate::components::*;
 use crate::messages::{Fire, Shard};
 use crate::render::bullets::BulletAssets;
 use crate::systems::power_weapon::Homing;
-use crate::systems::shop::{homing_turn_rate, overcharge_interval, UpgradeId, Upgrades};
+use crate::systems::shop::{
+    gunslinger_fire_mult, homing_turn_rate, overcharge_interval, UpgradeId, Upgrades,
+};
 use bevy::prelude::*;
 use bevy_hanabi::prelude::ParticleEffect;
 
@@ -765,7 +767,9 @@ pub fn player_fire(
         };
         // Bloodlust surge (spec keystone): a recent kill briefly speeds up fire.
         let bl_mult = if bloodlust.0 > 0.0 { BLOODLUST_FIRE_MULT } else { 1.0 };
-        weapon.timer = base_cd * rapid_cooldown_mult(rapid) * cd_mult * bl_mult;
+        // Gunslinger keystone: +30%/stack fire rate (shorter cooldown).
+        let gun_mult = gunslinger_fire_mult(upgrades.owned(UpgradeId::Gunslinger));
+        weapon.timer = base_cd * rapid_cooldown_mult(rapid) * cd_mult * bl_mult * gun_mult;
 
         let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
         let nose = tf.translation.truncate() + fwd * 20.0;

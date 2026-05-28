@@ -82,12 +82,14 @@ pub enum UpgradeId {
     Overflow,
     /// Kinetic Battery — dashing refunds power-weapon energy (rainboids KINETIC_BATTERY).
     KineticBattery,
+    /// Gunslinger — +50% primary damage and +30% fire rate (rainboids GUNSLINGER).
+    Gunslinger,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 43] = [
+    pub const ALL: [UpgradeId; 44] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -131,6 +133,7 @@ impl UpgradeId {
         Self::XpBoost,
         Self::Overflow,
         Self::KineticBattery,
+        Self::Gunslinger,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -181,6 +184,7 @@ impl UpgradeId {
             Self::XpBoost => 40,
             Self::Overflow => 41,
             Self::KineticBattery => 42,
+            Self::Gunslinger => 43,
         }
     }
 
@@ -229,6 +233,7 @@ impl UpgradeId {
             Self::XpBoost => "XP Boost      (+20% account XP)",
             Self::Overflow => "Overflow      (+25% dmg at full NRG)",
             Self::KineticBattery => "Kinetic Batt. (dash refunds NRG)",
+            Self::Gunslinger => "Gunslinger    (+50% dmg, +30% rate)",
         }
     }
 
@@ -278,6 +283,7 @@ impl UpgradeId {
             Self::XpBoost => 2000,
             Self::Overflow => 2400,
             Self::KineticBattery => 2000,
+            Self::Gunslinger => 3200,
         }
     }
 
@@ -326,6 +332,7 @@ impl UpgradeId {
             Self::XpBoost => 4,
             Self::Overflow => 3,
             Self::KineticBattery => 3,
+            Self::Gunslinger => 1,
         }
     }
 }
@@ -470,6 +477,18 @@ pub fn overflow_bonus(stacks: u32) -> f32 {
 /// `20 × stacks` power-weapon energy — granted in `skills::use_skills` on dash.
 pub fn kinetic_battery_refund(stacks: u32) -> f32 {
     20.0 * stacks as f32
+}
+
+/// GUNSLINGER passive (rainboids GUNSLINGER, keystone) — damage half: `+0.5 ×
+/// stacks` flat primary damage, folded into the `amp` multiplier.
+pub fn gunslinger_dmg(stacks: u32) -> f32 {
+    0.5 * stacks as f32
+}
+
+/// GUNSLINGER fire-rate half: a `1 / (1 + 0.3 × stacks)` cooldown multiplier
+/// (+30%/stack fire rate), applied in `weapons::player_fire`. 1.0 when not owned.
+pub fn gunslinger_fire_mult(stacks: u32) -> f32 {
+    1.0 / (1.0 + 0.3 * stacks as f32)
 }
 
 /// FRENZY passive: a *live* kill-streak adds `0.03 × stacks × kills` damage on top
@@ -785,6 +804,7 @@ pub fn apply_upgrade(
         | UpgradeId::Scavenger
         | UpgradeId::XpBoost
         | UpgradeId::Overflow
-        | UpgradeId::KineticBattery => {}
+        | UpgradeId::KineticBattery
+        | UpgradeId::Gunslinger => {}
     }
 }

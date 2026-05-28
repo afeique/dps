@@ -1578,6 +1578,49 @@ fn kinetic_battery_refunds_energy_per_dash() {
     assert!((kinetic_battery_refund(3) - 60.0).abs() < 1e-6, "x3 → +60 energy/dash");
 }
 
+/// Gunslinger (rainboids GUNSLINGER): +50% primary damage and +30% fire rate.
+#[test]
+fn gunslinger_buffs_damage_and_fire_rate() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{gunslinger_dmg, gunslinger_fire_mult, UpgradeId, Upgrades};
+
+    // Fire-rate half (helper): +30%/stack → 1/(1+0.3) cooldown multiplier.
+    assert_eq!(gunslinger_fire_mult(0), 1.0, "not owned → full cooldown");
+    assert!((gunslinger_fire_mult(1) - 1.0 / 1.3).abs() < 1e-6, "x1 → ÷1.3 cooldown");
+    // Damage half (helper): +0.5/stack additive into amp.
+    assert!((gunslinger_dmg(1) - 0.5).abs() < 1e-6, "x1 → +50% damage");
+
+    // Damage integration (same seed cancels any crit): owned ≈ 1.5× the base hit.
+    fn dmg(owned: bool) -> f32 {
+        let mut app = test_app();
+        if owned {
+            app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Gunslinger, 1);
+        }
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1.0e6),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1.0e6 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    assert!((dmg(true) - dmg(false) * 1.5).abs() < 0.05 * dmg(false), "Gunslinger → +50% damage");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

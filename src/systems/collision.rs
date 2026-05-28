@@ -17,8 +17,8 @@ use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak,
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
-    berserker_bonus, frenzy_bonus, opportunist_bonus, overflow_bonus, predator_bonus,
-    stun_chance, vampiric_rounds_heal, vampirism_frac, UpgradeId, Upgrades,
+    berserker_bonus, frenzy_bonus, gunslinger_dmg, opportunist_bonus, overflow_bonus,
+    predator_bonus, stun_chance, vampiric_rounds_heal, vampirism_frac, UpgradeId, Upgrades,
     EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
@@ -162,7 +162,8 @@ pub fn bullet_hits_enemy(
         + glass_cannon_dmg(upgrades.owned(UpgradeId::GlassCannon))
         + berserker_bonus(upgrades.owned(UpgradeId::Berserker), player_hp_frac)
         + frenzy_bonus(upgrades.owned(UpgradeId::Frenzy), frenzy_kills)
-        + overflow;
+        + overflow
+        + gunslinger_dmg(upgrades.owned(UpgradeId::Gunslinger));
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).
