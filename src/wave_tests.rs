@@ -1454,17 +1454,36 @@ fn attunement_resolution_and_cycle() {
     assert_eq!(next_attunement(ElementSet::single(Element::Pyro)), ElementSet::single(Element::Cryo));
     assert_eq!(next_attunement(ElementSet::single(Element::Radiant)), ElementSet::EMPTY);
 
-    // The debug key advances the resource.
+    // The T key now cycles only *unlocked* attunements. With none unlocked it
+    // stays "off"; once Pyro is armory-unlocked, T advances to it.
+    use crate::meta::Meta;
     let mut app = test_app();
     app.init_resource::<Attunements>();
-    let world = app.world_mut();
     let mut input = ButtonInput::<KeyCode>::default();
     input.press(KeyCode::KeyT);
-    world.insert_resource(input);
+    app.world_mut().insert_resource(input);
+
+    // Locked: T is a no-op (Pyro not unlocked).
+    app.world_mut().insert_resource(Meta::default());
     let mut step = Schedule::default();
     step.add_systems(cycle_attunement);
-    step.run(world);
-    assert_eq!(world.resource::<Attunements>().0, ElementSet::single(Element::Pyro));
+    step.run(app.world_mut());
+    assert_eq!(
+        app.world().resource::<Attunements>().0,
+        ElementSet::EMPTY,
+        "with nothing unlocked, the attunement cycle stays off"
+    );
+
+    // Unlock Pyro → T advances to it.
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.unlock("ATT_PYRO", 0);
+    }
+    let mut input2 = ButtonInput::<KeyCode>::default();
+    input2.press(KeyCode::KeyT);
+    app.world_mut().insert_resource(input2);
+    step.run(app.world_mut());
+    assert_eq!(app.world().resource::<Attunements>().0, ElementSet::single(Element::Pyro));
 }
 
 /// W: an Orbital Strike telegraphs (no damage) then strikes its column AoE.
@@ -3847,28 +3866,39 @@ fn elemental_status_auras_stack_and_despawn_independently() {
     }
 }
 
-/// The armory catalog lists exactly the six gold-locked exotic weapons (the
-/// free base loadout is omitted), each with a positive cost + a stable id.
+/// The armory catalog lists the six gold-locked exotic weapons + the six
+/// elemental attunements (the free base loadout is omitted), each with a
+/// positive cost, a stable id, and starting locked.
 #[test]
-fn armory_catalog_is_the_exotic_weapons() {
+fn armory_catalog_has_exotics_and_attunements() {
     use crate::meta::Meta;
     use crate::systems::armory::armory_catalog;
     use crate::systems::weapons::WeaponKind;
 
     let catalog = armory_catalog();
-    assert_eq!(catalog.len(), 6, "six exotic weapons are unlockable");
+    assert_eq!(catalog.len(), 12, "6 exotic weapons + 6 attunements");
     let meta = Meta::default();
+
+    // No duplicate ids, every cost positive, nothing unlocked by default.
+    let mut ids = std::collections::HashSet::new();
     for e in &catalog {
         assert!(e.cost > 0, "{} has a cost", e.name);
-        // Every catalog id is a real, non-base (gold-locked) weapon id.
-        let kind = WeaponKind::ALL
-            .iter()
-            .copied()
-            .find(|w| w.id() == e.id)
-            .unwrap_or_else(|| panic!("catalog id {} maps to no weapon", e.id));
-        assert!(!kind.base_unlocked(), "{} is a base weapon, shouldn't be sold", e.name);
-        assert!(!kind.is_available(&meta), "catalog item starts locked");
+        assert!(ids.insert(e.id), "duplicate armory id {}", e.id);
+        assert!(!meta.is_unlocked(e.id), "{} starts locked", e.name);
     }
+
+    // The six weapon entries are exactly the non-base weapons.
+    let weapon_ids: Vec<&str> = WeaponKind::ALL
+        .iter()
+        .filter(|w| !w.base_unlocked())
+        .map(|w| w.id())
+        .collect();
+    assert_eq!(weapon_ids.len(), 6);
+    for wid in weapon_ids {
+        assert!(ids.contains(wid), "exotic weapon {wid} missing from catalog");
+    }
+    // The six attunement entries use the ATT_ id namespace.
+    assert_eq!(catalog.iter().filter(|e| e.id.starts_with("ATT_")).count(), 6);
 }
 
 /// Weapon armory-gating: the five base weapons are always available, the six

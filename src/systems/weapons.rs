@@ -548,9 +548,52 @@ pub fn next_attunement(current: ElementSet) -> ElementSet {
 /// DEBUG (until the BUILD tree gold-gates attunements): `T` cycles the active
 /// attunement element through the 6 + off, so player elemental offense — and the
 /// whole reaction/status engine — is playable now.
-pub fn cycle_attunement(keys: Res<ButtonInput<KeyCode>>, mut attune: ResMut<Attunements>) {
+/// The armory unlock id for attuning to `e` (distinct from weapon ids). The
+/// six non-Kinetic attunements are gold-gated; Kinetic is the neutral baseline.
+pub fn attunement_unlock_id(e: Element) -> &'static str {
+    match e {
+        Element::Pyro => "ATT_PYRO",
+        Element::Cryo => "ATT_CRYO",
+        Element::Volt => "ATT_VOLT",
+        Element::Toxic => "ATT_TOXIC",
+        Element::Void => "ATT_VOID",
+        Element::Radiant => "ATT_RADIANT",
+        Element::Kinetic => "ATT_KINETIC",
+    }
+}
+
+/// Whether attuning to `e` is unlocked in the armory.
+pub fn attunement_unlocked(e: Element, meta: &crate::meta::Meta) -> bool {
+    meta.is_unlocked(attunement_unlock_id(e))
+}
+
+/// Like [`next_attunement`] but skips attunements not yet unlocked — "off" (no
+/// attunement) is always available, so the cycle always terminates.
+pub fn next_attunement_avail(current: ElementSet, meta: &crate::meta::Meta) -> ElementSet {
+    let idx = ATTUNE_CYCLE
+        .iter()
+        .position(|o| match o {
+            None => current.is_empty(),
+            Some(e) => current.len() == 1 && current.contains(*e),
+        })
+        .unwrap_or(0);
+    for step in 1..=ATTUNE_CYCLE.len() {
+        match ATTUNE_CYCLE[(idx + step) % ATTUNE_CYCLE.len()] {
+            None => return ElementSet::EMPTY,
+            Some(e) if attunement_unlocked(e, meta) => return ElementSet::single(e),
+            _ => {} // locked — skip
+        }
+    }
+    ElementSet::EMPTY
+}
+
+pub fn cycle_attunement(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut attune: ResMut<Attunements>,
+    meta: Res<crate::meta::Meta>,
+) {
     if keys.just_pressed(KeyCode::KeyT) {
-        attune.0 = next_attunement(attune.0);
+        attune.0 = next_attunement_avail(attune.0, &meta);
     }
 }
 

@@ -7,21 +7,23 @@
 //! v1 lists the six exotic weapons; abilities/attunements join the catalog as
 //! their own unlock-gating lands.
 
-use crate::meta::{save_meta, Meta, WEAPON_UNLOCK_COST};
+use crate::combat::element::Element;
+use crate::meta::{save_meta, Meta, ATTUNEMENT_UNLOCK_COST, WEAPON_UNLOCK_COST};
 use crate::states::GameState;
-use crate::systems::weapons::WeaponKind;
+use crate::systems::weapons::{attunement_unlock_id, WeaponKind};
 use bevy::prelude::*;
 
 /// One purchasable unlock: a stable id (matches `Meta.unlocked`), a display
 /// name, and an account-gold cost.
 pub struct ArmoryEntry {
     pub id: &'static str,
-    pub name: &'static str,
+    pub name: String,
     pub cost: u64,
 }
 
-/// The unlock catalog — the six exotic weapons (the five base weapons are free
-/// and omitted). Abilities/attunements append here as their gating lands.
+/// The unlock catalog — the six exotic weapons + the six elemental attunements
+/// (the five base weapons + "no attunement" are free and omitted). Abilities
+/// append here as their gating lands.
 pub fn armory_catalog() -> Vec<ArmoryEntry> {
     const EXOTICS: [WeaponKind; 6] = [
         WeaponKind::GravityLance,
@@ -31,14 +33,25 @@ pub fn armory_catalog() -> Vec<ArmoryEntry> {
         WeaponKind::MitosisRounds,
         WeaponKind::FlakCannon,
     ];
-    EXOTICS
-        .iter()
-        .map(|w| ArmoryEntry {
-            id: w.id(),
-            name: w.name(),
-            cost: WEAPON_UNLOCK_COST,
-        })
-        .collect()
+    const ATTUNES: [Element; 6] = [
+        Element::Pyro,
+        Element::Cryo,
+        Element::Volt,
+        Element::Toxic,
+        Element::Void,
+        Element::Radiant,
+    ];
+    let weapons = EXOTICS.iter().map(|w| ArmoryEntry {
+        id: w.id(),
+        name: w.name().to_string(),
+        cost: WEAPON_UNLOCK_COST,
+    });
+    let attunes = ATTUNES.iter().map(|e| ArmoryEntry {
+        id: attunement_unlock_id(*e),
+        name: format!("{} Attunement", e.name()),
+        cost: ATTUNEMENT_UNLOCK_COST,
+    });
+    weapons.chain(attunes).collect()
 }
 
 /// Cursor over the armory catalog.
