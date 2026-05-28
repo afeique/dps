@@ -69,6 +69,8 @@ pub fn use_skills(
     keys: Res<ButtonInput<KeyCode>>,
     gamepads: Query<&Gamepad>,
     time: Res<Time>,
+    // Optional so headless tests (no audio assets) still run the skill logic.
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut commands: Commands,
     mut skills: ResMut<Skills>,
     mut deaths: MessageWriter<Death>,
@@ -113,6 +115,9 @@ pub fn use_skills(
             .entity(player_entity)
             .insert(Invulnerable { seconds: invuln });
         skills.dash_cd = 2.0;
+        if let Some(sfx) = &sfx {
+            commands.spawn((AudioPlayer::new(sfx.dash.clone()), PlaybackSettings::DESPAWN));
+        }
     }
 
     // --- SHIELD BURST (C) ------------------------------------------------

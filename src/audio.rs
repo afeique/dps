@@ -317,6 +317,33 @@ fn synth_crit() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Dash — a short airy "whoosh": filtered noise + a descending body tone, ~0.16 s.
+/// Played when the player dashes (`skills::use_skills`).
+fn synth_dash() -> Vec<u8> {
+    let duration = 0.16_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.10) as usize;
+    let decay = (-8.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut noise_state: u64 = 0x2468_ACE0_1357_9BDF;
+    let mut lp: f32 = 0.0;
+    let mut body_phase: f32 = 0.0;
+    for i in 0..n {
+        let (raw, next) = lcg_noise(noise_state);
+        noise_state = next;
+        // Darken as it fades (falling low-pass cutoff) — the air rushing past.
+        let coeff = 0.35 - 0.25 * (i as f32 / n as f32);
+        lp += coeff * (raw - lp);
+        let amp = env_exp(i, attack, decay);
+        let body_freq = sweep_freq(520.0, 160.0, i, n); // descending
+        let sig = 0.7 * lp + 0.3 * sine(body_phase);
+        samples.push((sig * amp * 0.30).clamp(-1.0, 1.0));
+        body_phase = advance_phase(body_phase, body_freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 /// Level-up — a triumphant rising C-major arpeggio (C5→E5→G5→C6) with a soft
 /// octave sparkle, ~0.4 s. Played when the account level increases mid-run.
 fn synth_levelup() -> Vec<u8> {
@@ -364,6 +391,7 @@ pub struct Sfx {
     pub flare:        Handle<AudioSource>,
     pub crit:         Handle<AudioSource>,
     pub levelup:      Handle<AudioSource>,
+    pub dash:         Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -440,6 +468,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let flare        = assets.add(make_synth(synth_flare()));
     let crit         = assets.add(make_synth(synth_crit()));
     let levelup      = assets.add(make_synth(synth_levelup()));
+    let dash         = assets.add(make_synth(synth_dash()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -487,6 +516,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         flare,
         crit,
         levelup,
+        dash,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed
