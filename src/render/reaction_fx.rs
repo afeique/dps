@@ -24,8 +24,9 @@ pub struct Shockwave {
 }
 
 /// A unit-radius (1 px) 32-gon ring; the entity's Transform scale grows it to the
-/// live radius each tick. HDR-emissive so Bloom makes it pop.
-fn unit_ring(color: Color) -> Shape {
+/// live radius each tick. HDR-emissive so Bloom makes it pop. Shared with the
+/// level-up aura (`render::level_up_aura`), which reuses `Shockwave`/`tick_shockwaves`.
+pub fn unit_ring(color: Color) -> Shape {
     let mut path = ShapePath::new();
     for i in 0..32 {
         let a = i as f32 / 32.0 * std::f32::consts::TAU;

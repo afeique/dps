@@ -281,6 +281,8 @@ impl Plugin for GamePlugin {
                     render::dash_trail::fade_dash_ghosts,
                     // Invuln shield bubble: pulses into view during i-frames.
                     render::shield_bubble::update_shield_bubble,
+                    // Golden aura when the account levels up mid-run.
+                    render::level_up_aura::level_up_aura,
                 )
                     .run_if(in_state(GameState::Playing)),
             )

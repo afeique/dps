@@ -1640,6 +1640,39 @@ fn dash_trail_emits_only_while_dashing() {
     assert_eq!(ghosts(100.0, true), 0, "invuln but slow (Shield Burst) → no ghost");
 }
 
+/// A mid-run account level-up spawns one golden aura ring at the ship; the first
+/// observed level is adopted silently, and a steady level fires nothing.
+#[test]
+fn level_up_spawns_aura() {
+    use crate::components::Ship;
+    use crate::meta::Meta;
+    use crate::render::level_up_aura::level_up_aura;
+    use crate::render::reaction_fx::Shockwave;
+
+    let mut app = test_app();
+    app.world_mut().resource_mut::<Meta>().level = 3;
+    app.world_mut().spawn((Ship::default(), Transform::default()));
+    let world = app.world_mut();
+
+    let mut step = Schedule::default();
+    step.add_systems(level_up_aura);
+
+    let auras = |w: &mut World| w.query::<&Shockwave>().iter(w).count();
+
+    step.run(world); // first run adopts level 3 — no aura
+    assert_eq!(auras(world), 0, "adopting the starting level fires nothing");
+
+    step.run(world); // unchanged level — no aura
+    assert_eq!(auras(world), 0, "a steady level fires nothing");
+
+    world.resource_mut::<Meta>().level = 4;
+    step.run(world); // level up → one aura
+    assert_eq!(auras(world), 1, "a level-up spawns one aura");
+
+    step.run(world); // back to steady — still just the one
+    assert_eq!(auras(world), 1, "no further aura without another level-up");
+}
+
 /// The shield bubble is visible (scale > 0) only while the ship is invulnerable.
 #[test]
 fn shield_bubble_visible_only_when_invulnerable() {
