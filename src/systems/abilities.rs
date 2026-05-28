@@ -45,6 +45,7 @@ pub fn activate_loadout(
     mut commands: Commands,
     equipped: Res<EquippedAbilities>,
     mut cds: ResMut<AbilityCooldowns>,
+    mut infusion: ResMut<crate::systems::weapons::ElementInfusion>,
     mut player: Query<(Entity, &mut Transform), With<Ship>>,
     mut enemies: Query<(Entity, &mut Transform, Has<Boss>), (With<Enemy>, Without<Ship>)>,
 ) {
@@ -119,6 +120,15 @@ pub fn activate_loadout(
             Ability::SecondWind => {
                 // Arm a one-time death save; consumed by damage::apply_damage.
                 commands.entity(player_e).insert(SecondWindArmed);
+                true
+            }
+            Ability::ElementalInfusion => {
+                // Re-element shots to the next element for 8 s (spawn_bullets
+                // reads ElementInfusion); each cast cycles forward.
+                infusion.element = Some(crate::systems::weapons::next_infusion_element(
+                    infusion.element,
+                ));
+                infusion.secs = 8.0;
                 true
             }
             Ability::Blink => {

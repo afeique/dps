@@ -135,6 +135,7 @@ impl Ability {
                 | Ability::GravitySnare
                 | Ability::Designator
                 | Ability::SecondWind
+                | Ability::ElementalInfusion
                 | Ability::CryoField
                 | Ability::StasisField
                 | Ability::StormCell

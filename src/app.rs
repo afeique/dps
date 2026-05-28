@@ -39,6 +39,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::weapons::Attunements>()
+            .init_resource::<systems::weapons::ElementInfusion>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
             .init_resource::<components::loadout::EquippedAbilities>()
@@ -394,6 +395,8 @@ impl Plugin for GamePlugin {
                         systems::enemy::mechanics::decay_warden_resist,
                         // Count down the Overdrive primary-buff (W).
                         systems::power_weapon::tick_overdrive,
+                        // Expire an active Elemental Infusion (AB).
+                        systems::weapons::tick_element_infusion,
                         systems::skills::tick_bulwark,
                         systems::skills::tick_repair,
                         systems::skills::tick_tractor,

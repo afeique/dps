@@ -61,7 +61,18 @@ fn ability_catalog_is_complete_and_well_formed() {
         assert!(!a.name().is_empty());
     }
     let wired = Ability::ALL.iter().filter(|a| a.implemented()).count();
-    assert_eq!(wired, 12, "base + fields + Snare + Designator + Second Wind");
+    assert_eq!(wired, 13, "all but Sentry Drone are wired");
+}
+
+#[test]
+fn infusion_cycle_wraps_and_skips_kinetic() {
+    use crate::combat::element::Element;
+    use crate::systems::weapons::next_infusion_element;
+    assert_eq!(next_infusion_element(None), Element::Pyro);
+    assert_eq!(next_infusion_element(Some(Element::Pyro)), Element::Cryo);
+    assert_eq!(next_infusion_element(Some(Element::Radiant)), Element::Pyro);
+    // Kinetic isn't in the cycle → falls back to the first element.
+    assert_eq!(next_infusion_element(Some(Element::Kinetic)), Element::Pyro);
 }
 
 #[test]
@@ -90,6 +101,7 @@ fn world_with_ship() -> (World, Entity) {
     let mut world = World::new();
     world.insert_resource(EquippedAbilities::default());
     world.insert_resource(AbilityCooldowns::default());
+    world.insert_resource(crate::systems::weapons::ElementInfusion::default());
     let mut time = Time::<()>::default();
     time.advance_by(Duration::from_millis(16));
     world.insert_resource(time);
@@ -307,4 +319,23 @@ fn second_wind_arms_a_death_save() {
         "casting Second Wind arms the death save"
     );
     assert!(!world.resource::<AbilityCooldowns>().is_ready(0), "slot 0 on cooldown");
+}
+
+#[test]
+fn elemental_infusion_sets_the_override() {
+    use crate::combat::element::Element;
+    use crate::systems::weapons::ElementInfusion;
+
+    let (mut world, _ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([
+        Some(Ability::ElementalInfusion),
+        None,
+        None,
+        None,
+    ]));
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+    let inf = world.resource::<ElementInfusion>();
+    assert_eq!(inf.element, Some(Element::Pyro), "first cast infuses Pyro");
+    assert!((inf.secs - 8.0).abs() < 1e-3, "8s infusion duration");
 }

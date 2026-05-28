@@ -239,13 +239,60 @@ pub struct CurrentWeapon(pub WeaponKind);
 pub struct Attunements(pub ElementSet);
 
 /// Resolve a player bullet's element set (`resolveBulletElements` semantics):
-/// equipped `attune` elements if any, else the weapon's `base` element. (Element
-/// override — Elemental Infusion / Overdrive — layers on top in a later phase.)
+/// equipped `attune` elements if any, else the weapon's `base` element. An active
+/// [`ElementInfusion`] overrides this entirely (layered on at the `spawn_bullets`
+/// call site).
 pub fn resolve_player_bullet_set(attune: ElementSet, base: Element) -> ElementSet {
     if attune.is_empty() {
         ElementSet::single(base)
     } else {
         attune
+    }
+}
+
+/// An active **Elemental Infusion** (AB ability, `weapon-data.js` ELEMENTAL_INFUSION,
+/// 8 s): while `element` is `Some`, every player bullet's element is overridden to
+/// it (beats resists by switching). `None` = no infusion. Each cast cycles to the
+/// next element and resets the timer; `tick_element_infusion` expires it.
+#[derive(Resource, Default)]
+pub struct ElementInfusion {
+    pub element: Option<Element>,
+    pub secs: f32,
+}
+
+/// The infusion element cycle (`ELEMENTAL_INFUSION.elements` — the six non-Kinetic
+/// elements).
+pub const INFUSION_CYCLE: [Element; 6] = [
+    Element::Pyro,
+    Element::Cryo,
+    Element::Volt,
+    Element::Toxic,
+    Element::Void,
+    Element::Radiant,
+];
+
+/// The next infusion element after `current` (wraps; `None` → the first). Pure.
+pub fn next_infusion_element(current: Option<Element>) -> Element {
+    match current {
+        None => INFUSION_CYCLE[0],
+        Some(e) => {
+            let i = INFUSION_CYCLE
+                .iter()
+                .position(|&x| x == e)
+                .map_or(0, |i| (i + 1) % INFUSION_CYCLE.len());
+            INFUSION_CYCLE[i]
+        }
+    }
+}
+
+/// Count down an active Elemental Infusion and clear it on expiry.
+pub fn tick_element_infusion(time: Res<Time>, mut infusion: ResMut<ElementInfusion>) {
+    if infusion.element.is_some() {
+        infusion.secs -= time.delta_secs();
+        if infusion.secs <= 0.0 {
+            infusion.element = None;
+            infusion.secs = 0.0;
+        }
     }
 }
 
@@ -541,6 +588,7 @@ pub fn spawn_bullets(
     assets: Res<BulletAssets>,
     cur: Res<CurrentWeapon>,
     attune: Res<Attunements>,
+    infusion: Res<ElementInfusion>,
     upgrades: Res<Upgrades>,
     wave: Res<crate::systems::wave::Wave>,
     // Running count of player bullets fired — drives the Overcharge cadence.
@@ -594,10 +642,14 @@ pub fn spawn_bullets(
                 ));
                 b.spawn((ParticleEffect::new(trail), Transform::default()));
             });
-            // Element tag (W): equipped attunements if any, else the weapon's
-            // base element (resolve_player_bullet_set). Resist + reactions are
-            // applied in `bullet_hits_enemy` from this set.
-            bullet.insert(BulletElements(resolve_player_bullet_set(attune.0, cur.0.element())));
+            // Element tag (W): an active Elemental Infusion (AB) overrides
+            // everything; else equipped attunements, else the weapon's base
+            // element. Resist + reactions are applied in `bullet_hits_enemy`.
+            let set = match infusion.element {
+                Some(e) => ElementSet::single(e),
+                None => resolve_player_bullet_set(attune.0, cur.0.element()),
+            };
+            bullet.insert(BulletElements(set));
             // Gravity Lance orbs pull nearby enemies as they fly (W).
             if cur.0 == WeaponKind::GravityLance {
                 bullet.insert(GravityBullet { pull_radius: 150.0, pull_strength: 60.0 });
