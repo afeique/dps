@@ -20,6 +20,14 @@ pub struct GravityBullet {
     pub pull_strength: f32,
 }
 
+/// A **Boomerang** disc: flies out for `timer` s, then `returning` flips and it
+/// accelerates back toward the player (`systems::weapons::boomerang_return`).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct Boomerang {
+    pub timer: f32,
+    pub returning: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,

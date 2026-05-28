@@ -290,6 +290,8 @@ impl Plugin for GamePlugin {
                         .chain(),
                     // Gravity Lance orbs drag nearby enemies before they move (W).
                     systems::weapons::gravity_pull,
+                    // Boomerang discs curve back to the player (W).
+                    systems::weapons::boomerang_return,
                     systems::movement::integrate,
                     systems::movement::confine_player,
                     // Generic formations (spec IV.6): override bound members'

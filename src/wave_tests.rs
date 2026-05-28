@@ -1220,6 +1220,40 @@ fn gravity_lance_is_void_and_pulls() {
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
 }
 
+/// W: a Boomerang disc flies out, then (after the out phase) accelerates back
+/// toward the player — its outbound velocity reverses.
+#[test]
+fn boomerang_returns_to_player() {
+    use crate::components::{Boomerang, Velocity};
+    use crate::systems::weapons::boomerang_return;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    // A disc out at +X, moving +X, mid-return phase.
+    let disc = world
+        .spawn((
+            Velocity(Vec2::new(300.0, 0.0)),
+            Transform::from_xyz(200.0, 0.0, 0.0),
+            Boomerang { timer: 0.0, returning: false },
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(boomerang_return);
+    // Advance well past the 28-tick out phase + keep returning long enough that
+    // the +X velocity fully reverses (accel only applies during the return phase).
+    for _ in 0..60 {
+        let mut t = Time::<()>::default();
+        t.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+        world.insert_resource(t);
+        step.run(world);
+    }
+
+    assert!(world.get::<Boomerang>(disc).unwrap().returning, "entered return phase");
+    assert!(world.get::<Velocity>(disc).unwrap().0.x < 0.0, "velocity reversed toward the player");
+}
+
 /// W: the Spin Cannon's fire cooldown spools from slow (0.22 s) to fast (0.06 s)
 /// as the spool fills.
 #[test]

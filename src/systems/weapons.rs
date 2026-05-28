@@ -54,6 +54,8 @@ pub enum WeaponKind {
     GravityLance,
     /// Minigun — fire rate spools up slow→fast while held (W).
     SpinCannon,
+    /// Disc that flies out then curves back to the player (W).
+    Boomerang,
 }
 
 impl WeaponKind {
@@ -65,7 +67,8 @@ impl WeaponKind {
             Self::RailDriver => Self::ClusterLauncher,
             Self::ClusterLauncher => Self::GravityLance,
             Self::GravityLance => Self::SpinCannon,
-            Self::SpinCannon => Self::PulseCannon,
+            Self::SpinCannon => Self::Boomerang,
+            Self::Boomerang => Self::PulseCannon,
         }
     }
 
@@ -79,6 +82,7 @@ impl WeaponKind {
             Self::ClusterLauncher => "Cluster Launcher",
             Self::GravityLance => "Gravity Lance",
             Self::SpinCannon => "Spin Cannon",
+            Self::Boomerang => "Boomerang Discs",
         }
     }
 
@@ -147,8 +151,19 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             cooldown: SPIN_SLOW_CD, damage: 0.5, speed: BASE_BULLET_SPEED * 1.0,
             radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.12, pierce: 0,
         },
+        // Out-and-back disc (weapon-data.js: outFrames 28, returnAccel 0.55,
+        // pierce 3). The return arc rides on the `Boomerang` component.
+        WeaponKind::Boomerang => WeaponStats {
+            cooldown: 0.60, damage: 1.4, speed: BASE_BULLET_SPEED * 0.85,
+            radius: BASE_BULLET_RADIUS * 1.1, count: 1, spread: 0.0, jitter: 0.0, pierce: 3,
+        },
     }
 }
+
+/// Boomerang flight: out for `BOOMERANG_OUT_SECS`, then accelerate back to the
+/// player at `BOOMERANG_RETURN_ACCEL` px/s² (weapon-data.js outFrames 28).
+pub const BOOMERANG_OUT_SECS: f32 = 28.0 / 60.0;
+pub const BOOMERANG_RETURN_ACCEL: f32 = 2600.0;
 
 /// Spin Cannon spool: slow → fast fire-rate over `SPIN_UP_TIME` s of held fire.
 pub const SPIN_SLOW_CD: f32 = 0.22;
@@ -248,6 +263,30 @@ pub fn gravity_pull(
                 etf.translation.x += step.x;
                 etf.translation.y += step.y;
             }
+        }
+    }
+}
+
+/// Boomerang discs fly out for `BOOMERANG_OUT_SECS`, then accelerate back toward
+/// the player (W). Standalone trajectory system (run before integrate); the disc
+/// hits enemies on both legs via the normal pierce path. Player `&Transform`
+/// (immut) is disjoint from the disc `&mut Velocity` query (a disc isn't the ship).
+pub fn boomerang_return(
+    time: Res<Time>,
+    player: Query<&Transform, With<Ship>>,
+    mut discs: Query<(&mut Velocity, &Transform, &mut Boomerang)>,
+) {
+    let Ok(ptf) = player.single() else { return };
+    let ppos = ptf.translation.truncate();
+    let dt = time.delta_secs();
+    for (mut vel, tf, mut b) in &mut discs {
+        b.timer += dt;
+        if b.timer >= BOOMERANG_OUT_SECS {
+            b.returning = true;
+        }
+        if b.returning {
+            let to_player = (ppos - tf.translation.truncate()).normalize_or_zero();
+            vel.0 += to_player * BOOMERANG_RETURN_ACCEL * dt;
         }
     }
 }
@@ -453,6 +492,10 @@ pub fn spawn_bullets(
             // Gravity Lance orbs pull nearby enemies as they fly (W).
             if cur.0 == WeaponKind::GravityLance {
                 bullet.insert(GravityBullet { pull_radius: 150.0, pull_strength: 60.0 });
+            }
+            // Boomerang discs fly out then curve back (W).
+            if cur.0 == WeaponKind::Boomerang {
+                bullet.insert(Boomerang::default());
             }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {
