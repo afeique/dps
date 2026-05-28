@@ -1010,6 +1010,50 @@ fn shatter_emits_reaction_and_spawns_shockwave() {
     }
 }
 
+/// The Catalyst passive amplifies elemental-reaction damage: a shatter with
+/// Catalyst stacks hurts a caught neighbor more than the un-stacked baseline.
+#[test]
+fn catalyst_amplifies_reaction_damage() {
+    use crate::combat::reaction::{PendingReactions, ReactionSeed};
+    use crate::systems::damage::apply_damage;
+    use crate::systems::reactions::resolve_reactions;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    // Run one shatter against a neighbor at 50 px; return the damage it took.
+    fn shatter_damage(catalyst_stacks: u32) -> f32 {
+        let mut app = test_app();
+        app.world_mut()
+            .resource_mut::<Upgrades>()
+            .set(UpgradeId::Catalyst, catalyst_stacks);
+        let world = app.world_mut();
+        let source = world
+            .spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(0.0, 0.0, 0.0)))
+            .id();
+        let near = world
+            .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(1000.0), Transform::from_xyz(50.0, 0.0, 0.0)))
+            .id();
+        world
+            .resource_mut::<PendingReactions>()
+            .0
+            .push(ReactionSeed::Shatter { source, center: Vec2::ZERO, depth: 0 });
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.016));
+        world.insert_resource(time);
+        let mut step = Schedule::default();
+        step.add_systems((resolve_reactions, apply_damage).chain());
+        step.run(world);
+        1000.0 - world.get::<Health>(near).unwrap().current
+    }
+
+    let base = shatter_damage(0);
+    let amped = shatter_damage(5); // +125%
+    assert!(base > 0.0, "shatter deals damage at baseline");
+    assert!(
+        amped > base * 2.0,
+        "Catalyst ×5 (+125%) more than doubles reaction damage (base {base}, amped {amped})"
+    );
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

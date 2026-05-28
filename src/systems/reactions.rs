@@ -23,6 +23,7 @@ pub fn resolve_reactions(
     mut pending: ResMut<PendingReactions>,
     mut dmg: MessageWriter<Damage>,
     mut fx: MessageWriter<Reaction>,
+    upgrades: Res<crate::systems::shop::Upgrades>,
     enemies: Query<
         (Entity, &Transform, Option<&Resistances>, Has<Frozen>),
         (With<Enemy>, Without<Ship>),
@@ -34,6 +35,11 @@ pub fn resolve_reactions(
     // Drain into a worklist; the shatter chain re-queues into it (bounded by
     // depth < MAX so it terminates). Query data is stable across the run since
     // our inserts are deferred Commands.
+    // Catalyst passive: amplifies all reaction damage (spec — shop keystone).
+    let catalyst = 1.0
+        + crate::systems::shop::catalyst_bonus(
+            upgrades.owned(crate::systems::shop::UpgradeId::Catalyst),
+        );
     let mut work: Vec<ReactionSeed> = std::mem::take(&mut pending.0);
     while let Some(seed) = work.pop() {
         match seed {
@@ -62,7 +68,7 @@ pub fn resolve_reactions(
                     let cryo = res.map_or(1.0, |r| r.multiplier(Element::Cryo));
                     dmg.write(Damage {
                         target: e,
-                        amount: SHATTER_DAMAGE * cryo,
+                        amount: SHATTER_DAMAGE * cryo * catalyst,
                     });
                     commands.entity(e).insert(Frozen {
                         secs: SHATTER_REFREEZE_SECS,
@@ -88,7 +94,7 @@ pub fn resolve_reactions(
                         continue;
                     }
                     commands.entity(e).insert(Burning {
-                        dps: damage,
+                        dps: damage * catalyst,
                         secs: FLARE_BURN_SECS,
                     });
                 }

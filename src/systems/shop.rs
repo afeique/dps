@@ -48,12 +48,14 @@ pub enum UpgradeId {
     CombatMedic,
     Momentum,
     Whirlwind,
+    /// Amplifies elemental-reaction (shatter / oil-flare) damage.
+    Catalyst,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 26] = [
+    pub const ALL: [UpgradeId; 27] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -80,6 +82,7 @@ impl UpgradeId {
         Self::CombatMedic,
         Self::Momentum,
         Self::Whirlwind,
+        Self::Catalyst,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -113,6 +116,7 @@ impl UpgradeId {
             Self::CombatMedic => 23,
             Self::Momentum => 24,
             Self::Whirlwind => 25,
+            Self::Catalyst => 26,
         }
     }
 
@@ -144,6 +148,7 @@ impl UpgradeId {
             Self::CombatMedic => "Combat Medic  (kill heals on hurt)",
             Self::Momentum => "Momentum      (+speed while moving)",
             Self::Whirlwind => "Whirlwind     (orbiting blade)",
+            Self::Catalyst => "Catalyst      (+reaction dmg)",
         }
     }
 
@@ -176,6 +181,7 @@ impl UpgradeId {
             Self::CombatMedic => 3000,
             Self::Momentum => 2000,
             Self::Whirlwind => 2500,
+            Self::Catalyst => 2400,
         }
     }
 
@@ -207,8 +213,15 @@ impl UpgradeId {
             Self::CombatMedic => 1,
             Self::Momentum => 4,
             Self::Whirlwind => 4,
+            Self::Catalyst => 5,
         }
     }
+}
+
+/// Elemental-reaction damage bonus from `Catalyst` stacks (+25%/stack): a
+/// multiplier applied to shatter / oil-flare damage in `systems::reactions`.
+pub fn catalyst_bonus(stacks: u32) -> f32 {
+    0.25 * stacks as f32
 }
 
 /// Stun chance applied by the `_STUN` bullet trait at `stacks` (spec III.6:
@@ -538,6 +551,7 @@ pub fn apply_upgrade(
         | UpgradeId::StaticDischarge
         | UpgradeId::CombatMedic
         | UpgradeId::Momentum
-        | UpgradeId::Whirlwind => {}
+        | UpgradeId::Whirlwind
+        | UpgradeId::Catalyst => {}
     }
 }
