@@ -111,6 +111,10 @@ pub struct Meta {
     /// older saves load with an empty stash.
     #[serde(default)]
     pub stash: Vec<crate::systems::items::Item>,
+    /// Selected cosmetic ship-skin index (into `render::shapes::SKINS`); applied
+    /// to the hull at spawn. `#[serde(default)]` → older saves use skin 0.
+    #[serde(default)]
+    pub skin: usize,
 }
 
 impl Default for Meta {
@@ -127,6 +131,7 @@ impl Default for Meta {
             attunement: None,
             cores: 0,
             stash: Vec::new(),
+            skin: 0,
         }
     }
 }

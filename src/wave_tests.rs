@@ -1621,6 +1621,23 @@ fn gunslinger_buffs_damage_and_fire_rate() {
     assert!((dmg(true) - dmg(false) * 1.5).abs() < 0.05 * dmg(false), "Gunslinger → +50% damage");
 }
 
+/// The 12 cosmetic ship skins: a full table, distinct names, and a clamped
+/// accessor (out-of-range → the default skin). Meta.skin persists via RON.
+#[test]
+fn ship_skins_table_and_clamp() {
+    use crate::meta::Meta;
+    use crate::render::shapes::{skin_for, SKINS};
+
+    assert_eq!(SKINS.len(), 12, "the plan's 12 skins");
+    assert_eq!(skin_for(0).name, "Aurora", "index 0 is the default");
+    assert_eq!(skin_for(99).name, SKINS[0].name, "out-of-range clamps to default");
+    assert_eq!(skin_for(11).name, "Plasma", "last skin reachable");
+
+    // The selected skin index persists across the RON save.
+    let m = Meta { skin: 7, ..Default::default() };
+    assert_eq!(Meta::from_ron(&m.to_ron()).skin, 7);
+}
+
 /// Cores salvage economy (Phase IT, rainboids cores.js): salvage value, batch
 /// total, reroll/tier-up costs, and the Meta Cores wallet (add + bounded spend).
 #[test]

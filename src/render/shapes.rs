@@ -47,10 +47,48 @@ fn hull_path() -> ShapePath {
     path.close()
 }
 
+/// A cosmetic ship skin (graphical parity with rainboids' player skins): a named
+/// emissive edge colour for the hull. The fill stays near-black; only the bloom-
+/// flared stroke changes, so the silhouette reads the same in every skin.
+#[derive(Clone, Copy)]
+pub struct Skin {
+    pub name: &'static str,
+    /// HDR stroke colour (over-bright so `Bloom` flares it into the glow edge).
+    pub edge: (f32, f32, f32),
+}
+
+/// The 12 selectable ship skins. Index 0 (Aurora cyan) is the default hull look.
+pub const SKINS: [Skin; 12] = [
+    Skin { name: "Aurora", edge: (0.2, 4.5, 7.5) },   // cyan (default)
+    Skin { name: "Ember", edge: (7.5, 1.6, 0.3) },    // orange-red
+    Skin { name: "Solar", edge: (8.0, 6.0, 0.6) },    // gold
+    Skin { name: "Verdant", edge: (1.0, 7.0, 2.2) },  // green
+    Skin { name: "Amethyst", edge: (5.0, 1.2, 8.0) }, // violet
+    Skin { name: "Rose", edge: (8.0, 1.6, 4.5) },     // magenta-pink
+    Skin { name: "Frost", edge: (4.5, 7.5, 8.5) },    // pale ice
+    Skin { name: "Toxic", edge: (4.5, 8.0, 0.6) },    // acid green
+    Skin { name: "Inferno", edge: (8.5, 3.0, 0.2) },  // hot orange
+    Skin { name: "Abyss", edge: (1.2, 2.0, 8.5) },    // deep blue
+    Skin { name: "Phantom", edge: (5.5, 5.5, 6.5) },  // silver-grey
+    Skin { name: "Plasma", edge: (7.0, 0.6, 7.5) },   // electric purple
+];
+
+/// The skin at `index`, clamped to the [`SKINS`] table (out-of-range → default).
+pub fn skin_for(index: usize) -> &'static Skin {
+    SKINS.get(index).unwrap_or(&SKINS[0])
+}
+
+/// The default hull (Aurora skin) — the no-arg form used where no skin is known.
 pub fn ship_hull() -> Shape {
+    ship_hull_skin(&SKINS[0])
+}
+
+/// The hull rendered in a given [`Skin`]: near-black fill + the skin's emissive edge.
+pub fn ship_hull_skin(skin: &Skin) -> Shape {
+    let (r, g, b) = skin.edge;
     ShapeBuilder::with(&hull_path())
         .fill(Color::linear_rgb(0.0, 0.03, 0.08)) // near-black navy hull, stays dark
-        .stroke((Color::linear_rgb(0.2, 4.5, 7.5), 2.0)) // emissive cyan edge → bloom
+        .stroke((Color::linear_rgb(r, g, b), 2.0)) // emissive edge → bloom
         .build()
 }
 
