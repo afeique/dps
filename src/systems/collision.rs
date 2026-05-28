@@ -106,6 +106,7 @@ pub fn bullet_hits_enemy(
             Has<Oil>,
             Option<&AllyShield>,
             Has<Adaptive>,
+            Has<CoreShielded>,
         ),
         (With<Enemy>, Without<Ship>),
     >,
@@ -199,8 +200,14 @@ pub fn bullet_hits_enemy(
             eoil,
             eshield,
             eadaptive,
+            eshielded,
         ) in &enemies
         {
+            // A boss core is invulnerable while its weak-point parts live (BO):
+            // the shot passes through it (and may still hit a part this frame).
+            if eshielded {
+                continue;
+            }
             let reach = bc.radius + ec.radius;
             let d2 = btf
                 .translation
@@ -334,7 +341,7 @@ pub fn bullet_hits_enemy(
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
                     let splash = bullet.damage * amp * streak_mult;
-                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _, _) in &enemies {
+                    for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;
                         }

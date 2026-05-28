@@ -72,6 +72,25 @@ pub struct Raged;
 #[derive(Component, Debug)]
 pub struct Frenzied;
 
+/// A destructible boss weak-point part (rainboids `boss-parts.js`): a turret /
+/// plate the player must clear. A part is itself an `Enemy` (so the normal
+/// bullet→enemy→damage pipeline hits + kills it) plus this marker linking it to
+/// its boss. While any `shields_core` part lives, the boss core is invulnerable
+/// (`CoreShielded`), forcing the player to strip the parts first.
+#[derive(Component, Debug)]
+pub struct BossPart {
+    /// The boss entity this part belongs to.
+    pub boss: Entity,
+    /// Whether this part gates the core's damage while alive (vs. a bonus weak point).
+    pub shields_core: bool,
+}
+
+/// Marks a boss whose core is currently invulnerable because ≥1 `shields_core`
+/// [`BossPart`] is still alive. Maintained by `enemy::mechanics::update_core_shield`;
+/// read by `collision::bullet_hits_enemy` to skip damage to the core.
+#[derive(Component, Debug)]
+pub struct CoreShielded;
+
 /// A boss that has crossed its HP-threshold but is in the **rage telegraph**
 /// window (spec IV.7, `TELEGRAPH_FRAMES = 24` ≈ 0.4 s): a red warning ring shows
 /// before the rage burst fires, giving the player a counterplay beat.

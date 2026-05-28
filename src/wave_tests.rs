@@ -3982,6 +3982,74 @@ fn boss_frenzy_escalates_in_the_mid_hp_band() {
     assert!(!run(0.2).0, "≤33% is the rage phase — frenzy is skipped there");
 }
 
+/// Weak-point parts (BO): a boss is `CoreShielded` while a `shields_core` part
+/// lives, and loses the marker once the parts are gone.
+#[test]
+fn boss_core_shielded_while_parts_live() {
+    use crate::components::{Boss, BossPart, CoreShielded};
+    use crate::systems::enemy::mechanics::update_core_shield;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let boss = world
+        .spawn((Enemy { kind: EnemyKind::Titan }, Boss { tier: 1 }, Health::new(100.0), Transform::default()))
+        .id();
+    let part = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            BossPart { boss, shields_core: true },
+            Health::new(10.0),
+            Transform::default(),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(update_core_shield);
+    step.run(world);
+    assert!(world.get::<CoreShielded>(boss).is_some(), "core shielded while a part lives");
+
+    world.despawn(part); // destroyed parts despawn via the normal death path
+    step.run(world);
+    assert!(world.get::<CoreShielded>(boss).is_none(), "core exposed once parts are gone");
+}
+
+/// A `CoreShielded` boss core takes no bullet damage (the shot passes through);
+/// without the shield it takes damage normally.
+#[test]
+fn core_shielded_boss_takes_no_bullet_damage() {
+    use crate::components::CoreShielded;
+    use crate::systems::collision::bullet_hits_enemy;
+
+    fn hp_after(shielded: bool) -> f32 {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let mut b = world.spawn((
+            Enemy { kind: EnemyKind::Titan },
+            Health::new(100.0),
+            Collider { radius: 16.0 },
+            Faction::Enemy,
+            Transform::default(),
+        ));
+        if shielded {
+            b.insert(CoreShielded);
+        }
+        let boss = b.id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 20.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::default(),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        world.get::<Health>(boss).unwrap().current
+    }
+
+    assert_eq!(hp_after(true), 100.0, "shielded core takes no damage");
+    assert!(hp_after(false) < 100.0, "unshielded core takes damage");
+}
+
 // ── 42. overheal_converts_to_tanks ────────────────────────────────────────────
 
 /// Overheal above max HP accumulates toward a spare tank — 40 overheal = 1 tank

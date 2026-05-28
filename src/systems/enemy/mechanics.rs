@@ -5,8 +5,8 @@
 
 use crate::combat::element::{Element, Resistances};
 use crate::components::{
-    Adaptive, AllyShield, Drone, DroneSpawner, Enemy, EnemyKind, PlayerCorrode, Ship, SupportAura,
-    AURA_LINGER, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
+    Adaptive, AllyShield, Boss, BossPart, CoreShielded, Drone, DroneSpawner, Enemy, EnemyKind,
+    PlayerCorrode, Ship, SupportAura, AURA_LINGER, SPORE_DRONE_CAP, SPORE_DRONE_INTERVAL,
 };
 use crate::messages::{Damage, Death};
 use crate::systems::player_status::apply_player_status;
@@ -135,5 +135,33 @@ pub fn decay_warden_resist(
     *acc = ADAPT_DECAY_INTERVAL;
     for mut r in &mut q {
         r.decay_default();
+    }
+}
+
+/// Maintain the [`CoreShielded`] marker on bosses: a boss core is invulnerable
+/// while any of its `shields_core` [`BossPart`]s is still alive (rainboids
+/// "core invulnerable while parts live"). A destroyed part is despawned by the
+/// normal enemy-death path, so it simply drops out of the live-parts set here.
+pub fn update_core_shield(
+    mut commands: Commands,
+    parts: Query<&BossPart>,
+    bosses: Query<(Entity, Has<CoreShielded>), With<Boss>>,
+) {
+    use std::collections::HashSet;
+    let shielded: HashSet<Entity> = parts
+        .iter()
+        .filter(|p| p.shields_core)
+        .map(|p| p.boss)
+        .collect();
+    for (boss, has_marker) in &bosses {
+        match (shielded.contains(&boss), has_marker) {
+            (true, false) => {
+                commands.entity(boss).insert(CoreShielded);
+            }
+            (false, true) => {
+                commands.entity(boss).remove::<CoreShielded>();
+            }
+            _ => {}
+        }
     }
 }
