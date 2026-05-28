@@ -4,6 +4,7 @@
 //! *simulation*. Simulation systems must not touch rendering. `input` runs in
 //! `Update` (read devices every frame) and only writes the `Intent` component.
 
+pub mod abilities;
 pub mod asteroids;
 pub mod cleanup;
 pub mod collision;

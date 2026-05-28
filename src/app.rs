@@ -16,7 +16,7 @@ use bevy_prototype_lyon::prelude::ShapePlugin;
 use crate::messages::{Collision, Damage, Death, Fire, Knockback, PlayerHurt};
 use crate::resources::{PlayBounds, Score};
 use crate::states::GameState;
-use crate::{audio, render, systems};
+use crate::{audio, components, render, systems};
 
 pub struct GamePlugin;
 
@@ -41,6 +41,8 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::weapons::Attunements>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
+            .init_resource::<components::loadout::EquippedAbilities>()
+            .init_resource::<components::loadout::AbilityCooldowns>()
             .init_resource::<systems::shop::Upgrades>()
             .init_resource::<systems::shop::ShopSel>()
             .init_resource::<systems::drops::HealthDropTimer>()
@@ -180,6 +182,7 @@ impl Plugin for GamePlugin {
                     systems::skills::use_skills,
                     systems::skills::emp_pulse,
                     systems::skills::cast_deflectors,
+                    systems::abilities::activate_loadout,
                     systems::shop::open_shop,
                     systems::flow::open_pause,
                 )

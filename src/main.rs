@@ -32,6 +32,8 @@ mod combat_tests;
 #[cfg(test)]
 mod gate_tests;
 #[cfg(test)]
+mod loadout_tests;
+#[cfg(test)]
 mod meta_tests;
 #[cfg(test)]
 mod wave_tests;

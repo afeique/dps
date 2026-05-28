@@ -305,7 +305,14 @@ pub fn cast_deflectors(
     let Ok(ptf) = player.single() else {
         return;
     };
-    let center = ptf.translation.truncate();
+    spawn_deflector_orbs(&mut commands, ptf.translation.truncate());
+    skills.deflector_cd = 15.0;
+}
+
+/// Spawn `DEFLECTOR_COUNT` orbs orbiting `center`, each absorbing
+/// `DEFLECTOR_BLOCKS` enemy bullets for 5 s. Shared by the legacy `J` keybind
+/// (`cast_deflectors`) and the 4-slot loadout (`systems::abilities`).
+pub fn spawn_deflector_orbs(commands: &mut Commands, center: Vec2) {
     for i in 0..DEFLECTOR_COUNT {
         let phase = i as f32 / DEFLECTOR_COUNT as f32 * TAU;
         let pos = center + Vec2::new(phase.cos(), phase.sin()) * DEFLECTOR_RADIUS;
@@ -320,7 +327,6 @@ pub fn cast_deflectors(
             Lifetime { seconds: 5.0 },
         ));
     }
-    skills.deflector_cd = 15.0;
 }
 
 /// Keep deflector orbs circling the ship each tick.

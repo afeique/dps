@@ -2,10 +2,12 @@
 //! primitives (used across player / enemy / projectile) live here.
 
 pub mod enemy;
+pub mod loadout;
 pub mod player;
 pub mod projectile;
 
 pub use enemy::*;
+pub use loadout::*;
 pub use player::*;
 pub use projectile::*;
 
