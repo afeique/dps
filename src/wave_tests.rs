@@ -4086,6 +4086,37 @@ fn boss_parts_track_their_boss_and_clean_up() {
     );
 }
 
+/// A spawned tier boss carries a ring of 3 shielding parts, and reads as
+/// `CoreShielded` once the tracker runs.
+#[test]
+fn tier_boss_spawns_shielding_parts() {
+    use crate::components::{Boss, BossPart, CoreShielded};
+    use crate::systems::enemy::{self, mechanics::update_core_shield};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut spawn = Schedule::default();
+    spawn.add_systems(|mut c: Commands| {
+        enemy::spawn_tiered(&mut c, EnemyKind::Titan, Vec2::ZERO, 2);
+    });
+    spawn.run(world);
+
+    assert_eq!(world.query::<&BossPart>().iter(world).count(), 3, "boss spawns 3 weak-point parts");
+    assert!(
+        world.query::<&BossPart>().iter(world).all(|p| p.shields_core),
+        "the parts shield the core"
+    );
+
+    let mut step = Schedule::default();
+    step.add_systems(update_core_shield);
+    step.run(world);
+    assert_eq!(
+        world.query_filtered::<(), (With<Boss>, With<CoreShielded>)>().iter(world).count(),
+        1,
+        "the boss core is shielded while its parts live"
+    );
+}
+
 // ── 42. overheal_converts_to_tanks ────────────────────────────────────────────
 
 /// Overheal above max HP accumulates toward a spare tank — 40 overheal = 1 tank

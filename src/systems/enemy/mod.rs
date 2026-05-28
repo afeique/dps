@@ -313,6 +313,43 @@ fn element_ring(radius: f32, element: Element) -> Shape {
     ShapeBuilder::with(&path.close()).stroke((glow, 2.0)).build()
 }
 
+/// A small amber turret silhouette for a boss weak-point [`BossPart`].
+fn boss_part_shape() -> Shape {
+    let r = 12.0_f32;
+    let mut path = ShapePath::new();
+    for i in 0..6 {
+        let a = i as f32 / 6.0 * std::f32::consts::TAU;
+        let p = Vec2::new(a.cos() * r, a.sin() * r);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close())
+        .fill(Color::linear_rgb(0.1, 0.05, 0.02))
+        .stroke((Color::linear_rgb(8.0, 3.5, 0.4), 2.0)) // amber emissive edge
+        .build()
+}
+
+/// Spawn a ring of `PART_COUNT` destructible weak-point [`BossPart`]s around a
+/// boss (rainboids `boss-parts.js`): each is an inert `Enemy` body (no Velocity →
+/// AI skips it; no FireCooldown → it doesn't fire), parked at its `offset` by
+/// `mechanics::update_boss_parts`. While they live the boss core is invulnerable
+/// (`mechanics::update_core_shield` + the gate in `collision::bullet_hits_enemy`).
+pub fn spawn_boss_parts(commands: &mut Commands, boss: Entity, center: Vec2, ring: f32) {
+    const PART_COUNT: usize = 3;
+    for i in 0..PART_COUNT {
+        let a = i as f32 / PART_COUNT as f32 * std::f32::consts::TAU;
+        let offset = Vec2::new(a.cos(), a.sin()) * ring;
+        commands.spawn((
+            Enemy { kind: EnemyKind::Hunter }, // a neutral hittable body
+            BossPart { boss, shields_core: true, offset },
+            Health::new(40.0),
+            Collider { radius: 14.0 },
+            Faction::Enemy,
+            boss_part_shape(),
+            Transform::from_translation((center + offset).extend(0.2)),
+        ));
+    }
+}
+
 /// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% HP it
 /// enters the **telegraph** window — a red warning ring + a `RageTelegraph` timer
 /// — rather than raging instantly. `tick_rage_telegraph` fires `activate_rage`
@@ -607,7 +644,12 @@ pub fn spawn(commands: &mut Commands, kind: EnemyKind, pos: Vec2) {
 pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u8) {
     let (hp_mul, sz_mul, sp_mul) = boss_tier_mul(tier);
     let promo = if tier > 0 { Promo::Boss(tier) } else { Promo::None };
-    spawn_enemy(commands, kind, pos, hp_mul, sz_mul, sp_mul, promo);
+    let boss = spawn_enemy(commands, kind, pos, hp_mul, sz_mul, sp_mul, promo);
+    // A tier boss carries a ring of destructible weak-point parts that shield its
+    // core (BO) — clear them to expose the boss. Ring scales with the boss size.
+    if tier > 0 {
+        spawn_boss_parts(commands, boss, pos, 46.0 * sz_mul);
+    }
 }
 
 /// Spawn a mid-wave **mini-boss** promotion of `kind` (spec V.6 — no speed buff).
