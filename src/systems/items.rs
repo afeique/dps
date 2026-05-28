@@ -606,9 +606,12 @@ pub fn roll_item_drops_on_death(
 /// Gaining HP gear heals by the gained amount; losing it clamps `current`.
 pub fn apply_item_hp(
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     mut player: Query<(&mut Health, &mut ItemHpBonus), With<Ship>>,
 ) {
-    let target = equipment.affix_total(AffixKind::Hp);
+    // Equipped HP affixes + account SP HEALTH — both flat max-HP added on top of
+    // the ship's base, reconciled against ItemHpBonus.
+    let target = equipment.affix_total(AffixKind::Hp) + meta.sp_value("HEALTH");
     let Ok((mut hp, mut bonus)) = player.single_mut() else {
         return; // no player (between runs) — reconcile once it spawns
     };

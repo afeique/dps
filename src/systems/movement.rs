@@ -27,14 +27,17 @@ pub fn ship_control(
     time: Res<Time>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     // Seconds of continuous movement, for the Momentum speed ramp.
     mut sustained: Local<f32>,
     mut q: Query<(&Ship, &Intent, &mut Velocity, &mut Transform)>,
 ) {
     let dt = time.delta_secs();
     let momentum = upgrades.owned(UpgradeId::Momentum);
-    // Equipped SPEED affixes raise top speed by a flat fraction (spec VI.5).
-    let item_speed = equipment.affix_total(AffixKind::Speed) / 100.0;
+    // Equipped SPEED affixes + account SP SPEED raise top speed by a flat
+    // fraction (spec VI.5 / sp-stats.js).
+    let item_speed =
+        equipment.affix_total(AffixKind::Speed) / 100.0 + meta.sp_value("SPEED") / 100.0;
     for (ship, intent, mut vel, mut tf) in &mut q {
         // Momentum passive: top speed ramps with sustained movement (spec VI.3).
         if intent.move_dir.length_squared() > 0.01 {

@@ -4548,6 +4548,72 @@ fn item_speed_raises_top_speed() {
     assert!(speed <= base * 1.5 + 1.0, "but not beyond the equipped +50% (got {speed})");
 }
 
+/// Account SP SPEED lifts top speed like the SPEED affix (Phase ME wiring).
+#[test]
+fn sp_speed_raises_top_speed() {
+    use crate::meta::Meta;
+    use crate::systems::movement::ship_control;
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.sp = 20;
+        for _ in 0..10 {
+            meta.allocate_sp("SPEED"); // 10/20 of the +100% cap → +50%
+        }
+    }
+    let world = app.world_mut();
+    let base = Ship::default().max_speed;
+    let ship = world
+        .spawn((
+            Ship::default(),
+            Intent { move_dir: Vec2::X, aim: Vec2::ZERO, aim_active: false, firing: false },
+            Velocity(Vec2::ZERO),
+            Transform::default(),
+        ))
+        .id();
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(ship_control);
+    for _ in 0..50 {
+        step.run(world);
+    }
+    let speed = world.get::<Velocity>(ship).unwrap().0.length();
+    assert!(speed > base * 1.2, "SP speed lifts top speed above base (base {base}, got {speed})");
+}
+
+/// Account SP HEALTH adds flat max-HP through apply_item_hp (Phase ME wiring).
+#[test]
+fn sp_health_raises_max_hp() {
+    use crate::components::ItemHpBonus;
+    use crate::meta::Meta;
+    use crate::systems::items::apply_item_hp;
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.sp = 20;
+        for _ in 0..20 {
+            meta.allocate_sp("HEALTH"); // +400 max HP at the cap
+        }
+    }
+    let world = app.world_mut();
+    let player = world
+        .spawn((Ship::default(), Health::new(40.0), ItemHpBonus(0.0), Transform::default()))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(apply_item_hp);
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap();
+    assert!((hp.max - 440.0).abs() < 1e-3, "SP HEALTH adds +400 max HP (max now {})", hp.max);
+    assert!(hp.current > 40.0, "gaining max HP heals by the gained amount");
+}
+
 // ── 87. item_hp_raises_max ────────────────────────────────────────────────────
 
 /// An equipped MAX-HP affix raises the player's `Health.max` by its delta (and
