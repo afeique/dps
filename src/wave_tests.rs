@@ -1312,6 +1312,52 @@ fn vampiric_rounds_heals_on_crit() {
     assert!(player_hp_after(true) > 40.0, "Vampiric Rounds → crits over-heal past max");
 }
 
+/// Berserker scales weapon damage with the player's *missing* HP: the helper is
+/// 0 at full HP and +0.25/stack at 0 HP; in combat a wounded player hits harder.
+#[test]
+fn berserker_scales_damage_with_missing_hp() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{berserker_bonus, UpgradeId, Upgrades};
+
+    assert_eq!(berserker_bonus(0, 0.0), 0.0, "not owned → no bonus");
+    assert_eq!(berserker_bonus(4, 1.0), 0.0, "full HP → no bonus");
+    assert!((berserker_bonus(4, 0.0) - 1.0).abs() < 1e-6, "0 HP, x4 → +100%");
+    assert!((berserker_bonus(4, 0.25) - 0.75).abs() < 1e-6, "25% HP, x4 → +75%");
+
+    // Damage dealt to a tanky enemy at a given player HP fraction. Each run is a
+    // fresh app with the same RNG seed + one bullet, so any crit roll is identical
+    // across runs — the ratio isolates Berserker (cancels the shared crit factor).
+    fn dmg_at(current_hp: f32) -> f32 {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Berserker, 4);
+        let world = app.world_mut();
+        world.spawn((Ship::default(), Health { current: current_hp, max: 40.0 }, Transform::from_xyz(900.0, 0.0, 0.0)));
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1.0e6),
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1.0e6 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    let full = dmg_at(40.0); // frac 1.0 → +0%
+    let quarter = dmg_at(10.0); // frac 0.25 → +75%
+    assert!(quarter > full * 1.7, "wounded (25% HP) hits ~1.75× a full-HP shot ({quarter} vs {full})");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

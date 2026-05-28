@@ -17,8 +17,8 @@ use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak,
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
-    opportunist_bonus, predator_bonus, stun_chance, vampiric_rounds_heal, vampirism_frac,
-    UpgradeId, Upgrades,
+    berserker_bonus, opportunist_bonus, predator_bonus, stun_chance, vampiric_rounds_heal,
+    vampirism_frac, UpgradeId, Upgrades,
     EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
@@ -118,6 +118,14 @@ pub fn bullet_hits_enemy(
     mut reactions: ResMut<PendingReactions>,
 ) {
     let player_pos_v = player_pos.single().ok().map(|t| t.translation.truncate());
+    // BERSERKER passive reads the player's HP fraction once (≈constant this tick);
+    // its damage bonus grows as HP drops. Immutable borrow ends before the loop's
+    // mutable `player_hp` use below.
+    let player_hp_frac = player_hp
+        .iter()
+        .next()
+        .map(|h| if h.max > 0.0 { h.current / h.max } else { 1.0 })
+        .unwrap_or(1.0);
     // Kill-streak multiplier scales all player bullet damage (spec III.6).
     let streak_mult = streak.multiplier();
     // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5) — shop
@@ -137,9 +145,11 @@ pub fn bullet_hits_enemy(
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
     let crit_dmg_bonus =
         equipment.affix_total(AffixKind::CritDamage) / 100.0 + meta.sp_value("CRIT_DAMAGE") / 100.0;
-    // AMPLIFIER (+%/stack) + GLASS CANNON (+50% flat) damage multipliers.
+    // AMPLIFIER (+%/stack) + GLASS CANNON (+50% flat) + BERSERKER (+%/stack scaled
+    // by missing HP) damage multipliers.
     let amp = amplifier_mult(upgrades.owned(UpgradeId::Amplifier))
-        + glass_cannon_dmg(upgrades.owned(UpgradeId::GlassCannon));
+        + glass_cannon_dmg(upgrades.owned(UpgradeId::GlassCannon))
+        + berserker_bonus(upgrades.owned(UpgradeId::Berserker), player_hp_frac);
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).

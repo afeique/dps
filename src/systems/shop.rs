@@ -68,12 +68,14 @@ pub enum UpgradeId {
     VampiricRounds,
     /// Ricochet — player shots bounce to another enemy (grants/extends Bounce).
     Ricochet,
+    /// Berserker — weapon damage rises as the player's own HP drops.
+    Berserker,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 36] = [
+    pub const ALL: [UpgradeId; 37] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -110,6 +112,7 @@ impl UpgradeId {
         Self::Bloodlust,
         Self::VampiricRounds,
         Self::Ricochet,
+        Self::Berserker,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -153,6 +156,7 @@ impl UpgradeId {
             Self::Bloodlust => 33,
             Self::VampiricRounds => 34,
             Self::Ricochet => 35,
+            Self::Berserker => 36,
         }
     }
 
@@ -194,6 +198,7 @@ impl UpgradeId {
             Self::Bloodlust => "Bloodlust     (faster fire on kill)",
             Self::VampiricRounds => "Vampiric Rnd  (heal on crit)",
             Self::Ricochet => "Ricochet      (shots bounce +1)",
+            Self::Berserker => "Berserker     (+dmg at low HP)",
         }
     }
 
@@ -236,6 +241,7 @@ impl UpgradeId {
             Self::Bloodlust => 2600,
             Self::VampiricRounds => 2400,
             Self::Ricochet => 2600,
+            Self::Berserker => 2400,
         }
     }
 
@@ -277,6 +283,7 @@ impl UpgradeId {
             Self::Bloodlust => 1,
             Self::VampiricRounds => 4,
             Self::Ricochet => 3,
+            Self::Berserker => 4,
         }
     }
 }
@@ -383,6 +390,13 @@ pub const PREDATOR_THRESHOLD: f32 = 0.75;
 /// OPPORTUNIST passive: bonus damage vs a status-afflicted enemy — `0.20 × stacks`.
 pub fn opportunist_bonus(stacks: u32) -> f32 {
     0.20 * stacks as f32
+}
+
+/// BERSERKER passive (keystone): an additive weapon-damage bonus that scales with
+/// the player's *missing* HP — `0.25 × stacks` at 0 HP, fading to 0 at full HP. A
+/// comeback mechanic; folded into the `amp` multiplier in `bullet_hits_enemy`.
+pub fn berserker_bonus(stacks: u32, hp_frac: f32) -> f32 {
+    0.25 * stacks as f32 * (1.0 - hp_frac.clamp(0.0, 1.0))
 }
 
 /// GLASS CANNON (keystone, binary): +50% weapon damage multiplier when owned.
@@ -683,6 +697,7 @@ pub fn apply_upgrade(
         | UpgradeId::GlassCannon
         | UpgradeId::Bloodlust
         | UpgradeId::VampiricRounds
-        | UpgradeId::Ricochet => {}
+        | UpgradeId::Ricochet
+        | UpgradeId::Berserker => {}
     }
 }
