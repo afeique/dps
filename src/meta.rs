@@ -11,12 +11,19 @@ use crate::messages::Death;
 use crate::resources::Score;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 /// Account level cap (`MAX_LEVEL`, sp-stats.js).
 pub const MAX_LEVEL: u32 = 100;
 /// XP per kill (combat-manager.js): a boss is worth 120, a regular enemy 12.
 pub const XP_PER_BOSS: u64 = 120;
 pub const XP_PER_KILL: u64 = 12;
+
+/// Account-gold ARMORY unlock costs (`shop/armory.js`). The base loadout is free;
+/// these gate the *extra* weapons / abilities / attunements behind banked gold.
+pub const WEAPON_UNLOCK_COST: u64 = 8_000;
+pub const ABILITY_UNLOCK_COST: u64 = 12_000;
+pub const ATTUNEMENT_UNLOCK_COST: u64 = 7_000;
 
 /// XP needed to advance *from* `level` to the next (`xpForLevel`, sp-stats.js):
 /// `500 + (level − 1) × 250`.
@@ -34,6 +41,11 @@ pub struct Meta {
     pub xp: u64,
     /// Unspent skill points (1 per level; spent on the SP stats).
     pub sp: u32,
+    /// Stable ids of gold-unlocked items (weapons / abilities / attunements),
+    /// beyond the always-available base loadout. A sorted set so the RON save is
+    /// deterministic. `#[serde(default)]` so older saves (without the field) load.
+    #[serde(default)]
+    pub unlocked: BTreeSet<String>,
 }
 
 impl Default for Meta {
@@ -43,6 +55,7 @@ impl Default for Meta {
             level: 1,
             xp: 0,
             sp: 0,
+            unlocked: BTreeSet::new(),
         }
     }
 }
@@ -68,6 +81,23 @@ impl Meta {
     /// Bank a finished run's gold into the persistent wallet.
     pub fn bank(&mut self, run_gold: u64) {
         self.account_gold = self.account_gold.saturating_add(run_gold);
+    }
+
+    /// Whether `id` has been unlocked in the armory.
+    pub fn is_unlocked(&self, id: &str) -> bool {
+        self.unlocked.contains(id)
+    }
+
+    /// Try to unlock `id` for `cost` account-gold. Returns `true` only on a
+    /// *new* purchase — the player had the gold and didn't already own it; the
+    /// gold is then spent. Already-owned or unaffordable → `false`, no spend.
+    pub fn unlock(&mut self, id: &str, cost: u64) -> bool {
+        if self.unlocked.contains(id) || self.account_gold < cost {
+            return false;
+        }
+        self.account_gold -= cost;
+        self.unlocked.insert(id.to_string());
+        true
     }
 
     /// Serialize to RON (pure — used by the disk save + the round-trip test).
