@@ -24,6 +24,9 @@ pub enum GameState {
     /// Skill-points screen — allocate banked account SP across the 12 stats.
     /// Opened with `S` from the title; `Esc` → `Title`.
     SpAllocation,
+    /// Loadout picker — assign abilities to the 4 slots. Opened with `L` from
+    /// the title; `Esc` → `Title`.
+    Loadout,
     /// Wave-clear survivor-card pick (pauses the sim); 1/2/3 → `Playing`.
     Survivor,
     /// Death / results screen; ENTER → `Title`.

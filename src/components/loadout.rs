@@ -136,6 +136,41 @@ impl Ability {
     pub fn is_available(self, meta: &crate::meta::Meta) -> bool {
         self.base_unlocked() || meta.is_unlocked(self.id())
     }
+}
+
+/// The loadout-picker slot options: "empty" (`None`) plus every *available*
+/// ability (base + armory-unlocked), in catalog order.
+pub fn available_abilities(meta: &crate::meta::Meta) -> Vec<Option<Ability>> {
+    let mut opts = vec![None];
+    opts.extend(
+        Ability::ALL
+            .iter()
+            .copied()
+            .filter(|a| a.is_available(meta))
+            .map(Some),
+    );
+    opts
+}
+
+/// Step a slot's ability to the next/prev entry in [`available_abilities`]
+/// (wrapping). Pure — drives the loadout picker's Left/Right.
+pub fn cycle_slot_ability(
+    current: Option<Ability>,
+    meta: &crate::meta::Meta,
+    forward: bool,
+) -> Option<Ability> {
+    let opts = available_abilities(meta);
+    let i = opts.iter().position(|&o| o == current).unwrap_or(0);
+    let n = opts.len();
+    let j = if forward {
+        (i + 1) % n
+    } else {
+        (i + n - 1) % n
+    };
+    opts[j]
+}
+
+impl Ability {
 
     /// A 3-char tag for the HUD ability-bar slot.
     pub fn short(self) -> &'static str {

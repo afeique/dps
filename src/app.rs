@@ -218,6 +218,28 @@ impl Plugin for GamePlugin {
                 )
                     .run_if(in_state(GameState::SpAllocation)),
             )
+            // ── loadout picker (assign abilities to the 4 slots; L on title) ───
+            .init_resource::<systems::loadout_screen::LoadoutSel>()
+            .add_systems(
+                Update,
+                systems::loadout_screen::open_loadout.run_if(in_state(GameState::Title)),
+            )
+            .add_systems(
+                OnEnter(GameState::Loadout),
+                systems::loadout_screen::spawn_loadout_ui,
+            )
+            .add_systems(
+                OnExit(GameState::Loadout),
+                systems::flow::despawn_screen::<systems::loadout_screen::LoadoutPanel>,
+            )
+            .add_systems(
+                Update,
+                (
+                    systems::loadout_screen::loadout_ui_update,
+                    systems::loadout_screen::loadout_input,
+                )
+                    .run_if(in_state(GameState::Loadout)),
+            )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)
             .add_systems(

@@ -30,6 +30,30 @@ fn cooldowns_tick_trigger_and_fraction() {
 }
 
 #[test]
+fn available_abilities_and_cycle_respect_unlocks() {
+    use crate::components::loadout::{available_abilities, cycle_slot_ability};
+    use crate::meta::Meta;
+
+    // Default account: only the four base abilities (+ "empty") are available.
+    let mut meta = Meta::default();
+    let opts = available_abilities(&meta);
+    assert_eq!(opts.len(), 5, "None + the 4 base abilities");
+    assert_eq!(opts[0], None);
+    assert!(opts.contains(&Some(Ability::Bulwark)));
+    assert!(!opts.contains(&Some(Ability::Blink)), "Blink is locked by default");
+
+    // Cycle forward from empty → first base ability; wrap back from empty → last.
+    assert_eq!(cycle_slot_ability(None, &meta, true), Some(Ability::Bulwark));
+    assert_eq!(cycle_slot_ability(None, &meta, false), Some(Ability::EmpPulse));
+
+    // Unlock Blink → it joins the pool and the cycle.
+    meta.unlock(Ability::Blink.id(), 0);
+    let opts2 = available_abilities(&meta);
+    assert_eq!(opts2.len(), 6);
+    assert!(opts2.contains(&Some(Ability::Blink)));
+}
+
+#[test]
 fn out_of_range_slot_is_never_ready() {
     let cds = AbilityCooldowns::default();
     assert!(!cds.is_ready(4));

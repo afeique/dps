@@ -19,6 +19,7 @@ pub mod hazard;
 pub mod hitstop;
 pub mod input;
 pub mod items;
+pub mod loadout_screen;
 pub mod missions;
 pub mod movement;
 pub mod passives;
