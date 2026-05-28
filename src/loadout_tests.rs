@@ -65,6 +65,17 @@ fn ability_catalog_is_complete_and_well_formed() {
 }
 
 #[test]
+fn every_ability_has_a_unique_short_tag() {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    for a in Ability::ALL {
+        let s = a.short();
+        assert!(!s.is_empty() && s.chars().count() <= 3, "{a:?} tag '{s}' must be 1-3 chars");
+        assert!(seen.insert(s), "duplicate ability HUD tag '{s}'");
+    }
+}
+
+#[test]
 fn infusion_cycle_wraps_and_skips_kinetic() {
     use crate::combat::element::Element;
     use crate::systems::weapons::next_infusion_element;

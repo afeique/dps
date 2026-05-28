@@ -101,6 +101,26 @@ impl Ability {
         }
     }
 
+    /// A 3-char tag for the HUD ability-bar slot.
+    pub fn short(self) -> &'static str {
+        match self {
+            Ability::Bulwark => "BLW",
+            Ability::FieldMedic => "MED",
+            Ability::DeflectorOrbs => "ORB",
+            Ability::EmpPulse => "EMP",
+            Ability::SentryDrone => "DRN",
+            Ability::Blink => "BLK",
+            Ability::GravitySnare => "GRV",
+            Ability::Designator => "MRK",
+            Ability::SecondWind => "2ND",
+            Ability::ElementalInfusion => "INF",
+            Ability::CryoField => "CRY",
+            Ability::StasisField => "STA",
+            Ability::StormCell => "STM",
+            Ability::PyreAura => "PYR",
+        }
+    }
+
     /// Display name (HUD ability bar + BUILD tree).
     pub fn name(self) -> &'static str {
         match self {
