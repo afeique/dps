@@ -293,6 +293,8 @@ impl Plugin for GamePlugin {
                         .chain(),
                     // Fire intent → bullets.
                     (
+                        // Sentry Drones (AB) emit player Fire before spawn_bullets.
+                        systems::abilities::tick_sentry_drones,
                         systems::enemy::firing::enemy_firing,
                         systems::weapons::player_fire,
                         systems::weapons::spawn_bullets,

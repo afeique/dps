@@ -4,7 +4,7 @@
 
 use crate::components::loadout::*;
 use crate::components::{
-    Boss, Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Mark, SecondWindArmed, Ship,
+    Boss, Bulwark, Enemy, EnemyKind, Frozen, Invulnerable, Mark, SecondWindArmed, Sentry, Ship,
 };
 use crate::systems::abilities::{activate_loadout, tick_ability_fields};
 use bevy::prelude::*;
@@ -61,7 +61,7 @@ fn ability_catalog_is_complete_and_well_formed() {
         assert!(!a.name().is_empty());
     }
     let wired = Ability::ALL.iter().filter(|a| a.implemented()).count();
-    assert_eq!(wired, 13, "all but Sentry Drone are wired");
+    assert_eq!(wired, 14, "the entire ability roster is wired");
 }
 
 #[test]
@@ -338,4 +338,15 @@ fn elemental_infusion_sets_the_override() {
     let inf = world.resource::<ElementInfusion>();
     assert_eq!(inf.element, Some(Element::Pyro), "first cast infuses Pyro");
     assert!((inf.secs - 8.0).abs() < 1e-3, "8s infusion duration");
+}
+
+#[test]
+fn sentry_drone_ability_deploys_a_drone() {
+    let (mut world, _ship) = world_with_ship();
+    world.insert_resource(EquippedAbilities([Some(Ability::SentryDrone), None, None, None]));
+
+    run_with_key(&mut world, KeyCode::Numpad1);
+    let mut q = world.query::<&Sentry>();
+    assert_eq!(q.iter(&world).count(), 1, "deploys one sentry drone");
+    assert!(!world.resource::<AbilityCooldowns>().is_ready(0), "slot 0 on cooldown");
 }

@@ -34,7 +34,7 @@ use bevy_hanabi::prelude::ParticleEffect;
 // ─── Base units (dps scale; spec multipliers apply on top) ──────────────────
 
 /// Base player bullet speed (world-units/sec). Spec `bulletSpeed×` scales this.
-const BASE_BULLET_SPEED: f32 = 950.0;
+pub const BASE_BULLET_SPEED: f32 = 950.0;
 /// Base player bullet radius (px). Spec `bulletSize×` scales this.
 const BASE_BULLET_RADIUS: f32 = 3.0;
 

@@ -2097,6 +2097,76 @@ fn second_wind_revives_once_on_lethal_hit() {
     assert!(world.get::<Invulnerable>(player).is_some(), "brief i-frames after the revive");
 }
 
+// ── 27c. sentry_drone_fires_and_expires ───────────────────────────────────────
+
+/// A deployed Sentry Drone (AB) auto-fires a player `Fire` at the nearest enemy
+/// when its timer is ready, and despawns once its 8 s lifetime elapses.
+#[test]
+fn sentry_drone_fires_at_nearest_enemy() {
+    use crate::components::Sentry;
+    use crate::systems::abilities::tick_sentry_drones;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(16));
+    world.insert_resource(time);
+
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.spawn((
+        Sentry { secs: 8.0, angle: 0.0, fire_timer: 0.0 }, // ready to fire
+        Transform::from_xyz(58.0, 0.0, 0.0),
+    ));
+    world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(120.0, 0.0, 0.0)));
+
+    #[derive(Resource, Default)]
+    struct FireCount(u32);
+    world.insert_resource(FireCount::default());
+    fn tally(mut r: MessageReader<Fire>, mut c: ResMut<FireCount>) {
+        for _ in r.read() {
+            c.0 += 1;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((tick_sentry_drones, tally).chain());
+    step.run(world);
+
+    assert!(
+        world.resource::<FireCount>().0 >= 1,
+        "a ready sentry with an enemy in view emits a Fire"
+    );
+}
+
+#[test]
+fn sentry_drone_despawns_after_lifetime() {
+    use crate::components::Sentry;
+    use crate::systems::abilities::tick_sentry_drones;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(100)); // 0.1 s step
+    world.insert_resource(time);
+
+    world.spawn((Ship::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    let drone = world
+        .spawn((
+            Sentry { secs: 0.05, angle: 0.0, fire_timer: 0.0 }, // shorter than the step
+            Transform::from_xyz(58.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_sentry_drones);
+    step.run(world);
+
+    assert!(
+        world.get::<Sentry>(drone).is_none(),
+        "the sentry despawns when its lifetime elapses"
+    );
+}
+
 // ── 28. repair_nanites_regen_then_expires ─────────────────────────────────────
 
 /// Repair Nanites regenerates HP over its window (capped at max) and then

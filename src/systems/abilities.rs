@@ -10,7 +10,9 @@
 //! (C/X/V/G/H/J/K) still work in parallel during the migration.
 
 use crate::components::*;
+use crate::messages::Fire;
 use crate::systems::skills::{spawn_deflector_orbs, EMP_RADIUS};
+use crate::systems::weapons::BASE_BULLET_SPEED;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::TAU;
@@ -35,6 +37,15 @@ const SNARE_MIN_DIST: f32 = 70.0;
 
 /// Designator (`weapon-data.js`): MARK every enemy within this radius.
 const DESIGNATOR_RADIUS: f32 = 360.0;
+
+/// Sentry Drone (`weapon-data.js` SENTRY_DRONE + `player/abilities.js`): one drone
+/// orbits the ship at `SENTRY_ORBIT_RADIUS`, turning `SENTRY_ORBIT_OMEGA` rad/s,
+/// auto-firing `SENTRY_DAMAGE` shots every `SENTRY_FIRE_INTERVAL` s for 8 s.
+const SENTRY_ORBIT_RADIUS: f32 = 58.0;
+const SENTRY_ORBIT_OMEGA: f32 = 4.0;
+const SENTRY_FIRE_INTERVAL: f32 = 0.6;
+const SENTRY_DAMAGE: f32 = 1.2;
+const SENTRY_COUNT: u32 = 1;
 
 /// Tick the loadout cooldowns and fire equipped abilities on their slot key.
 /// A press is consumed (cooldown spent) only if the slot holds an *implemented*
@@ -129,6 +140,10 @@ pub fn activate_loadout(
                     infusion.element,
                 ));
                 infusion.secs = 8.0;
+                true
+            }
+            Ability::SentryDrone => {
+                spawn_sentry_drones(&mut commands, center, SENTRY_COUNT, ability.duration());
                 true
             }
             Ability::Blink => {
@@ -248,6 +263,101 @@ pub fn tick_ability_fields(
                 }
                 FieldStatus::Burn => {
                     commands.entity(e).insert(Burning { dps: 6.0, secs: 1.0 });
+                }
+            }
+        }
+    }
+}
+
+/// A small orange drone diamond (HDR for bloom).
+fn sentry_shape() -> Shape {
+    let r = 7.0_f32;
+    let pts = [
+        Vec2::new(0.0, r),
+        Vec2::new(r, 0.0),
+        Vec2::new(0.0, -r),
+        Vec2::new(-r, 0.0),
+    ];
+    let mut path = ShapePath::new().move_to(pts[0]);
+    for p in &pts[1..] {
+        path = path.line_to(*p);
+    }
+    ShapeBuilder::with(&path.close())
+        .fill(Color::linear_rgb(6.0, 2.4, 0.6))
+        .build()
+}
+
+/// Spawn `count` Sentry Drones orbiting `center`, each living `secs` seconds.
+pub fn spawn_sentry_drones(commands: &mut Commands, center: Vec2, count: u32, secs: f32) {
+    for i in 0..count {
+        let angle = i as f32 / count.max(1) as f32 * TAU;
+        let pos = center + Vec2::new(angle.cos(), angle.sin()) * SENTRY_ORBIT_RADIUS;
+        commands.spawn((
+            Sentry {
+                secs,
+                angle,
+                fire_timer: 0.0,
+            },
+            sentry_shape(),
+            Transform::from_translation(pos.extend(0.6)),
+        ));
+    }
+}
+
+/// Sentry Drones: orbit the ship, aim at the nearest enemy, and emit a `Fire`
+/// (player faction) each `SENTRY_FIRE_INTERVAL`; despawn when their lifetime ends.
+pub fn tick_sentry_drones(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut fire: MessageWriter<Fire>,
+    player: Query<&Transform, (With<Ship>, Without<Sentry>)>,
+    mut sentries: Query<(Entity, &mut Transform, &mut Sentry), (Without<Ship>, Without<Enemy>)>,
+    enemies: Query<&Transform, (With<Enemy>, Without<Sentry>)>,
+) {
+    let dt = time.delta_secs();
+    // Without a player, still expire the drones (they orbit nothing).
+    let center = player.single().ok().map(|t| t.translation.truncate());
+
+    for (e, mut tf, mut sentry) in &mut sentries {
+        sentry.secs -= dt;
+        if sentry.secs <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let Some(center) = center else {
+            continue;
+        };
+        sentry.angle += SENTRY_ORBIT_OMEGA * dt;
+        let pos = center + Vec2::new(sentry.angle.cos(), sentry.angle.sin()) * SENTRY_ORBIT_RADIUS;
+        tf.translation.x = pos.x;
+        tf.translation.y = pos.y;
+
+        // Nearest enemy → aim.
+        let mut target = None;
+        let mut best = f32::INFINITY;
+        for etf in &enemies {
+            let ep = etf.translation.truncate();
+            let d2 = ep.distance_squared(pos);
+            if d2 < best {
+                best = d2;
+                target = Some(ep);
+            }
+        }
+
+        sentry.fire_timer -= dt;
+        if let Some(target) = target {
+            if sentry.fire_timer <= 0.0 {
+                sentry.fire_timer = SENTRY_FIRE_INTERVAL;
+                let dir = (target - pos).normalize_or_zero();
+                if dir != Vec2::ZERO {
+                    fire.write(Fire {
+                        origin: pos,
+                        dir,
+                        damage: SENTRY_DAMAGE,
+                        speed: BASE_BULLET_SPEED,
+                        faction: Faction::Player,
+                        homing: false,
+                    });
                 }
             }
         }

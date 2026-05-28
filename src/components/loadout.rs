@@ -121,9 +121,9 @@ impl Ability {
         }
     }
 
-    /// Whether this ability's effect is wired into `activate_loadout` yet. The
-    /// modeled-but-unimplemented ones occupy slots and show in the HUD, but
-    /// pressing their slot is a no-op (no cooldown spent) until their increment.
+    /// Whether this ability's effect is wired into `activate_loadout`. All 14 are
+    /// now implemented; kept as a guard so a new enum variant defaults to no-op
+    /// until wired.
     pub fn implemented(self) -> bool {
         matches!(
             self,
@@ -131,6 +131,7 @@ impl Ability {
                 | Ability::FieldMedic
                 | Ability::DeflectorOrbs
                 | Ability::EmpPulse
+                | Ability::SentryDrone
                 | Ability::Blink
                 | Ability::GravitySnare
                 | Ability::Designator
@@ -184,6 +185,19 @@ pub struct AbilityField {
     pub tick: f32,
     /// Countdown to the next application (s).
     pub timer: f32,
+}
+
+/// A **Sentry Drone** (AB ability): orbits the player and auto-fires at the
+/// nearest enemy until `secs` elapses (`player/abilities.js`). Ticked by
+/// `systems::abilities::tick_sentry_drones`.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Sentry {
+    /// Remaining lifetime (s).
+    pub secs: f32,
+    /// Current orbit angle (rad).
+    pub angle: f32,
+    /// Countdown to the next shot (s).
+    pub fire_timer: f32,
 }
 
 /// Armed by the **Second Wind** ability — a one-time death save. When the player
