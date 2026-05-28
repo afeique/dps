@@ -16,8 +16,8 @@ use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
-    amplifier_mult, executioner_bonus, explosion_radius, knock_chance, stun_chance, vampirism_frac,
-    UpgradeId, Upgrades, EXECUTE_THRESHOLD, KNOCK_PX,
+    amplifier_mult, executioner_bonus, explosion_radius, knock_chance, predator_bonus, stun_chance,
+    vampirism_frac, UpgradeId, Upgrades, EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
 
@@ -143,6 +143,8 @@ pub fn bullet_hits_enemy(
     let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
     // EXECUTIONER passive: bonus damage vs enemies below the execute threshold.
     let exec_bonus = executioner_bonus(upgrades.owned(UpgradeId::Executioner));
+    // PREDATOR passive: bonus damage vs healthy enemies (above PREDATOR_THRESHOLD).
+    let pred_bonus = predator_bonus(upgrades.owned(UpgradeId::Predator));
     for (bullet_e, btf, bc, mut bullet, belems, bvel, bounce, mgen) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
@@ -185,6 +187,12 @@ pub fn bullet_hits_enemy(
                 } else {
                     1.0
                 };
+                // PREDATOR: extra damage vs a still-healthy enemy (>75% HP).
+                let predator = if pred_bonus > 0.0 && ehp.current > ehp.max * PREDATOR_THRESHOLD {
+                    1.0 + pred_bonus
+                } else {
+                    1.0
+                };
                 // Element/resistance multiplier (E2): the AVERAGE of the bullet's
                 // elements vs this enemy's resist map (resist <1, weakness >1).
                 let resist_mult = match (belem_set, eres) {
@@ -205,7 +213,7 @@ pub fn bullet_hits_enemy(
                 // Lumen Drone ally-shield: incoming damage ×(1 − amount) (EN).
                 let ally = eshield.map_or(1.0, |s| 1.0 - s.amount);
                 let amount = enemy_defense_damage(
-                    bullet.damage * amp * streak_mult * crit_mult * exec * resist_mult * ally,
+                    bullet.damage * amp * streak_mult * crit_mult * exec * predator * resist_mult * ally,
                     ecorrode.map_or(0, |c| c.stacks),
                     econduct.is_some(),
                     has_volt,

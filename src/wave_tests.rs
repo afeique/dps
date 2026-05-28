@@ -1131,6 +1131,43 @@ fn amplifier_raises_weapon_damage() {
     assert!((damage_dealt(5) - 16.0).abs() < 0.01, "Amplifier ×5 (+60%) → 16");
 }
 
+/// Predator boosts damage against healthy (>75% HP) enemies.
+#[test]
+fn predator_boosts_damage_vs_healthy_enemies() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    fn damage_dealt(pred_stacks: u32) -> f32 {
+        let mut app = test_app();
+        app.world_mut()
+            .resource_mut::<Upgrades>()
+            .set(UpgradeId::Predator, pred_stacks);
+        let world = app.world_mut();
+        let enemy = world
+            .spawn((
+                Enemy { kind: EnemyKind::Hunter },
+                Health::new(1000.0), // full HP → above the 75% threshold
+                Collider { radius: 16.0 },
+                Faction::Enemy,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ))
+            .id();
+        world.spawn((
+            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+            Collider { radius: 3.0 },
+            Faction::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        let mut step = Schedule::default();
+        step.add_systems((bullet_hits_enemy, apply_damage).chain());
+        step.run(world);
+        1000.0 - world.get::<Health>(enemy).unwrap().current
+    }
+
+    assert!((damage_dealt(0) - 10.0).abs() < 0.01, "base 10 vs a full-HP enemy");
+    assert!((damage_dealt(4) - 18.0).abs() < 0.01, "Predator ×4 (+80%) → 18 vs healthy");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.
