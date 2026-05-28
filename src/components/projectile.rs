@@ -43,6 +43,13 @@ pub struct Bounce {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct MitosisGen(pub u32);
 
+/// A **Flak** bullet's airburst fuse: when `timer` reaches 0 it bursts into a
+/// shrapnel ring (`Shard`s) and despawns (`systems::weapons::flak_airburst`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Airburst {
+    pub timer: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,

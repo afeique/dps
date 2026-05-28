@@ -60,6 +60,8 @@ pub enum WeaponKind {
     Caroms,
     /// Bullet that fragments into shards on impact (W).
     MitosisRounds,
+    /// Bullet that airbursts into a shrapnel ring at range (W).
+    FlakCannon,
 }
 
 impl WeaponKind {
@@ -74,7 +76,8 @@ impl WeaponKind {
             Self::SpinCannon => Self::Boomerang,
             Self::Boomerang => Self::Caroms,
             Self::Caroms => Self::MitosisRounds,
-            Self::MitosisRounds => Self::PulseCannon,
+            Self::MitosisRounds => Self::FlakCannon,
+            Self::FlakCannon => Self::PulseCannon,
         }
     }
 
@@ -91,6 +94,7 @@ impl WeaponKind {
             Self::Boomerang => "Boomerang Discs",
             Self::Caroms => "Caroms",
             Self::MitosisRounds => "Mitosis Rounds",
+            Self::FlakCannon => "Flak Cannon",
         }
     }
 
@@ -177,8 +181,20 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             cooldown: 0.38, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
             radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
+        // Airburst (weapon-data.js: burstDistance 300 → 9 shrapnel). The timed
+        // burst rides on `Airburst`; the shrapnel ring goes out as `Shard`s.
+        WeaponKind::FlakCannon => WeaponStats {
+            cooldown: 0.65, damage: 0.8, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 0.9, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+        },
     }
 }
+
+/// Flak airburst (weapon-data.js): bursts at 300px into 9 shrapnel (0.55 dmg).
+pub const FLAK_BURST_DIST: f32 = 300.0;
+pub const FLAK_SHRAPNEL: u32 = 9;
+pub const FLAK_SHRAPNEL_DMG: f32 = 0.55;
+pub const FLAK_SHRAPNEL_SPEED: f32 = 300.0;
 
 /// Mitosis split params (weapon-data.js): 2 shards at ±this angle, ×0.5 damage,
 /// ×0.85 speed, 2 generations.
@@ -325,6 +341,38 @@ pub fn spawn_shards(
         if s.generation > 0 {
             e.insert(MitosisGen(s.generation));
         }
+    }
+}
+
+/// Flak bullets count down their airburst fuse; when it lapses, they burst into
+/// a `FLAK_SHRAPNEL`-shrapnel ring (`Shard`s, spawned by `spawn_shards`) and
+/// despawn (W). Run before integrate; the shards emit this tick.
+pub fn flak_airburst(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut shards: MessageWriter<Shard>,
+    mut q: Query<(Entity, &Transform, &mut Airburst, Option<&BulletElements>)>,
+) {
+    let dt = time.delta_secs();
+    for (e, tf, mut ab, belems) in &mut q {
+        ab.timer -= dt;
+        if ab.timer > 0.0 {
+            continue;
+        }
+        let origin = tf.translation.truncate();
+        let elem = belems.map_or(ElementSet::kinetic(), |b| b.0);
+        for i in 0..FLAK_SHRAPNEL {
+            let a = i as f32 / FLAK_SHRAPNEL as f32 * std::f32::consts::TAU;
+            shards.write(Shard {
+                origin,
+                dir: Vec2::new(a.cos(), a.sin()),
+                speed: FLAK_SHRAPNEL_SPEED,
+                damage: FLAK_SHRAPNEL_DMG,
+                element: elem,
+                generation: 0,
+            });
+        }
+        commands.entity(e).despawn();
     }
 }
 
@@ -565,6 +613,10 @@ pub fn spawn_bullets(
             // Mitosis bullets fragment on impact (W).
             if cur.0 == WeaponKind::MitosisRounds {
                 bullet.insert(MitosisGen(MITOSIS_GENERATIONS));
+            }
+            // Flak bullets airburst into shrapnel after travelling ~300px (W).
+            if cur.0 == WeaponKind::FlakCannon {
+                bullet.insert(Airburst { timer: FLAK_BURST_DIST / shot.speed.max(1.0) });
             }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {

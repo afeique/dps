@@ -289,10 +289,17 @@ impl Plugin for GamePlugin {
                         systems::weapons::spawn_bullets,
                     )
                         .chain(),
-                    // Gravity Lance orbs drag nearby enemies before they move (W).
-                    systems::weapons::gravity_pull,
-                    // Boomerang discs curve back to the player (W).
-                    systems::weapons::boomerang_return,
+                    // Bullet trajectory systems (W), grouped to keep the outer
+                    // tuple under Bevy's 20-element limit — run before integrate.
+                    (
+                        // Gravity Lance orbs drag nearby enemies in.
+                        systems::weapons::gravity_pull,
+                        // Boomerang discs curve back to the player.
+                        systems::weapons::boomerang_return,
+                        // Flak bullets airburst into a shrapnel ring at range.
+                        systems::weapons::flak_airburst,
+                    )
+                        .chain(),
                     systems::movement::integrate,
                     systems::movement::confine_player,
                     // Generic formations (spec IV.6): override bound members'

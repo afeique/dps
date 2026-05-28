@@ -1221,6 +1221,46 @@ fn gravity_lance_is_void_and_pulls() {
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
 }
 
+/// W: a Flak bullet, when its airburst fuse lapses, emits a 9-shrapnel ring and
+/// despawns.
+#[test]
+fn flak_airbursts_into_shrapnel() {
+    use crate::components::{Airburst, BulletElements, Bullet, BulletKind};
+    use crate::combat::element::ElementSet;
+    use crate::messages::Shard;
+    use crate::systems::weapons::{flak_airburst, FLAK_SHRAPNEL};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let flak = world
+        .spawn((
+            Bullet { kind: BulletKind::Player, damage: 0.8, pierce: 0 },
+            BulletElements(ElementSet::kinetic()),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            Airburst { timer: 0.05 },
+        ))
+        .id();
+
+    #[derive(Resource, Default)]
+    struct Count(u32);
+    world.insert_resource(Count::default());
+    fn collect(mut r: MessageReader<Shard>, mut c: ResMut<Count>) {
+        for _ in r.read() {
+            c.0 += 1;
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((flak_airburst, collect).chain());
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1)); // past the fuse
+    world.insert_resource(time);
+    step.run(world);
+
+    assert_eq!(world.resource::<Count>().0, FLAK_SHRAPNEL, "burst a full shrapnel ring");
+    assert!(world.get::<Airburst>(flak).is_none(), "flak bullet despawned after bursting");
+}
+
 /// W: a Mitosis bullet, on impact, emits 2 shards at half damage carrying gen−1.
 #[test]
 fn mitosis_splits_into_shards_on_hit() {
