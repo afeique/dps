@@ -367,6 +367,7 @@ pub fn boss_phase(hp_frac: f32) -> u8 {
 pub fn boss_frenzy(
     mut commands: Commands,
     mut fire: MessageWriter<Fire>,
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut bosses: Query<
         (Entity, &Transform, &Health, Option<&mut FireCooldown>),
         (With<Boss>, Without<Raged>, Without<Frenzied>),
@@ -377,6 +378,12 @@ pub fn boss_frenzy(
             continue; // only on first entry to the mid band
         }
         commands.entity(e).insert(Frenzied);
+        if let Some(sfx) = &sfx {
+            commands.spawn((
+                AudioPlayer::new(sfx.boss_roar.clone()),
+                PlaybackSettings::DESPAWN,
+            ));
+        }
         if let Some(mut fc) = fc {
             fc.cooldown *= 0.8; // a gentler speed-up than rage's ×0.66
             fc.timer = 0.0;
@@ -412,6 +419,7 @@ pub fn tick_rage_telegraph(
     time: Res<Time>,
     mut commands: Commands,
     mut fire: MessageWriter<Fire>,
+    sfx: Option<Res<crate::audio::Sfx>>,
     mut bosses: Query<
         (Entity, &Transform, &mut RageTelegraph, Option<&mut FireCooldown>),
         Without<Raged>,
@@ -425,6 +433,12 @@ pub fn tick_rage_telegraph(
         }
         commands.entity(e).remove::<RageTelegraph>();
         activate_rage(&mut commands, &mut fire, e, tf.translation.truncate(), fc);
+        if let Some(sfx) = &sfx {
+            commands.spawn((
+                AudioPlayer::new(sfx.boss_roar.clone()),
+                PlaybackSettings::DESPAWN,
+            ));
+        }
     }
 }
 

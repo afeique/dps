@@ -389,6 +389,32 @@ fn synth_ability() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Boss roar — a menacing low growl (a descending 150→62 Hz body + a growly
+/// fifth + low-passed noise), ~0.5 s. Played when a boss escalates (frenzy/rage).
+fn synth_boss_roar() -> Vec<u8> {
+    let duration = 0.50_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.04) as usize;
+    let decay = (-3.5_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let (mut p1, mut p2) = (0.0_f32, 0.0_f32);
+    let mut noise_state: u64 = 0xCAFE_BABE_DEAD_BEEF;
+    let mut lp: f32 = 0.0;
+    for i in 0..n {
+        let (raw, next) = lcg_noise(noise_state);
+        noise_state = next;
+        lp += 0.10 * (raw - lp);
+        let amp = env_exp(i, attack, decay);
+        let f1 = sweep_freq(150.0, 62.0, i, n);
+        let sig = 0.55 * sine(p1) + 0.2 * sine(p2) + 0.25 * lp;
+        samples.push((sig * amp * 0.50).clamp(-1.0, 1.0));
+        p1 = advance_phase(p1, f1);
+        p2 = advance_phase(p2, f1 * 1.5); // a growly fifth above
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 /// Shield engage — an airy rising shimmer (a 320→780 Hz sweep + an octave
 /// sparkle, soft attack), ~0.26 s. Played on a defensive pop (Shield Burst /
 /// Bulwark) to pair with the shield-bubble VFX.
@@ -488,6 +514,7 @@ pub struct Sfx {
     pub bomb:         Handle<AudioSource>,
     pub shield:       Handle<AudioSource>,
     pub ability:      Handle<AudioSource>,
+    pub boss_roar:    Handle<AudioSource>,
 
     // ── File-based SFX: event_key → variants ──
     /// Map from event key (e.g. `"shoot"`, `"enemyDestroy_HUNTER"`) to a
@@ -569,6 +596,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let bomb         = assets.add(make_synth(synth_bomb()));
     let shield       = assets.add(make_synth(synth_shield()));
     let ability      = assets.add(make_synth(synth_ability()));
+    let boss_roar    = assets.add(make_synth(synth_boss_roar()));
 
     // ── Load WAV files from sfx/ ──
     let mut file_sfx: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
@@ -621,6 +649,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         bomb,
         shield,
         ability,
+        boss_roar,
         file_sfx,
         last_played: HashMap::new(),
         variant_counter: 0x517C_C1B7_2722_0A95, // arbitrary non-zero seed
