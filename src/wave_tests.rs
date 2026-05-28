@@ -1261,6 +1261,57 @@ fn glass_cannon_trades_hp_for_damage() {
     assert!((hp.max - 25.0).abs() < 1e-3, "Glass Cannon → −15 max HP (40 → 25)");
 }
 
+/// Vampiric Rounds heals the player on crits — distinct from Vampirism (which
+/// heals every hit). Helper scales +3 HP/stack; in combat the heal only lands
+/// when the upgrade is owned (control: no upgrade → HP unchanged).
+#[test]
+fn vampiric_rounds_heals_on_crit() {
+    use crate::systems::collision::bullet_hits_enemy;
+    use crate::systems::shop::{vampiric_rounds_heal, UpgradeId, Upgrades};
+
+    assert_eq!(vampiric_rounds_heal(0), 0.0, "not owned → no heal");
+    assert!((vampiric_rounds_heal(4) - 12.0).abs() < 1e-6, "+3 HP per stack");
+
+    // Fire many crits at a tanky enemy; the player neither moves nor is hit, so
+    // its HP only changes via the heal. Crit caps at 60%, so 40 shots make ≥1
+    // crit a certainty (0.4^40 ≈ 1e-16). Owns no Vampirism, so vamp = 0.
+    fn player_hp_after(owns_rounds: bool) -> f32 {
+        let mut app = test_app();
+        {
+            let mut up = app.world_mut().resource_mut::<Upgrades>();
+            up.set(UpgradeId::CritChance, 100); // max crit chance (0.60)
+            if owns_rounds {
+                up.set(UpgradeId::VampiricRounds, 4);
+            }
+        }
+        let world = app.world_mut();
+        world.spawn((Ship::default(), Health::new(40.0), Transform::from_xyz(500.0, 0.0, 0.0)));
+        world.spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Health::new(1.0e6),
+            Collider { radius: 16.0 },
+            Faction::Enemy,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        for _ in 0..40 {
+            world.spawn((
+                Bullet { kind: BulletKind::Player, damage: 5.0, pierce: 0 },
+                Collider { radius: 3.0 },
+                Faction::Player,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+            ));
+        }
+        let mut step = Schedule::default();
+        step.add_systems(bullet_hits_enemy);
+        step.run(world);
+        let mut q = world.query_filtered::<&Health, With<Ship>>();
+        q.single(world).unwrap().current
+    }
+
+    assert_eq!(player_hp_after(false), 40.0, "control: no upgrade → HP unchanged");
+    assert!(player_hp_after(true) > 40.0, "Vampiric Rounds → crits over-heal past max");
+}
+
 /// Player elemental resistance (E5/E8) reduces typed enemy-contact damage:
 /// `player_multiplier = 1 − clamp(resist, 0, 0.9)`, applied in
 /// `enemy_contact_player` by the enemy's element.

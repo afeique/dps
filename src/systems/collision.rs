@@ -17,7 +17,8 @@ use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak,
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
-    opportunist_bonus, predator_bonus, stun_chance, vampirism_frac, UpgradeId, Upgrades,
+    opportunist_bonus, predator_bonus, stun_chance, vampiric_rounds_heal, vampirism_frac,
+    UpgradeId, Upgrades,
     EXECUTE_THRESHOLD, KNOCK_PX, PREDATOR_THRESHOLD,
 };
 use bevy::prelude::*;
@@ -126,6 +127,8 @@ pub fn bullet_hits_enemy(
     let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism))
         + equipment.affix_total(AffixKind::Vampirism) / 100.0
         + meta.sp_value("VAMPIRISM") / 100.0;
+    // VAMPIRIC ROUNDS passive: a flat HP refund on each critical hit.
+    let crit_heal = vampiric_rounds_heal(upgrades.owned(UpgradeId::VampiricRounds));
     // Crit chance/damage scale with their upgrade stacks (spec III.6) + equipped
     // item affixes (chance as a fraction; damage as an additive bonus on the cap).
     let crit_p = crit_chance(upgrades.owned(UpgradeId::CritChance))
@@ -275,11 +278,13 @@ pub fn bullet_hits_enemy(
                         commands.entity(enemy_e).insert(bumped);
                     }
                 }
-                // VAMPIRISM: heal the player for a fraction of the damage dealt.
-                // (Over-fill allowed; overheal_to_tanks converts the overflow.)
-                if vamp > 0.0 {
+                // VAMPIRISM heals a fraction of every hit's damage; VAMPIRIC
+                // ROUNDS adds a flat refund on crits. (Over-fill allowed;
+                // overheal_to_tanks converts the overflow.)
+                let heal = amount * vamp + if crit_mult > 1.0 { crit_heal } else { 0.0 };
+                if heal > 0.0 {
                     if let Ok(mut hp) = player_hp.single_mut() {
-                        hp.current += amount * vamp;
+                        hp.current += heal;
                     }
                 }
                 // Landing a hit charges the power-weapon energy meter (spec III.3);

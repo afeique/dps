@@ -64,12 +64,14 @@ pub enum UpgradeId {
     GlassCannon,
     /// Bloodlust — a kill grants a brief fire-rate surge.
     Bloodlust,
+    /// Vampiric Rounds — critical hits restore a flat chunk of HP.
+    VampiricRounds,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 34] = [
+    pub const ALL: [UpgradeId; 35] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -104,6 +106,7 @@ impl UpgradeId {
         Self::Opportunist,
         Self::GlassCannon,
         Self::Bloodlust,
+        Self::VampiricRounds,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -145,6 +148,7 @@ impl UpgradeId {
             Self::Opportunist => 31,
             Self::GlassCannon => 32,
             Self::Bloodlust => 33,
+            Self::VampiricRounds => 34,
         }
     }
 
@@ -184,6 +188,7 @@ impl UpgradeId {
             Self::Opportunist => "Opportunist   (+dmg vs afflicted)",
             Self::GlassCannon => "Glass Cannon  (+50% dmg, -15 HP)",
             Self::Bloodlust => "Bloodlust     (faster fire on kill)",
+            Self::VampiricRounds => "Vampiric Rnd  (heal on crit)",
         }
     }
 
@@ -224,6 +229,7 @@ impl UpgradeId {
             Self::Opportunist => 2400,
             Self::GlassCannon => 3000,
             Self::Bloodlust => 2600,
+            Self::VampiricRounds => 2400,
         }
     }
 
@@ -263,6 +269,7 @@ impl UpgradeId {
             Self::Opportunist => 4,
             Self::GlassCannon => 1,
             Self::Bloodlust => 1,
+            Self::VampiricRounds => 4,
         }
     }
 }
@@ -289,6 +296,13 @@ pub fn amplifier_mult(stacks: u32) -> f32 {
 /// player's per-element `Resistances` in `items::apply_item_resist`.
 pub fn warding_bonus(stacks: u32) -> f32 {
     0.08 * stacks as f32
+}
+
+/// Flat HP restored on a critical hit from `VampiricRounds` stacks (+3 HP/stack):
+/// applied in `collision::bullet_hits_enemy` on a crit (distinct from `Vampirism`,
+/// which heals a fraction of *every* hit's damage). 0 = not owned.
+pub fn vampiric_rounds_heal(stacks: u32) -> f32 {
+    3.0 * stacks as f32
 }
 
 /// Stun chance applied by the `_STUN` bullet trait at `stacks` (spec III.6:
@@ -660,6 +674,7 @@ pub fn apply_upgrade(
         | UpgradeId::Predator
         | UpgradeId::Opportunist
         | UpgradeId::GlassCannon
-        | UpgradeId::Bloodlust => {}
+        | UpgradeId::Bloodlust
+        | UpgradeId::VampiricRounds => {}
     }
 }
