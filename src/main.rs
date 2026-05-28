@@ -20,6 +20,7 @@ mod audio;
 mod combat;
 mod components;
 mod messages;
+mod meta;
 mod music;
 mod render;
 mod resources;
@@ -30,6 +31,8 @@ mod systems;
 mod combat_tests;
 #[cfg(test)]
 mod gate_tests;
+#[cfg(test)]
+mod meta_tests;
 #[cfg(test)]
 mod wave_tests;
 

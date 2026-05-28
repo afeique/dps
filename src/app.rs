@@ -50,6 +50,8 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
             .init_resource::<crate::combat::reaction::PendingReactions>()
+            // Meta-progression (ME): load the persistent account profile at boot.
+            .insert_resource(crate::meta::load_meta())
             .init_resource::<systems::hitstop::Hitstop>()
             .init_resource::<render::shake::ScreenShake>()
             .init_resource::<render::flash::ScreenFlash>()
@@ -194,7 +196,10 @@ impl Plugin for GamePlugin {
                 systems::flow::pause_input.run_if(in_state(GameState::Paused)),
             )
             // ── death → GameOver → title flow ───────────────────────────
-            .add_systems(OnEnter(GameState::GameOver), systems::flow::enter_game_over)
+            .add_systems(
+                OnEnter(GameState::GameOver),
+                (systems::flow::enter_game_over, crate::meta::bank_run),
+            )
             .add_systems(
                 OnExit(GameState::GameOver),
                 systems::flow::despawn_screen::<systems::flow::GameOverScreen>,
@@ -231,7 +236,7 @@ impl Plugin for GamePlugin {
             )
             .add_systems(
                 OnEnter(GameState::GameComplete),
-                systems::flow::enter_game_complete,
+                (systems::flow::enter_game_complete, crate::meta::bank_run),
             )
             .add_systems(
                 OnExit(GameState::GameComplete),
@@ -352,6 +357,8 @@ impl Plugin for GamePlugin {
                     systems::enemy::boss_pair_rage,
                     // Ashen Detonator death-flare: a PYRO blast on death (EN).
                     systems::enemy::mechanics::ashen_death_flare,
+                    // Award account XP per kill (ME).
+                    crate::meta::award_xp,
                     // Combat Medic: a kill after taking a hit heals the player.
                     systems::passives::tick_combat_medic,
                     // Hitstop: a boss/mini-boss `Death` freezes the sim a few

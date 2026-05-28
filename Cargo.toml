@@ -19,6 +19,11 @@ bevy_prototype_lyon = "0.16.0"
 # GPU-compute particles (explosions, trails, debris) — the payoff over the web
 # build's 600-particle cap. 2D-only (no 3d/serde). See docs/port-plan.md §3.2.
 bevy_hanabi = { version = "0.18.0", default-features = false, features = ["2d"] }
+# Meta-progression persistence (ME): the account profile is serialized as RON
+# in the OS config dir so it survives across runs (progression.js + storage.js).
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
+dirs = "5"
 
 # ── Build-speed profiles (Bevy's recommended dev setup) ──────────────
 # Compile our own code with light optimization, but optimize all
