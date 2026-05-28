@@ -73,6 +73,7 @@ pub fn bullet_hits_enemy(
     streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
+    meta: Res<crate::meta::Meta>,
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
     mut bullets: Query<(
@@ -119,14 +120,19 @@ pub fn bullet_hits_enemy(
     let streak_mult = streak.multiplier();
     // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5) — shop
     // stacks + equipped item affixes.
+    // Each adds the account SP-stat bonus (sp_value is a % → /100) on top of the
+    // shop stacks + equipped item affixes.
     let vamp = vampirism_frac(upgrades.owned(UpgradeId::Vampirism))
-        + equipment.affix_total(AffixKind::Vampirism) / 100.0;
+        + equipment.affix_total(AffixKind::Vampirism) / 100.0
+        + meta.sp_value("VAMPIRISM") / 100.0;
     // Crit chance/damage scale with their upgrade stacks (spec III.6) + equipped
     // item affixes (chance as a fraction; damage as an additive bonus on the cap).
-    let crit_p =
-        crit_chance(upgrades.owned(UpgradeId::CritChance)) + equipment.affix_total(AffixKind::CritChance) / 100.0;
+    let crit_p = crit_chance(upgrades.owned(UpgradeId::CritChance))
+        + equipment.affix_total(AffixKind::CritChance) / 100.0
+        + meta.sp_value("CRIT_CHANCE") / 100.0;
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
-    let crit_dmg_bonus = equipment.affix_total(AffixKind::CritDamage) / 100.0;
+    let crit_dmg_bonus =
+        equipment.affix_total(AffixKind::CritDamage) / 100.0 + meta.sp_value("CRIT_DAMAGE") / 100.0;
     // `_STUN` bullet trait: chance to stun the enemy on hit (spec III.2/III.6).
     let stun_p = stun_chance(upgrades.owned(UpgradeId::StunShot));
     // `_EXPLODE` bullet trait: AoE splash radius on hit (0 = off).

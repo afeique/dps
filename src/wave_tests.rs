@@ -39,6 +39,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Crit>()
         .add_message::<crate::messages::Shard>()
         .add_message::<crate::messages::Reaction>()
+        .init_resource::<crate::meta::Meta>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
@@ -1932,6 +1933,56 @@ fn vampirism_heals_on_hit() {
 
     let hp = world.get::<Health>(player).unwrap().current;
     assert!(hp > 10.0, "vampirism should heal the player on a hit (hp now {hp})");
+}
+
+/// Account SP VAMPIRISM feeds the same lifesteal path as the shop/item sources
+/// (Phase ME effect-wiring): a maxed SP Vampirism heals the player on a hit even
+/// with no upgrades/affixes.
+#[test]
+fn sp_vampirism_heals_on_hit() {
+    use crate::meta::Meta;
+    use crate::systems::collision::bullet_hits_enemy;
+
+    let mut app = test_app();
+    {
+        let mut meta = app.world_mut().resource_mut::<Meta>();
+        meta.sp = 20;
+        for _ in 0..20 {
+            meta.allocate_sp("VAMPIRISM"); // → 50% lifesteal at the cap
+        }
+        assert!((meta.sp_value("VAMPIRISM") - 50.0).abs() < 1e-3);
+    }
+    let world = app.world_mut();
+
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health { current: 10.0, max: 40.0 },
+            Collider { radius: 16.0 },
+            Faction::Player,
+            Transform::from_xyz(500.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Health::new(100.0),
+        Collider { radius: 16.0 },
+        Faction::Enemy,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
+        Collider { radius: 3.0 },
+        Faction::Player,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((bullet_hits_enemy, apply_damage).chain());
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!(hp > 10.0, "SP vampirism heals the player on a hit (hp now {hp})");
 }
 
 // ── 23. dodge_ignores_about_half ──────────────────────────────────────────────
