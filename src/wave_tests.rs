@@ -1258,6 +1258,27 @@ fn player_hurt_triggers_red_flash() {
     );
 }
 
+/// Elemental enemies get an element-colored halo child (so they read at a
+/// glance); Kinetic ones don't. Cinder is Pyro; Hunter is Kinetic.
+#[test]
+fn elemental_enemies_get_an_element_halo() {
+    let mut world = World::new();
+    fn spawn_two(mut c: Commands) {
+        crate::systems::enemy::spawn(&mut c, EnemyKind::Cinder, Vec2::ZERO);
+        crate::systems::enemy::spawn(&mut c, EnemyKind::Hunter, Vec2::new(99.0, 0.0));
+    }
+    let mut step = Schedule::default();
+    step.add_systems(spawn_two);
+    step.run(&mut world);
+
+    let mut q = world.query_filtered::<&Children, With<Enemy>>();
+    assert_eq!(
+        q.iter(&world).count(),
+        1,
+        "only the elemental (Cinder) enemy carries a halo child; the Kinetic Hunter doesn't"
+    );
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

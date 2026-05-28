@@ -298,6 +298,21 @@ fn telegraph_ring(radius: f32) -> Shape {
         .build()
 }
 
+/// An element-colored halo ring (HDR-boosted from `Element::color` so bloom
+/// flares it) worn by elemental enemies so they read at a glance — many reuse a
+/// non-elemental silhouette (e.g. Cinder = Wasp), so the tint is the tell.
+fn element_ring(radius: f32, element: Element) -> Shape {
+    let l = element.color().to_linear();
+    let glow = Color::linear_rgb(l.red * 3.0, l.green * 3.0, l.blue * 3.0);
+    let mut path = ShapePath::new();
+    for i in 0..28 {
+        let a = i as f32 / 28.0 * std::f32::consts::TAU;
+        let p = Vec2::new(a.cos() * radius, a.sin() * radius);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close()).stroke((glow, 2.0)).build()
+}
+
 /// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% HP it
 /// enters the **telegraph** window — a red warning ring + a `RageTelegraph` timer
 /// — rather than raging instantly. `tick_rage_telegraph` fires `activate_rage`
@@ -673,6 +688,17 @@ fn spawn_enemy(
             c.spawn((
                 shapes::drifter_core(18.0),
                 Transform::from_xyz(0.0, 0.0, 1.0),
+            ));
+        });
+    }
+
+    // Elemental enemies wear an element-colored halo so they read at a glance.
+    let elem = element_for(kind);
+    if elem != Element::Kinetic {
+        e.with_children(|c| {
+            c.spawn((
+                element_ring(st.radius * 1.2, elem),
+                Transform::from_xyz(0.0, 0.0, 0.1),
             ));
         });
     }
