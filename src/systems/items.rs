@@ -638,6 +638,7 @@ pub fn roll_item_drops_on_death(
     mut rng: ResMut<GameRng>,
     mut feed: ResMut<LootFeed>,
     mut equipment: ResMut<Equipment>,
+    mut meta: ResMut<crate::meta::Meta>,
 ) {
     let level = wave.number() as u32;
     for death in deaths.read() {
@@ -649,10 +650,22 @@ pub fn roll_item_drops_on_death(
             // Auto-equip if it out-scores the current slot item (JS model); the
             // feed shows every drop, marking which ones equipped.
             let equipped = equipment.try_equip(item.clone());
+            // Drops that weren't an upgrade bank into the persistent stash (the
+            // salvage/crafting pool, rainboids meta.stash), oldest pruned at the cap.
+            if !equipped {
+                meta.stash.push(item.clone());
+                if meta.stash.len() > STASH_CAP {
+                    meta.stash.remove(0);
+                }
+            }
             feed.push(item, equipped);
         }
     }
 }
+
+/// Soft cap on the persistent stash so the RON save can't grow without bound;
+/// the oldest entries are pruned first (the player salvages to manage it).
+pub const STASH_CAP: usize = 300;
 
 /// Reconcile the player's `Health.max` against the equipped MAX-HP affix total
 /// (spec VI.5). Unlike the read-live affixes, HP is a *capacity* baked into

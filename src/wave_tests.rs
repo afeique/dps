@@ -5524,6 +5524,12 @@ fn item_loot_feed_on_death() {
     let n = world.resource::<LootFeed>().pending.len();
     assert!(n > 0, "enemy kills mint loot (got {n})");
     assert!(n <= 12, "loot backlog stays bounded (got {n})");
+
+    // Non-equipped drops bank into the persistent stash, capped by STASH_CAP.
+    use crate::systems::items::STASH_CAP;
+    let stash = world.resource::<crate::meta::Meta>().stash.len();
+    assert!(stash > 0, "unequipped drops bank into the stash (got {stash})");
+    assert!(stash <= STASH_CAP, "stash stays bounded (got {stash})");
 }
 
 // ── 80. loot_card_fade_curve ──────────────────────────────────────────────────
