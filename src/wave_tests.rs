@@ -3847,6 +3847,40 @@ fn elemental_status_auras_stack_and_despawn_independently() {
     }
 }
 
+/// Weapon armory-gating: the five base weapons are always available, the six
+/// exotics only once unlocked. Tab/Q cycling skips locked weapons.
+#[test]
+fn weapon_cycle_skips_locked_exotics() {
+    use crate::meta::{Meta, WEAPON_UNLOCK_COST};
+    use crate::systems::weapons::WeaponKind;
+
+    let mut meta = Meta::default();
+
+    // Base loadout is free; exotics are locked by default.
+    assert!(WeaponKind::PulseCannon.is_available(&meta), "Pulse is a free base weapon");
+    assert!(WeaponKind::ClusterLauncher.is_available(&meta), "Cluster is base");
+    assert!(!WeaponKind::GravityLance.is_available(&meta), "Gravity Lance is gold-locked");
+    assert!(!WeaponKind::FlakCannon.is_available(&meta), "Flak is gold-locked");
+
+    // From the last base weapon, Tab wraps past all the locked exotics back to
+    // the first base weapon (since none are unlocked).
+    assert_eq!(
+        WeaponKind::ClusterLauncher.next_available(&meta),
+        WeaponKind::PulseCannon,
+        "with no exotics unlocked, cycling wraps to the base set"
+    );
+
+    // Unlock Gravity Lance → it becomes reachable from Cluster.
+    meta.account_gold = WEAPON_UNLOCK_COST;
+    assert!(meta.unlock(WeaponKind::GravityLance.id(), WEAPON_UNLOCK_COST));
+    assert!(WeaponKind::GravityLance.is_available(&meta));
+    assert_eq!(
+        WeaponKind::ClusterLauncher.next_available(&meta),
+        WeaponKind::GravityLance,
+        "an unlocked exotic is now in the cycle"
+    );
+}
+
 /// The player's own statuses (PlayerBurn/Chill/Corrode) get the same aura: it
 /// spawns when afflicted and despawns when the status clears.
 #[test]

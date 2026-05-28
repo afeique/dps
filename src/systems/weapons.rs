@@ -40,9 +40,10 @@ const BASE_BULLET_RADIUS: f32 = 3.0;
 
 // ─── Weapon kinds + per-kind stats ──────────────────────────────────────────
 
-/// The five primary weapons (`PRIMARY_WEAPONS`). Selectable at runtime; the
-/// real game gates them behind `unlockWave`, deferred to the shop increment.
-#[derive(Clone, Copy, PartialEq, Default)]
+/// The eleven primary weapons (`PRIMARY_WEAPONS`). The first five are the free
+/// base loadout (Digit 1–5); the six exotics are armory-unlocked (gated by
+/// `WeaponKind::is_available` / `next_available` against `Meta.unlocked`).
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum WeaponKind {
     #[default]
     PulseCannon,
@@ -105,6 +106,59 @@ impl WeaponKind {
             Self::GravityLance => Element::Void,
             _ => Element::Kinetic,
         }
+    }
+
+    /// Total number of weapon kinds (bounds the `next_available` cycle).
+    pub const COUNT: usize = 11;
+
+    /// Stable id for the armory unlock set ([`crate::meta::Meta::unlocked`]).
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::PulseCannon => "PULSE",
+            Self::StormNeedles => "STORM",
+            Self::ScatterShot => "SCATTER",
+            Self::RailDriver => "RAIL",
+            Self::ClusterLauncher => "CLUSTER",
+            Self::GravityLance => "GRAVITY_LANCE",
+            Self::SpinCannon => "SPIN_CANNON",
+            Self::Boomerang => "BOOMERANG",
+            Self::Caroms => "CAROMS",
+            Self::MitosisRounds => "MITOSIS",
+            Self::FlakCannon => "FLAK",
+        }
+    }
+
+    /// The five Digit-bound weapons are the free base loadout; the six exotic
+    /// (Tab/Q-only) weapons are gated behind armory gold-unlocks.
+    pub fn base_unlocked(self) -> bool {
+        matches!(
+            self,
+            Self::PulseCannon
+                | Self::StormNeedles
+                | Self::ScatterShot
+                | Self::RailDriver
+                | Self::ClusterLauncher
+        )
+    }
+
+    /// Whether this weapon is usable this run — a free base weapon, or one
+    /// unlocked in the armory (`meta.is_unlocked`).
+    pub fn is_available(self, meta: &crate::meta::Meta) -> bool {
+        self.base_unlocked() || meta.is_unlocked(self.id())
+    }
+
+    /// The next *available* weapon after `self` (the Tab/Q cycle skips locked
+    /// ones). Bounded by [`Self::COUNT`]; falls back to `self` if nothing else is
+    /// available (a base weapon always is, so this is just a safety net).
+    pub fn next_available(self, meta: &crate::meta::Meta) -> Self {
+        let mut k = self.next();
+        for _ in 0..Self::COUNT {
+            if k.is_available(meta) {
+                return k;
+            }
+            k = k.next();
+        }
+        self
     }
 }
 
@@ -485,8 +539,14 @@ pub fn cycle_attunement(keys: Res<ButtonInput<KeyCode>>, mut attune: ResMut<Attu
     }
 }
 
-/// Cycle (Tab / Q) or directly select (1–5) the active weapon.
-pub fn cycle_weapon(keys: Res<ButtonInput<KeyCode>>, mut cur: ResMut<CurrentWeapon>) {
+/// Cycle (Tab / Q) or directly select (1–5) the active weapon. Digit 1–5 pick
+/// the five free base weapons; Tab/Q cycles to the next *unlocked* weapon
+/// (armory-gated exotics are skipped until bought — `meta.is_unlocked`).
+pub fn cycle_weapon(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut cur: ResMut<CurrentWeapon>,
+    meta: Res<crate::meta::Meta>,
+) {
     if keys.just_pressed(KeyCode::Digit1) {
         cur.0 = WeaponKind::PulseCannon;
     } else if keys.just_pressed(KeyCode::Digit2) {
@@ -498,7 +558,7 @@ pub fn cycle_weapon(keys: Res<ButtonInput<KeyCode>>, mut cur: ResMut<CurrentWeap
     } else if keys.just_pressed(KeyCode::Digit5) {
         cur.0 = WeaponKind::ClusterLauncher;
     } else if keys.just_pressed(KeyCode::Tab) || keys.just_pressed(KeyCode::KeyQ) {
-        cur.0 = cur.0.next();
+        cur.0 = cur.0.next_available(&meta);
     }
 }
 
