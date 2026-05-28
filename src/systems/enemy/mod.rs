@@ -248,6 +248,7 @@ fn activate_rage(
             damage: 3.0,
             speed: 280.0,
             faction: Faction::Enemy,
+            element: crate::combat::element::Element::Kinetic,
             // Raged bosses fire homing bullets (spec IV.7 `enableHomingBullets`).
             homing: true,
         });

@@ -1177,6 +1177,43 @@ fn player_resist_reduces_contact_damage() {
     assert!((hp - 990.0).abs() < 1.0, "60% resist → ~10 contact damage (hp now {hp})");
 }
 
+/// An elemental enemy BULLET (E8) is scaled by the player's resist for its
+/// element and stamps that element's status — e.g. a Pyro bolt burns + is
+/// halved by 50% Pyro resist.
+#[test]
+fn elemental_enemy_bullet_resisted_and_applies_status() {
+    use crate::combat::element::{Element, ElementSet, Resistances};
+    use crate::components::{BulletElements, PlayerBurn};
+    use crate::systems::collision::enemy_bullet_hits_player;
+    use crate::systems::damage::apply_damage;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let player = world
+        .spawn((
+            Ship::default(),
+            Health::new(1000.0), // no Shield → isolate the resist scaling
+            Collider { radius: 20.0 },
+            Resistances::new().with(Element::Pyro, 0.5), // 50% Pyro resist
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Bullet { kind: BulletKind::Enemy, damage: 20.0, pierce: 0 },
+        Collider { radius: 4.0 },
+        BulletElements(ElementSet::single(Element::Pyro)),
+        Transform::from_xyz(0.0, 0.0, 0.0), // overlapping
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((enemy_bullet_hits_player, apply_damage).chain());
+    step.run(world);
+
+    let hp = world.get::<Health>(player).unwrap().current;
+    assert!((hp - 990.0).abs() < 1.0, "20 dmg × (1−0.5) = 10 (hp now {hp})");
+    assert!(world.get::<PlayerBurn>(player).is_some(), "a Pyro bullet ignites the player");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

@@ -373,13 +373,17 @@ pub fn bullet_hits_enemy(
 pub fn enemy_bullet_hits_player(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
-    player: Query<(Entity, &Transform, &Collider), With<Ship>>,
-    bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
+    player: Query<
+        (Entity, &Transform, &Collider, Option<&Resistances>, Option<&PlayerCorrode>),
+        With<Ship>,
+    >,
+    bullets: Query<(Entity, &Transform, &Collider, &Bullet, Option<&BulletElements>)>,
 ) {
-    let Ok((player_e, ptf, pc)) = player.single() else {
+    let Ok((player_e, ptf, pc, presist, pcorrode)) = player.single() else {
         return;
     };
-    for (bullet_e, btf, bc, bullet) in &bullets {
+    let corrode_stacks = pcorrode.map_or(0, |c| c.stacks);
+    for (bullet_e, btf, bc, bullet, belems) in &bullets {
         if bullet.kind != BulletKind::Enemy {
             continue;
         }
@@ -389,10 +393,25 @@ pub fn enemy_bullet_hits_player(
             .truncate()
             .distance_squared(ptf.translation.truncate());
         if d2 <= reach * reach {
+            // Elemental enemy bullet (E8): scale by the player's resist for the
+            // bullet's element + stamp its signature status (single-element).
+            let elem = belems.and_then(|b| b.0.iter().next());
+            let resist_mult = match (elem, presist) {
+                (Some(e), Some(r)) => r.player_multiplier(e),
+                _ => 1.0,
+            };
             dmg.write(Damage {
                 target: player_e,
-                amount: bullet.damage,
+                amount: bullet.damage * resist_mult,
             });
+            if let Some(e) = elem {
+                crate::systems::player_status::apply_player_status(
+                    &mut commands,
+                    player_e,
+                    e,
+                    corrode_stacks,
+                );
+            }
             commands.entity(bullet_e).despawn();
         }
     }

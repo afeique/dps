@@ -356,6 +356,7 @@ pub fn tick_sentry_drones(
                         damage: SENTRY_DAMAGE,
                         speed: BASE_BULLET_SPEED,
                         faction: Faction::Player,
+                        element: crate::combat::element::Element::Kinetic,
                         homing: false,
                     });
                 }

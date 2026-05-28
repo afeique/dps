@@ -730,6 +730,7 @@ pub fn player_fire(
                 damage: dmg,
                 speed: st.speed,
                 faction: Faction::Player,
+                element: crate::combat::element::Element::Kinetic,
                 homing: false,
             });
         };
@@ -845,11 +846,17 @@ pub fn spawn_bullets(
             if player_homing > 0.0 {
                 bullet.insert(Homing { turn_rate: player_homing });
             }
-        } else if shot.homing {
-            // Raged-boss bullets curve toward the player (spec IV.7 / IV.5).
-            bullet.insert(RageHoming {
-                turn_rate: crate::systems::enemy::RAGE_HOMING_TURN,
-            });
+        } else {
+            // Enemy bullets: raged-boss homing + an elemental tag (E8) so the
+            // hit applies the firing enemy's element status/resist to the player.
+            if shot.homing {
+                bullet.insert(RageHoming {
+                    turn_rate: crate::systems::enemy::RAGE_HOMING_TURN,
+                });
+            }
+            if shot.element != Element::Kinetic {
+                bullet.insert(BulletElements(ElementSet::single(shot.element)));
+            }
         }
     }
 }

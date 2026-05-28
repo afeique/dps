@@ -115,4 +115,9 @@ pub struct Fire {
     /// tags such enemy bullets with `RageHoming`. Always `false` for player
     /// shots and normal (un-raged) enemy fire.
     pub homing: bool,
+    /// The attack's element (E8). Enemy fire carries its kind's element
+    /// (`element_for`) so `spawn_bullets` tags the bullet + `enemy_bullet_hits_
+    /// player` applies the matching status / resist. Player Fire leaves this
+    /// `Kinetic` — player bullet elements resolve from attunement/weapon instead.
+    pub element: crate::combat::element::Element,
 }

@@ -100,6 +100,7 @@ pub fn enemy_firing(
                     damage: 2.0, // shootBurst3 → default bullet dmg (spec IV.5)
                     speed: 340.0,
                     faction: Faction::Enemy,
+                    element: crate::systems::enemy::element_for(enemy.kind),
                     homing: raged,
                 });
             }
@@ -116,6 +117,7 @@ pub fn enemy_firing(
                         damage: 2.0, // guardian_spread → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
+                        element: crate::systems::enemy::element_for(enemy.kind),
                         homing: raged,
                     });
                 }
@@ -134,6 +136,7 @@ pub fn enemy_firing(
                     damage: 1.0, // machinegun → LS(1) (spec IV.3)
                     speed: 360.0,
                     faction: Faction::Enemy,
+                    element: crate::systems::enemy::element_for(enemy.kind),
                     homing: raged,
                 });
             }
@@ -148,6 +151,7 @@ pub fn enemy_firing(
                     damage: 3.0, // chargedLaser → LS(3) (spec IV.3)
                     speed: 420.0,
                     faction: Faction::Enemy,
+                    element: crate::systems::enemy::element_for(enemy.kind),
                     homing: raged,
                 });
             }
@@ -169,6 +173,7 @@ pub fn enemy_firing(
                         damage: 2.0, // arcLightning → LS(2) (spec IV.3)
                         speed: 280.0,
                         faction: Faction::Enemy,
+                        element: crate::systems::enemy::element_for(enemy.kind),
                         homing: raged,
                     });
                 }
@@ -185,6 +190,7 @@ pub fn enemy_firing(
                     damage: 3.0, // shootMissile → LS(3) (spec IV.3)
                     speed: 250.0,
                     faction: Faction::Enemy,
+                    element: crate::systems::enemy::element_for(enemy.kind),
                     homing: raged,
                 });
             }
@@ -208,6 +214,7 @@ pub fn enemy_firing(
                         damage: 2.0, // spiral_laser → LS(2) (spec IV.3)
                         speed: 300.0,
                         faction: Faction::Enemy,
+                        element: crate::systems::enemy::element_for(enemy.kind),
                         homing: raged,
                     });
                 }
@@ -227,6 +234,7 @@ pub fn enemy_firing(
                         damage: 2.0, // sentinel_sweep → LS(2) (spec IV.3)
                         speed: 290.0,
                         faction: Faction::Enemy,
+                        element: crate::systems::enemy::element_for(enemy.kind),
                         homing: raged,
                     });
                 }
@@ -242,6 +250,7 @@ pub fn enemy_firing(
                     damage: 4.0, // layMine → LS(4) (spec IV.3)
                     speed: 120.0,
                     faction: Faction::Enemy,
+                    element: crate::systems::enemy::element_for(enemy.kind),
                     homing: raged,
                 });
             }
@@ -264,6 +273,7 @@ pub fn enemy_firing(
                         damage: 3.0, // sweep_laser → LS(3) (spec IV.3)
                         speed: 310.0,
                         faction: Faction::Enemy,
+                        element: crate::systems::enemy::element_for(enemy.kind),
                         homing: raged,
                     });
                 }
