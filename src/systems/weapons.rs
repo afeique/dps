@@ -284,6 +284,23 @@ pub const SHARD_RADIUS: f32 = 4.0;
 pub const CAROMS_BOUNCES: u32 = 3;
 pub const CAROMS_SEEK_RADIUS: f32 = 260.0;
 
+/// Seek radius for the Ricochet passive's bounces on non-Caroms weapons (a touch
+/// tighter than a dedicated Caroms shot).
+pub const RICOCHET_SEEK_RADIUS: f32 = 220.0;
+
+/// Resolve a player bullet's `Bounce` from the weapon + Ricochet stacks: Caroms
+/// always bounces (and Ricochet extends it); other weapons bounce only when the
+/// Ricochet passive is owned. `None` → the shot dies on first hit as usual.
+pub fn ricochet_bounce(weapon: WeaponKind, ricochet_owned: u32) -> Option<Bounce> {
+    let (base, seek) = if weapon == WeaponKind::Caroms {
+        (CAROMS_BOUNCES, CAROMS_SEEK_RADIUS)
+    } else {
+        (0, RICOCHET_SEEK_RADIUS)
+    };
+    let remaining = base + ricochet_owned;
+    (remaining > 0).then_some(Bounce { remaining, seek_radius: seek })
+}
+
 /// Boomerang flight: out for `BOOMERANG_OUT_SECS`, then accelerate back to the
 /// player at `BOOMERANG_RETURN_ACCEL` px/s² (weapon-data.js outFrames 28).
 pub const BOOMERANG_OUT_SECS: f32 = 28.0 / 60.0;
@@ -860,9 +877,10 @@ pub fn spawn_bullets(
             if cur.0 == WeaponKind::Boomerang {
                 bullet.insert(Boomerang::default());
             }
-            // Caroms bullets ricochet between enemies (W).
-            if cur.0 == WeaponKind::Caroms {
-                bullet.insert(Bounce { remaining: CAROMS_BOUNCES, seek_radius: CAROMS_SEEK_RADIUS });
+            // Caroms bullets ricochet between enemies (W); the Ricochet passive
+            // grants (or, on Caroms, extends) bounces on any player weapon.
+            if let Some(b) = ricochet_bounce(cur.0, upgrades.owned(UpgradeId::Ricochet)) {
+                bullet.insert(b);
             }
             // Mitosis bullets fragment on impact (W).
             if cur.0 == WeaponKind::MitosisRounds {

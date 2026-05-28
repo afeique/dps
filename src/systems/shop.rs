@@ -66,12 +66,14 @@ pub enum UpgradeId {
     Bloodlust,
     /// Vampiric Rounds — critical hits restore a flat chunk of HP.
     VampiricRounds,
+    /// Ricochet — player shots bounce to another enemy (grants/extends Bounce).
+    Ricochet,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 35] = [
+    pub const ALL: [UpgradeId; 36] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -107,6 +109,7 @@ impl UpgradeId {
         Self::GlassCannon,
         Self::Bloodlust,
         Self::VampiricRounds,
+        Self::Ricochet,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -149,6 +152,7 @@ impl UpgradeId {
             Self::GlassCannon => 32,
             Self::Bloodlust => 33,
             Self::VampiricRounds => 34,
+            Self::Ricochet => 35,
         }
     }
 
@@ -189,6 +193,7 @@ impl UpgradeId {
             Self::GlassCannon => "Glass Cannon  (+50% dmg, -15 HP)",
             Self::Bloodlust => "Bloodlust     (faster fire on kill)",
             Self::VampiricRounds => "Vampiric Rnd  (heal on crit)",
+            Self::Ricochet => "Ricochet      (shots bounce +1)",
         }
     }
 
@@ -230,6 +235,7 @@ impl UpgradeId {
             Self::GlassCannon => 3000,
             Self::Bloodlust => 2600,
             Self::VampiricRounds => 2400,
+            Self::Ricochet => 2600,
         }
     }
 
@@ -270,6 +276,7 @@ impl UpgradeId {
             Self::GlassCannon => 1,
             Self::Bloodlust => 1,
             Self::VampiricRounds => 4,
+            Self::Ricochet => 3,
         }
     }
 }
@@ -675,6 +682,7 @@ pub fn apply_upgrade(
         | UpgradeId::Opportunist
         | UpgradeId::GlassCannon
         | UpgradeId::Bloodlust
-        | UpgradeId::VampiricRounds => {}
+        | UpgradeId::VampiricRounds
+        | UpgradeId::Ricochet => {}
     }
 }

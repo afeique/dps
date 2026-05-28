@@ -2046,6 +2046,31 @@ fn caroms_bounces_to_next_enemy() {
     assert!(v.x > 200.0 && v.y.abs() < 1.0, "redirected toward enemy B (+X): {v:?}");
 }
 
+/// The Ricochet passive grants bounces to ordinary shots and extends a Caroms
+/// shot's; without it, non-Caroms weapons get no `Bounce` (die on first hit).
+#[test]
+fn ricochet_grants_and_extends_bounces() {
+    use crate::systems::weapons::{
+        ricochet_bounce, WeaponKind, CAROMS_BOUNCES, CAROMS_SEEK_RADIUS, RICOCHET_SEEK_RADIUS,
+    };
+
+    // No passive: a Pulse shot never bounces, but Caroms keeps its native bounce.
+    assert!(ricochet_bounce(WeaponKind::PulseCannon, 0).is_none(), "no Ricochet → Pulse dies on hit");
+    let caroms0 = ricochet_bounce(WeaponKind::Caroms, 0).expect("Caroms always bounces");
+    assert_eq!(caroms0.remaining, CAROMS_BOUNCES);
+    assert!((caroms0.seek_radius - CAROMS_SEEK_RADIUS).abs() < 1e-6);
+
+    // Ricochet x2: Pulse gains 2 bounces; Caroms is extended to base + 2.
+    let pulse2 = ricochet_bounce(WeaponKind::PulseCannon, 2).expect("Ricochet grants Pulse bounces");
+    assert_eq!(pulse2.remaining, 2, "Pulse bounces == Ricochet stacks");
+    assert!((pulse2.seek_radius - RICOCHET_SEEK_RADIUS).abs() < 1e-6);
+    assert_eq!(
+        ricochet_bounce(WeaponKind::Caroms, 2).unwrap().remaining,
+        CAROMS_BOUNCES + 2,
+        "Ricochet extends a Caroms shot"
+    );
+}
+
 /// W: a Boomerang disc flies out, then (after the out phase) accelerates back
 /// toward the player — its outbound velocity reverses.
 #[test]
