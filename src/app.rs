@@ -27,6 +27,8 @@ impl Plugin for GamePlugin {
             // lyon vector-path tessellation → Mesh2d for the silhouettes;
             // hanabi GPU-compute particles for explosions.
             .add_plugins((ShapePlugin, HanabiPlugin))
+            // egui for the BUILD screen (Phase UI).
+            .add_plugins(bevy_egui::EguiPlugin::default())
             // ── global flow + shared data ───────────────────────────────
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
@@ -243,6 +245,19 @@ impl Plugin for GamePlugin {
                     systems::loadout_screen::loadout_input,
                 )
                     .run_if(in_state(GameState::Loadout)),
+            )
+            // ── egui BUILD screen (tabbed; B on title) ─────────────────────────
+            .init_resource::<systems::build_screen::BuildTab>()
+            .add_systems(
+                Update,
+                (
+                    systems::build_screen::open_build.run_if(in_state(GameState::Title)),
+                    systems::build_screen::build_input.run_if(in_state(GameState::Build)),
+                ),
+            )
+            .add_systems(
+                bevy_egui::EguiPrimaryContextPass,
+                systems::build_screen::build_screen_ui.run_if(in_state(GameState::Build)),
             )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)

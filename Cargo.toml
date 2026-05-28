@@ -24,6 +24,9 @@ bevy_hanabi = { version = "0.18.0", default-features = false, features = ["2d"] 
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 dirs = "5"
+# Immediate-mode GUI for the BUILD-tree / loadout screens (Phase UI). Styled to
+# match the HDR neon aesthetic. Tracks Bevy 0.18.
+bevy_egui = "0.39"
 
 # ── Build-speed profiles (Bevy's recommended dev setup) ──────────────
 # Compile our own code with light optimization, but optimize all

@@ -7,6 +7,7 @@
 pub mod abilities;
 pub mod armory;
 pub mod asteroids;
+pub mod build_screen;
 pub mod cleanup;
 pub mod collision;
 pub mod damage;

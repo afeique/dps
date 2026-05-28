@@ -27,6 +27,9 @@ pub enum GameState {
     /// Loadout picker — assign abilities to the 4 slots. Opened with `L` from
     /// the title; `Esc` → `Title`.
     Loadout,
+    /// The egui BUILD screen — tabbed armory / skills / loadout. Opened with `B`
+    /// from the title; `Esc` → `Title`.
+    Build,
     /// Wave-clear survivor-card pick (pauses the sim); 1/2/3 → `Playing`.
     Survivor,
     /// Death / results screen; ENTER → `Title`.
