@@ -1316,6 +1316,29 @@ fn elemental_enemies_get_an_element_halo() {
     );
 }
 
+/// The low-HP warning pulses a red edge only while the player is critical.
+#[test]
+fn low_hp_warning_pulses_only_when_critical() {
+    use crate::components::{Health, Ship};
+    use crate::render::flash::{low_hp_warning, ScreenFlash};
+
+    fn intensity_at(hp_current: f32) -> f32 {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.5));
+        world.insert_resource(time);
+        world.insert_resource(ScreenFlash::default());
+        world.spawn((Ship::default(), Health { current: hp_current, max: 100.0 }));
+        let mut step = Schedule::default();
+        step.add_systems(low_hp_warning);
+        step.run(&mut world);
+        world.resource::<ScreenFlash>().intensity
+    }
+
+    assert!(intensity_at(10.0) > 0.0, "critical HP (<25%) pulses a warning");
+    assert_eq!(intensity_at(80.0), 0.0, "healthy HP → no warning");
+}
+
 /// The simple-timer elemental statuses (E3) count down and remove themselves on
 /// expiry; `Corrode` keeps its stacks for its whole duration.
 #[test]

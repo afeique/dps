@@ -108,6 +108,27 @@ pub fn trigger_player_hurt_flash(
     }
 }
 
+/// HP fraction below which the low-HP warning pulse kicks in.
+pub const LOW_HP_FRAC: f32 = 0.25;
+
+/// While the player is critically hurt (< [`LOW_HP_FRAC`] HP), pulse a faint red
+/// edge each frame (re-added so it doesn't decay away) — a danger heartbeat.
+pub fn low_hp_warning(
+    time: Res<Time>,
+    mut flash: ResMut<ScreenFlash>,
+    player: Query<&crate::components::Health, With<crate::components::Ship>>,
+) {
+    let Ok(hp) = player.single() else {
+        return;
+    };
+    if hp.max > 0.0 && hp.current > 0.0 && hp.current < hp.max * LOW_HP_FRAC {
+        // 0.06..0.16 sinusoidal throb (kept below the hit-flash so a real hit
+        // still reads stronger).
+        let pulse = 0.06 + 0.10 * (time.elapsed_secs() * 7.0).sin().abs();
+        flash.add(FLASH_HURT, pulse);
+    }
+}
+
 /// Drive the overlay color + alpha from the flash, then decay (spec I.2).
 pub fn apply_screen_flash(
     time: Res<Time>,
