@@ -108,8 +108,23 @@ impl WeaponKind {
         }
     }
 
+    /// Every weapon kind, in cycle order.
+    pub const ALL: [WeaponKind; 11] = [
+        Self::PulseCannon,
+        Self::StormNeedles,
+        Self::ScatterShot,
+        Self::RailDriver,
+        Self::ClusterLauncher,
+        Self::GravityLance,
+        Self::SpinCannon,
+        Self::Boomerang,
+        Self::Caroms,
+        Self::MitosisRounds,
+        Self::FlakCannon,
+    ];
+
     /// Total number of weapon kinds (bounds the `next_available` cycle).
-    pub const COUNT: usize = 11;
+    pub const COUNT: usize = Self::ALL.len();
 
     /// Stable id for the armory unlock set ([`crate::meta::Meta::unlocked`]).
     pub fn id(self) -> &'static str {

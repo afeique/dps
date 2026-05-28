@@ -18,6 +18,9 @@ pub enum GameState {
     Paused,
     /// On-demand upgrade shop (pauses the sim); B/Esc → `Playing`.
     Shop,
+    /// Armory — spend persistent account-gold on permanent unlocks. Opened with
+    /// `A` from the title; `Esc` → `Title`.
+    Armory,
     /// Wave-clear survivor-card pick (pauses the sim); 1/2/3 → `Playing`.
     Survivor,
     /// Death / results screen; ENTER → `Title`.

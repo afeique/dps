@@ -5,6 +5,7 @@
 //! `Update` (read devices every frame) and only writes the `Intent` component.
 
 pub mod abilities;
+pub mod armory;
 pub mod asteroids;
 pub mod cleanup;
 pub mod collision;

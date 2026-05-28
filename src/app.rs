@@ -157,18 +157,44 @@ impl Plugin for GamePlugin {
                 Update,
                 systems::flow::title_input.run_if(in_state(GameState::Title)),
             )
-            // ── start a fresh run on leaving the title (NOT on shop-close,
-            //    which also re-enters Playing) ────────────────────────────
+            // Despawn the title overlay whenever we leave it (→ Playing or Armory).
             .add_systems(
                 OnExit(GameState::Title),
+                systems::flow::despawn_screen::<systems::flow::TitleScreen>,
+            )
+            // Fresh-run setup ONLY on Title→Playing — not on Title→Armory, and
+            // not on shop-close (which re-enters Playing without exiting Title).
+            .add_systems(
+                OnTransition {
+                    exited: GameState::Title,
+                    entered: GameState::Playing,
+                },
                 (
-                    systems::flow::despawn_screen::<systems::flow::TitleScreen>,
                     systems::flow::reset_run,
                     systems::spawn::spawn_player,
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
                     systems::formations::clear_formations,
                 ),
+            )
+            // ── armory (spend account-gold on unlocks; opened with A on title) ─
+            .init_resource::<systems::armory::ArmorySel>()
+            .add_systems(
+                Update,
+                systems::armory::open_armory.run_if(in_state(GameState::Title)),
+            )
+            .add_systems(OnEnter(GameState::Armory), systems::armory::spawn_armory_ui)
+            .add_systems(
+                OnExit(GameState::Armory),
+                systems::flow::despawn_screen::<systems::armory::ArmoryPanel>,
+            )
+            .add_systems(
+                Update,
+                (
+                    systems::armory::armory_ui_update,
+                    systems::armory::armory_input,
+                )
+                    .run_if(in_state(GameState::Armory)),
             )
             // ── shop (on-demand; pauses the sim) ────────────────────────
             .add_systems(OnEnter(GameState::Shop), systems::shop::spawn_shop_ui)

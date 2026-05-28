@@ -3847,6 +3847,30 @@ fn elemental_status_auras_stack_and_despawn_independently() {
     }
 }
 
+/// The armory catalog lists exactly the six gold-locked exotic weapons (the
+/// free base loadout is omitted), each with a positive cost + a stable id.
+#[test]
+fn armory_catalog_is_the_exotic_weapons() {
+    use crate::meta::Meta;
+    use crate::systems::armory::armory_catalog;
+    use crate::systems::weapons::WeaponKind;
+
+    let catalog = armory_catalog();
+    assert_eq!(catalog.len(), 6, "six exotic weapons are unlockable");
+    let meta = Meta::default();
+    for e in &catalog {
+        assert!(e.cost > 0, "{} has a cost", e.name);
+        // Every catalog id is a real, non-base (gold-locked) weapon id.
+        let kind = WeaponKind::ALL
+            .iter()
+            .copied()
+            .find(|w| w.id() == e.id)
+            .unwrap_or_else(|| panic!("catalog id {} maps to no weapon", e.id));
+        assert!(!kind.base_unlocked(), "{} is a base weapon, shouldn't be sold", e.name);
+        assert!(!kind.is_available(&meta), "catalog item starts locked");
+    }
+}
+
 /// Weapon armory-gating: the five base weapons are always available, the six
 /// exotics only once unlocked. Tab/Q cycling skips locked weapons.
 #[test]
