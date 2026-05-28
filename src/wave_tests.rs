@@ -3950,7 +3950,7 @@ fn boss_frenzy_escalates_in_the_mid_hp_band() {
     assert_eq!(boss_phase(0.5), 1, "frenzied 33–66%");
     assert_eq!(boss_phase(0.2), 2, "raged at/below 33%");
 
-    fn run(hp_frac: f32) -> (bool, f32) {
+    fn run(hp_frac: f32) -> (bool, f32, usize) {
         let mut app = test_app();
         let world = app.world_mut();
         let e = world
@@ -3967,12 +3967,17 @@ fn boss_frenzy_escalates_in_the_mid_hp_band() {
         step.run(world);
         let frenzied = world.get::<Frenzied>(e).is_some();
         let cd = world.get::<FireCooldown>(e).unwrap().cooldown;
-        (frenzied, cd)
+        let cues = world
+            .query::<&crate::render::reaction_fx::Shockwave>()
+            .iter(world)
+            .count();
+        (frenzied, cd, cues)
     }
 
-    let (f_mid, cd_mid) = run(0.5);
+    let (f_mid, cd_mid, cues_mid) = run(0.5);
     assert!(f_mid, "a 50%-HP boss frenzies");
     assert!((cd_mid - 1.6).abs() < 1e-4, "frenzy speeds up fire ×0.8 (2.0 → 1.6)");
+    assert_eq!(cues_mid, 1, "frenzy spawns one power-up ring cue");
     assert!(!run(0.9).0, "a healthy boss (>66%) doesn't frenzy yet");
     assert!(!run(0.2).0, "≤33% is the rage phase — frenzy is skipped there");
 }

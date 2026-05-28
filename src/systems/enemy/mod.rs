@@ -382,6 +382,13 @@ pub fn boss_frenzy(
             fc.timer = 0.0;
         }
         let pos = tf.translation.truncate();
+        // A one-shot amber power-up ring so the escalation reads (the ≤33% rage
+        // has its telegraph; this gives the 66% frenzy a matching visual beat).
+        commands.spawn((
+            crate::render::reaction_fx::Shockwave { age: 0.0, peak: 90.0 },
+            crate::render::reaction_fx::unit_ring(Color::linear_rgb(8.0, 4.0, 0.5)),
+            Transform::from_translation(pos.extend(0.3)).with_scale(Vec3::splat(1.0)),
+        ));
         for i in 0..12 {
             let a = i as f32 / 12.0 * std::f32::consts::TAU;
             let dir = Vec2::new(a.cos(), a.sin());
