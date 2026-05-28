@@ -673,10 +673,38 @@ pub fn cycle_weapon(
     }
 }
 
+/// Remaining Bloodlust fire-rate-surge window (s). Refreshed to `BLOODLUST_SECS`
+/// on each enemy kill while the Bloodlust keystone is owned, and ticked down by
+/// [`bloodlust_on_kill`]; `player_fire` reads it to shorten the fire cooldown.
+#[derive(Resource, Default)]
+pub struct BloodlustTimer(pub f32);
+
+/// Bloodlust surge length (s) and the fire-cooldown multiplier while it's active.
+const BLOODLUST_SECS: f32 = 3.0;
+const BLOODLUST_FIRE_MULT: f32 = 0.6;
+
+/// Drain the Bloodlust window every tick; an enemy kill refreshes it (when owned).
+pub fn bloodlust_on_kill(
+    time: Res<Time>,
+    mut deaths: MessageReader<crate::messages::Death>,
+    upgrades: Res<Upgrades>,
+    mut timer: ResMut<BloodlustTimer>,
+) {
+    timer.0 = (timer.0 - time.delta_secs()).max(0.0);
+    let owned = upgrades.owned(UpgradeId::Bloodlust) > 0;
+    for d in deaths.read() {
+        // A kill carries the dead enemy's kind; the player's own death leaves it None.
+        if owned && d.kind.is_some() {
+            timer.0 = BLOODLUST_SECS;
+        }
+    }
+}
+
 /// Tick the active weapon's cooldown; emit its `Fire` pattern while held.
 pub fn player_fire(
     time: Res<Time>,
     cur: Res<CurrentWeapon>,
+    bloodlust: Res<BloodlustTimer>,
     upgrades: Res<Upgrades>,
     mut fire: MessageWriter<Fire>,
     // Spin Cannon spool level (0..1), persisted across frames (one player).
@@ -718,7 +746,9 @@ pub fn player_fire(
         } else {
             st.cooldown
         };
-        weapon.timer = base_cd * rapid_cooldown_mult(rapid) * cd_mult;
+        // Bloodlust surge (spec keystone): a recent kill briefly speeds up fire.
+        let bl_mult = if bloodlust.0 > 0.0 { BLOODLUST_FIRE_MULT } else { 1.0 };
+        weapon.timer = base_cd * rapid_cooldown_mult(rapid) * cd_mult * bl_mult;
 
         let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
         let nose = tf.translation.truncate() + fwd * 20.0;

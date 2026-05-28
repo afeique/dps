@@ -42,6 +42,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::weapons::CurrentWeapon>()
             .init_resource::<systems::weapons::Attunements>()
             .init_resource::<systems::weapons::ElementInfusion>()
+            .init_resource::<systems::weapons::BloodlustTimer>()
             .init_resource::<systems::power_weapon::PowerWeapon>()
             .init_resource::<systems::skills::Skills>()
             .init_resource::<components::loadout::EquippedAbilities>()
@@ -481,8 +482,15 @@ impl Plugin for GamePlugin {
                     systems::enemy::boss_pair_rage,
                     // Ashen Detonator death-flare: a PYRO blast on death (EN).
                     systems::enemy::mechanics::ashen_death_flare,
-                    // Award account XP per kill (ME).
-                    crate::meta::award_xp,
+                    // On-kill `Death` readers, nested as one chained sub-group so
+                    // the outer tuple stays under Bevy's 20-element limit.
+                    (
+                        // Award account XP per kill (ME).
+                        crate::meta::award_xp,
+                        // Bloodlust: a kill briefly speeds up fire (keystone passive).
+                        systems::weapons::bloodlust_on_kill,
+                    )
+                        .chain(),
                     // Combat Medic: a kill after taking a hit heals the player.
                     systems::passives::tick_combat_medic,
                     // Hitstop: a boss/mini-boss `Death` freezes the sim a few

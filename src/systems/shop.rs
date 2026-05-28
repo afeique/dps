@@ -62,12 +62,14 @@ pub enum UpgradeId {
     Opportunist,
     /// Glass Cannon — big +damage at the cost of max HP (a risk/reward keystone).
     GlassCannon,
+    /// Bloodlust — a kill grants a brief fire-rate surge.
+    Bloodlust,
 }
 
 impl UpgradeId {
     /// Display order (also the buy-menu order). `COUNT` derives from this, so
     /// adding a variant only means a new entry here + its match arms.
-    pub const ALL: [UpgradeId; 33] = [
+    pub const ALL: [UpgradeId; 34] = [
         Self::HealthBoost,
         Self::ShieldBoost,
         Self::SpeedBoost,
@@ -101,6 +103,7 @@ impl UpgradeId {
         Self::Predator,
         Self::Opportunist,
         Self::GlassCannon,
+        Self::Bloodlust,
     ];
 
     /// Total number of upgrades (sizes the `Upgrades` stack array).
@@ -141,6 +144,7 @@ impl UpgradeId {
             Self::Predator => 30,
             Self::Opportunist => 31,
             Self::GlassCannon => 32,
+            Self::Bloodlust => 33,
         }
     }
 
@@ -179,6 +183,7 @@ impl UpgradeId {
             Self::Predator => "Predator      (+dmg vs healthy)",
             Self::Opportunist => "Opportunist   (+dmg vs afflicted)",
             Self::GlassCannon => "Glass Cannon  (+50% dmg, -15 HP)",
+            Self::Bloodlust => "Bloodlust     (faster fire on kill)",
         }
     }
 
@@ -218,6 +223,7 @@ impl UpgradeId {
             Self::Predator => 2400,
             Self::Opportunist => 2400,
             Self::GlassCannon => 3000,
+            Self::Bloodlust => 2600,
         }
     }
 
@@ -256,6 +262,7 @@ impl UpgradeId {
             Self::Predator => 4,
             Self::Opportunist => 4,
             Self::GlassCannon => 1,
+            Self::Bloodlust => 1,
         }
     }
 }
@@ -652,6 +659,7 @@ pub fn apply_upgrade(
         | UpgradeId::Warding
         | UpgradeId::Predator
         | UpgradeId::Opportunist
-        | UpgradeId::GlassCannon => {}
+        | UpgradeId::GlassCannon
+        | UpgradeId::Bloodlust => {}
     }
 }

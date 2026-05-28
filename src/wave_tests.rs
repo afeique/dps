@@ -2028,6 +2028,7 @@ fn overdrive_buffs_primary_damage() {
     fn fire_dmg(overdrive: bool) -> f32 {
         let mut app = test_app();
         app.init_resource::<CurrentWeapon>();
+        app.init_resource::<crate::systems::weapons::BloodlustTimer>();
         app.insert_resource(Dmg::default());
         let world = app.world_mut();
         let mut pc = world.spawn((
@@ -5452,4 +5453,81 @@ fn hitstop_triggers_and_drains() {
         (world.resource::<Hitstop>().secs - MINI_HITSTOP).abs() < 1e-6,
         "mini-boss kill → lighter freeze"
     );
+}
+
+// ── 95. bloodlust_refreshes_on_kill ───────────────────────────────────────────
+
+/// Bloodlust keystone: an enemy kill refreshes the fire-rate window when owned;
+/// a player death (kind None) doesn't, and an unowned upgrade never arms it.
+#[test]
+fn bloodlust_refreshes_on_kill() {
+    use crate::messages::Death;
+    use crate::systems::shop::{UpgradeId, Upgrades};
+    use crate::systems::weapons::{bloodlust_on_kill, BloodlustTimer};
+
+    let enemy_death = || Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Hunter),
+        boss_tier: 0,
+        mini_boss: false,
+    };
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.016));
+    // A System binds to the first World it runs in, so build a fresh schedule
+    // per app rather than reusing one across these three worlds.
+    let schedule = || {
+        let mut s = Schedule::default();
+        s.add_systems(bloodlust_on_kill);
+        s
+    };
+
+    // Unowned: a kill never arms the window.
+    {
+        let mut app = test_app();
+        app.init_resource::<BloodlustTimer>();
+        let world = app.world_mut();
+        world.insert_resource(time.clone());
+        world.write_message(enemy_death());
+        schedule().run(world);
+        assert_eq!(world.resource::<BloodlustTimer>().0, 0.0, "unowned → no surge");
+    }
+
+    // Owned + enemy kill: window refreshes to the full duration.
+    {
+        let mut app = test_app();
+        app.init_resource::<BloodlustTimer>();
+        let world = app.world_mut();
+        world.resource_mut::<Upgrades>().set(UpgradeId::Bloodlust, 1);
+        world.insert_resource(time.clone());
+        world.write_message(enemy_death());
+        let mut step = schedule();
+        step.run(world);
+        let armed = world.resource::<BloodlustTimer>().0;
+        assert!(armed > 2.9, "owned + kill → surge armed ({armed})");
+
+        // No kill next tick: the window ticks down toward zero.
+        world.insert_resource(time.clone());
+        step.run(world);
+        assert!(world.resource::<BloodlustTimer>().0 < armed, "drains without a kill");
+    }
+
+    // Owned but a player death (kind None) doesn't arm it.
+    {
+        let mut app = test_app();
+        app.init_resource::<BloodlustTimer>();
+        let world = app.world_mut();
+        world.resource_mut::<Upgrades>().set(UpgradeId::Bloodlust, 1);
+        world.insert_resource(time.clone());
+        world.write_message(Death {
+            entity: Entity::PLACEHOLDER,
+            position: Vec2::ZERO,
+            kind: None,
+            boss_tier: 0,
+            mini_boss: false,
+        });
+        schedule().run(world);
+        assert_eq!(world.resource::<BloodlustTimer>().0, 0.0, "player death → no surge");
+    }
 }
