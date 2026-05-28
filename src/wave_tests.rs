@@ -3938,6 +3938,45 @@ fn boss_pair_rage_links_survivors() {
     );
 }
 
+/// Multi-phase boss: the mid-HP (33–66%) band triggers a one-shot frenzy that
+/// speeds up fire — a beat before the ≤33% rage, so the fight escalates twice.
+#[test]
+fn boss_frenzy_escalates_in_the_mid_hp_band() {
+    use crate::components::{Boss, FireCooldown, Frenzied};
+    use crate::systems::enemy::{boss_frenzy, boss_phase};
+
+    // Pure phase thresholds.
+    assert_eq!(boss_phase(0.9), 0, "calm above 66%");
+    assert_eq!(boss_phase(0.5), 1, "frenzied 33–66%");
+    assert_eq!(boss_phase(0.2), 2, "raged at/below 33%");
+
+    fn run(hp_frac: f32) -> (bool, f32) {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let e = world
+            .spawn((
+                Enemy { kind: EnemyKind::Titan },
+                Boss { tier: 1 },
+                Health { current: hp_frac * 100.0, max: 100.0 },
+                FireCooldown { cooldown: 2.0, timer: 1.0 },
+                Transform::default(),
+            ))
+            .id();
+        let mut step = Schedule::default();
+        step.add_systems(boss_frenzy);
+        step.run(world);
+        let frenzied = world.get::<Frenzied>(e).is_some();
+        let cd = world.get::<FireCooldown>(e).unwrap().cooldown;
+        (frenzied, cd)
+    }
+
+    let (f_mid, cd_mid) = run(0.5);
+    assert!(f_mid, "a 50%-HP boss frenzies");
+    assert!((cd_mid - 1.6).abs() < 1e-4, "frenzy speeds up fire ×0.8 (2.0 → 1.6)");
+    assert!(!run(0.9).0, "a healthy boss (>66%) doesn't frenzy yet");
+    assert!(!run(0.2).0, "≤33% is the rage phase — frenzy is skipped there");
+}
+
 // ── 42. overheal_converts_to_tanks ────────────────────────────────────────────
 
 /// Overheal above max HP accumulates toward a spare tank — 40 overheal = 1 tank

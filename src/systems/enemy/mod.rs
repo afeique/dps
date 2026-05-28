@@ -348,6 +348,56 @@ pub fn boss_rage(
     }
 }
 
+/// Boss fight phase from its HP fraction: 0 = calm (>66%), 1 = frenzied
+/// (33–66%, `boss_frenzy`), 2 = raged (≤33%, `boss_rage`). Pure for testing.
+pub fn boss_phase(hp_frac: f32) -> u8 {
+    if hp_frac > 0.66 {
+        0
+    } else if hp_frac > 0.33 {
+        1
+    } else {
+        2
+    }
+}
+
+/// Mid-fight **frenzy** escalation (one-shot): when a boss first drops into the
+/// 33–66% HP band it speeds up its fire and looses a ring burst — a milder beat
+/// before the ≤33% rage (`boss_rage`), so the fight escalates in two phases.
+/// Non-homing (the homing/invuln rage is the harder, later phase).
+pub fn boss_frenzy(
+    mut commands: Commands,
+    mut fire: MessageWriter<Fire>,
+    mut bosses: Query<
+        (Entity, &Transform, &Health, Option<&mut FireCooldown>),
+        (With<Boss>, Without<Raged>, Without<Frenzied>),
+    >,
+) {
+    for (e, tf, hp, fc) in &mut bosses {
+        if boss_phase(hp.current / hp.max) != 1 {
+            continue; // only on first entry to the mid band
+        }
+        commands.entity(e).insert(Frenzied);
+        if let Some(mut fc) = fc {
+            fc.cooldown *= 0.8; // a gentler speed-up than rage's ×0.66
+            fc.timer = 0.0;
+        }
+        let pos = tf.translation.truncate();
+        for i in 0..12 {
+            let a = i as f32 / 12.0 * std::f32::consts::TAU;
+            let dir = Vec2::new(a.cos(), a.sin());
+            fire.write(Fire {
+                origin: pos + dir * 24.0,
+                dir,
+                damage: 3.0,
+                speed: 260.0,
+                faction: Faction::Enemy,
+                element: Element::Kinetic,
+                homing: false,
+            });
+        }
+    }
+}
+
 /// Tick the rage telegraph; when it lapses, fire the actual rage (spec IV.7).
 /// Skips bosses already `Raged` (e.g. a pair-link rage that pre-empted the
 /// telegraph) so the tantrum never double-fires.

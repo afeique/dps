@@ -66,6 +66,12 @@ pub struct Boss {
 #[derive(Component, Debug)]
 pub struct Raged;
 
+/// Marks a boss that has crossed its **mid-fight frenzy** threshold (≤66% HP) —
+/// a one-shot gate so `boss_frenzy` escalates exactly once, before the harder
+/// rage at ≤33% (`boss_rage`). The two stack into a multi-phase boss fight.
+#[derive(Component, Debug)]
+pub struct Frenzied;
+
 /// A boss that has crossed its HP-threshold but is in the **rage telegraph**
 /// window (spec IV.7, `TELEGRAPH_FRAMES = 24` ≈ 0.4 s): a red warning ring shows
 /// before the rage burst fires, giving the player a counterplay beat.

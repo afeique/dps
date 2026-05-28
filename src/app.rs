@@ -414,6 +414,8 @@ impl Plugin for GamePlugin {
                         systems::enemy::sentinel::ai,
                         systems::enemy::tangerine::ai,
                         systems::enemy::titan::ai,
+                        // Mid-fight frenzy escalation at ≤66% HP (phase 1).
+                        systems::enemy::boss_frenzy,
                         systems::enemy::boss_rage,
                         // Rage telegraph window → activate_rage when it lapses (IV.7).
                         systems::enemy::tick_rage_telegraph,
