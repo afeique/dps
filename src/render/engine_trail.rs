@@ -22,8 +22,8 @@ const EMIT_INTERVAL: f32 = 0.018;
 /// Mote lifetime (s).
 const MOTE_LIFE: f32 = 0.42;
 
-/// A small filled disc (HDR cyan-white engine glow; bloom flares it).
-fn mote_shape() -> Shape {
+/// A small filled disc engine-glow mote in `color` (HDR so bloom flares it).
+fn mote_shape(color: Color) -> Shape {
     let r = 3.2_f32;
     let mut path = ShapePath::new();
     for i in 0..12 {
@@ -31,14 +31,14 @@ fn mote_shape() -> Shape {
         let p = Vec2::new(a.cos() * r, a.sin() * r);
         path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
     }
-    ShapeBuilder::with(&path.close())
-        .fill(Color::linear_rgb(2.5, 6.0, 9.0))
-        .build()
+    ShapeBuilder::with(&path.close()).fill(color).build()
 }
 
 /// Emit exhaust motes behind the moving ship, throttled by `EMIT_INTERVAL`.
 pub fn emit_engine_trail(
     time: Res<Time>,
+    // Optional so headless tests (no Meta) still run — falls back to the cyan default.
+    meta: Option<Res<crate::meta::Meta>>,
     mut commands: Commands,
     mut accum: Local<f32>,
     ship: Query<(&Transform, &Velocity), With<Ship>>,
@@ -63,9 +63,14 @@ pub fn emit_engine_trail(
     let jitter = ((time.elapsed_secs() * 53.0).sin()) * 4.0;
     let pos = tf.translation.truncate() + back * 16.0 + perp * jitter;
 
+    // The exhaust glow takes the selected ship skin's colour (default cyan-white).
+    let (r, g, b) = meta
+        .map(|m| crate::render::shapes::skin_for(m.skin).edge)
+        .unwrap_or((2.5, 6.0, 9.0));
+
     commands.spawn((
         EngineExhaust { max_life: MOTE_LIFE },
-        mote_shape(),
+        mote_shape(Color::linear_rgb(r, g, b)),
         Transform::from_translation(pos.extend(-0.1)), // just behind the ship
         Velocity(back * 70.0),
         Lifetime { seconds: MOTE_LIFE },
