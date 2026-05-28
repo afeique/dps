@@ -1220,6 +1220,38 @@ fn gravity_lance_is_void_and_pulls() {
     assert!(world.get::<Transform>(e).unwrap().translation.x < 100.0, "enemy pulled toward the orb");
 }
 
+/// W: a Caroms bullet, on hitting an enemy, survives and redirects toward the
+/// nearest other enemy, spending one bounce.
+#[test]
+fn caroms_bounces_to_next_enemy() {
+    use crate::components::{Bounce, Bullet, BulletKind, Velocity};
+    use crate::systems::collision::bullet_hits_enemy;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    // Enemy A at the origin (the hit); enemy B at +X (the bounce target).
+    world.spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 16.0 }, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 16.0 }, Transform::from_xyz(100.0, 0.0, 0.0)));
+    let bullet = world
+        .spawn((
+            Bullet { kind: BulletKind::Player, damage: 1.0, pierce: 0 },
+            Collider { radius: 5.0 },
+            Velocity(Vec2::new(0.0, 300.0)), // moving +Y
+            Bounce { remaining: 3, seek_radius: 260.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(bullet_hits_enemy);
+    step.run(world);
+
+    assert!(world.get::<Bounce>(bullet).is_some(), "caroms bullet survived the hit");
+    assert_eq!(world.get::<Bounce>(bullet).unwrap().remaining, 2, "one bounce spent");
+    let v = world.get::<Velocity>(bullet).unwrap().0;
+    assert!(v.x > 200.0 && v.y.abs() < 1.0, "redirected toward enemy B (+X): {v:?}");
+}
+
 /// W: a Boomerang disc flies out, then (after the out phase) accelerates back
 /// toward the player — its outbound velocity reverses.
 #[test]

@@ -56,6 +56,8 @@ pub enum WeaponKind {
     SpinCannon,
     /// Disc that flies out then curves back to the player (W).
     Boomerang,
+    /// Bullet that caroms between enemies (W).
+    Caroms,
 }
 
 impl WeaponKind {
@@ -68,7 +70,8 @@ impl WeaponKind {
             Self::ClusterLauncher => Self::GravityLance,
             Self::GravityLance => Self::SpinCannon,
             Self::SpinCannon => Self::Boomerang,
-            Self::Boomerang => Self::PulseCannon,
+            Self::Boomerang => Self::Caroms,
+            Self::Caroms => Self::PulseCannon,
         }
     }
 
@@ -83,6 +86,7 @@ impl WeaponKind {
             Self::GravityLance => "Gravity Lance",
             Self::SpinCannon => "Spin Cannon",
             Self::Boomerang => "Boomerang Discs",
+            Self::Caroms => "Caroms",
         }
     }
 
@@ -157,8 +161,18 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             cooldown: 0.60, damage: 1.4, speed: BASE_BULLET_SPEED * 0.85,
             radius: BASE_BULLET_RADIUS * 1.1, count: 1, spread: 0.0, jitter: 0.0, pierce: 3,
         },
+        // Ricochet bullet (weapon-data.js: bounces 3, bounceSeekRadius 260). The
+        // carom redirect rides on the `Bounce` component (no pierce).
+        WeaponKind::Caroms => WeaponStats {
+            cooldown: 0.34, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 0.8, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+        },
     }
 }
+
+/// Caroms bounce count + the radius it seeks the next enemy within (weapon-data.js).
+pub const CAROMS_BOUNCES: u32 = 3;
+pub const CAROMS_SEEK_RADIUS: f32 = 260.0;
 
 /// Boomerang flight: out for `BOOMERANG_OUT_SECS`, then accelerate back to the
 /// player at `BOOMERANG_RETURN_ACCEL` px/s² (weapon-data.js outFrames 28).
@@ -496,6 +510,10 @@ pub fn spawn_bullets(
             // Boomerang discs fly out then curve back (W).
             if cur.0 == WeaponKind::Boomerang {
                 bullet.insert(Boomerang::default());
+            }
+            // Caroms bullets ricochet between enemies (W).
+            if cur.0 == WeaponKind::Caroms {
+                bullet.insert(Bounce { remaining: CAROMS_BOUNCES, seek_radius: CAROMS_SEEK_RADIUS });
             }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {

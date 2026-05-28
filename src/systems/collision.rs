@@ -74,7 +74,15 @@ pub fn bullet_hits_enemy(
     equipment: Res<Equipment>,
     mut rng: ResMut<GameRng>,
     mut energy: ResMut<EnergyMeter>,
-    mut bullets: Query<(Entity, &Transform, &Collider, &mut Bullet, Option<&BulletElements>)>,
+    mut bullets: Query<(
+        Entity,
+        &Transform,
+        &Collider,
+        &mut Bullet,
+        Option<&BulletElements>,
+        Option<&mut Velocity>,
+        Option<&mut Bounce>,
+    )>,
     // `Without<Ship>` keeps this immut `&Health` disjoint from `player_hp`'s mut.
     // The element components (E2/E4) are optional so test-spawned enemies (no
     // resist/armor) are unaffected (neutral ×1).
@@ -125,7 +133,7 @@ pub fn bullet_hits_enemy(
     let knock_p = knock_chance(upgrades.owned(UpgradeId::KnockShot));
     // EXECUTIONER passive: bonus damage vs enemies below the execute threshold.
     let exec_bonus = executioner_bonus(upgrades.owned(UpgradeId::Executioner));
-    for (bullet_e, btf, bc, mut bullet, belems) in &mut bullets {
+    for (bullet_e, btf, bc, mut bullet, belems, bvel, bounce) in &mut bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
@@ -276,14 +284,48 @@ pub fn bullet_hits_enemy(
                         }
                     }
                 }
+                // Caroms (W): redirect toward the nearest OTHER enemy within the
+                // seek radius instead of dying, up to `remaining` bounces.
+                let bounced = match (bounce, bvel) {
+                    (Some(mut b), Some(mut vel)) if b.remaining > 0 => {
+                        let from = btf.translation.truncate();
+                        let r2 = b.seek_radius * b.seek_radius;
+                        let mut best: Option<(f32, Vec2)> = None;
+                        for (e2, etf2, ..) in &enemies {
+                            if e2 == enemy_e {
+                                continue;
+                            }
+                            let p = etf2.translation.truncate();
+                            let d2 = p.distance_squared(from);
+                            if d2 <= r2 && best.is_none_or(|(bd, _)| d2 < bd) {
+                                best = Some((d2, p));
+                            }
+                        }
+                        match best {
+                            Some((_, target)) => {
+                                let speed = vel.0.length();
+                                let dir = (target - from).normalize_or_zero();
+                                if dir != Vec2::ZERO && speed > 0.0 {
+                                    vel.0 = dir * speed;
+                                }
+                                b.remaining -= 1;
+                                true // bounced — survives this hit
+                            }
+                            None => false, // no target in range → expire normally
+                        }
+                    }
+                    _ => false,
+                };
                 // Piercing bullets pass through; others die on the first hit.
                 // (One hit per frame — a fast bullet clears an enemy's radius
                 // before the next tick, so re-hits are rare. Tracking a hit-set
                 // for slow piercers is a later refinement.)
-                if bullet.pierce == 0 {
-                    commands.entity(bullet_e).despawn();
-                } else {
-                    bullet.pierce -= 1;
+                if !bounced {
+                    if bullet.pierce == 0 {
+                        commands.entity(bullet_e).despawn();
+                    } else {
+                        bullet.pierce -= 1;
+                    }
                 }
                 break;
             }

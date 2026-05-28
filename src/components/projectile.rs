@@ -28,6 +28,15 @@ pub struct Boomerang {
     pub returning: bool,
 }
 
+/// A **Caroms** bullet: on hitting an enemy it reflects toward the nearest other
+/// enemy within `seek_radius` instead of dying, up to `remaining` bounces
+/// (`collision::bullet_hits_enemy`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Bounce {
+    pub remaining: u32,
+    pub seek_radius: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,
