@@ -486,6 +486,43 @@ fn enemy_death_spawns_element_shrapnel() {
     );
 }
 
+// ── 3e. orbs_pulse_and_spin_around_their_base_scale ──────────────────────────
+
+/// `animate_orbs` gives idle orbs a spin + a pulse that scales *around* their
+/// resting scale — crucially multiplying the gold-tier `base_scale` rather than
+/// clobbering it — and keeps the pulse within the ±15% band.
+#[test]
+fn orbs_pulse_and_spin_around_their_base_scale() {
+    use crate::systems::drops::{OrbGlow, animate_orbs};
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    let base = 1.6_f32; // a large gold-tier orb
+    let orb = world
+        .spawn((
+            OrbGlow { base_scale: base, phase: 0.3 },
+            Transform::from_scale(Vec3::ONE),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(200));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(animate_orbs);
+    step.run(world);
+
+    let tf = *world.get::<Transform>(orb).unwrap();
+    assert!(
+        tf.scale.x >= base * 0.84 && tf.scale.x <= base * 1.16,
+        "the pulse must scale around base_scale {base}, not clobber it (got {})",
+        tf.scale.x
+    );
+    assert_eq!(tf.scale.x, tf.scale.y, "the pulse is uniform");
+    assert!(tf.rotation.z.abs() > 0.0, "the orb should be spinning");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

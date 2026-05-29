@@ -321,6 +321,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::tick_line_debris,
                     // Lingering ember afterglow at the shatter point.
                     render::asteroid_debris::fade_embers,
+                    // Idle orbs spin + pulse so they read as live collectibles.
+                    systems::drops::animate_orbs,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

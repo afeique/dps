@@ -24,6 +24,22 @@ pub struct Orb {
     pub heal: f32,
 }
 
+/// Idle-animation state for an orb (`animate_orbs`): its resting scale (so the
+/// pulse *multiplies* it instead of clobbering the gold-tier scale) and a phase
+/// offset so a cluster of orbs doesn't pulse/spin in lockstep. Mirrors rainboids'
+/// powerup idle (`powerup.js`: `0.85 + 0.15*sin(pulsePhase)` + a slow rotate).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct OrbGlow {
+    pub base_scale: f32,
+    pub phase: f32,
+}
+
+/// Gentle idle spin (rad/sec) — faithful to powerup.js' slow `rotation`.
+const ORB_SPIN: f32 = 0.8;
+/// Pulse rate (rad/sec) and amplitude (±fraction of base scale): `0.85..1.15`.
+const ORB_PULSE_RATE: f32 = 5.0;
+const ORB_PULSE_AMP: f32 = 0.15;
+
 /// Health-orb drop cooldown (spec VI.5) — run-scoped, ticked in `spawn_drops`.
 #[derive(Resource, Default)]
 pub struct HealthDropTimer {
@@ -146,6 +162,22 @@ fn orb_shape_colored(color: Color) -> Shape {
         .build()
 }
 
+// ─── Idle animation ──────────────────────────────────────────────────────────
+
+/// Give idle orbs life: a gentle continuous spin + a `0.85..1.15` scale pulse
+/// around their resting (gold-tier) scale, each desynced by its `OrbGlow.phase`
+/// — so a field of orbs shimmers and turns instead of sitting as flat diamonds.
+/// Port of rainboids' powerup idle (`powerup.js`). Pure presentation: it writes
+/// only `Transform` rotation + scale; position is owned by `integrate`/`attract_orbs`.
+pub fn animate_orbs(time: Res<Time>, mut q: Query<(&OrbGlow, &mut Transform)>) {
+    let t = time.elapsed_secs();
+    for (g, mut tf) in &mut q {
+        tf.rotation = Quat::from_rotation_z(t * ORB_SPIN + g.phase);
+        let pulse = 1.0 + ORB_PULSE_AMP * (t * ORB_PULSE_RATE + g.phase).sin();
+        tf.scale = Vec3::splat(g.base_scale * pulse);
+    }
+}
+
 // ─── Spawn drops ─────────────────────────────────────────────────────────────
 
 /// Deterministic drift seed from an entity's raw index. Returns a Vec2 in
@@ -201,6 +233,8 @@ pub fn spawn_drops(
         let idx = death.entity.to_bits() as u32;
         let drift = drift_from_index(idx) * 28.0; // world-units / second
         let base_z = 0.5_f32;
+        // Idle-animation phase from the spawn index so a cluster desyncs.
+        let phase = (idx & 0xFF) as f32 / 255.0 * std::f32::consts::TAU;
 
         // Gold orb — value scales with wave × Gold Find × streak × drop profile;
         // the resulting tier sets its tint + scale. Bosses use the 2.4× budget,
@@ -216,6 +250,7 @@ pub fn spawn_drops(
         let tier = gold_tier(value);
         commands.spawn((
             Orb { gold: value, points: 0, heal: 0.0 },
+            OrbGlow { base_scale: tier.scale(), phase },
             orb_shape_colored(tier.color()),
             Transform::from_xyz(death.position.x, death.position.y, base_z)
                 .with_scale(Vec3::splat(tier.scale())),
@@ -239,6 +274,7 @@ pub fn spawn_drops(
         };
         commands.spawn((
             Orb { gold: 0, points, heal: 0.0 },
+            OrbGlow { base_scale: 1.0, phase: phase + 2.0 },
             shape_orb(false),
             Transform::from_xyz(death.position.x + 6.0, death.position.y, base_z),
             Velocity(-drift * 0.8), // opposite drift so they spread apart
@@ -252,6 +288,7 @@ pub fn spawn_drops(
             let heal = health_orb_heal(wave_n, rng.next_f32());
             commands.spawn((
                 Orb { gold: 0, points: 0, heal },
+                OrbGlow { base_scale: 1.0, phase: phase + 4.0 },
                 orb_shape_colored(Color::linear_rgb(1.0, 9.0, 3.0)), // HDR green
                 Transform::from_xyz(death.position.x - 6.0, death.position.y, base_z),
                 Velocity(drift * 0.5),
