@@ -333,7 +333,7 @@ fn boss_part_shape() -> Shape {
 /// AI skips it; no FireCooldown → it doesn't fire), parked at its `offset` by
 /// `mechanics::update_boss_parts`. While they live the boss core is invulnerable
 /// (`mechanics::update_core_shield` + the gate in `collision::bullet_hits_enemy`).
-pub fn spawn_boss_parts(commands: &mut Commands, boss: Entity, center: Vec2, ring: f32) {
+pub fn spawn_boss_parts(commands: &mut Commands, boss: Entity, center: Vec2, ring: f32, hp: f32) {
     const PART_COUNT: usize = 3;
     for i in 0..PART_COUNT {
         let a = i as f32 / PART_COUNT as f32 * std::f32::consts::TAU;
@@ -341,13 +341,19 @@ pub fn spawn_boss_parts(commands: &mut Commands, boss: Entity, center: Vec2, rin
         commands.spawn((
             Enemy { kind: EnemyKind::Hunter }, // a neutral hittable body
             BossPart { boss, shields_core: true, offset },
-            Health::new(40.0),
+            Health::new(hp),
             Collider { radius: 14.0 },
             Faction::Enemy,
             boss_part_shape(),
             Transform::from_translation((center + offset).extend(0.2)),
         ));
     }
+}
+
+/// Per-part HP for a tier-`tier` boss's weak points — tankier on higher tiers so
+/// stripping a big boss's shield takes longer (`30 + 20 × tier`).
+pub fn boss_part_hp(tier: u8) -> f32 {
+    30.0 + 20.0 * tier as f32
 }
 
 /// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% HP it
@@ -662,7 +668,7 @@ pub fn spawn_tiered(commands: &mut Commands, kind: EnemyKind, pos: Vec2, tier: u
     // A tier boss carries a ring of destructible weak-point parts that shield its
     // core (BO) — clear them to expose the boss. Ring scales with the boss size.
     if tier > 0 {
-        spawn_boss_parts(commands, boss, pos, 46.0 * sz_mul);
+        spawn_boss_parts(commands, boss, pos, 46.0 * sz_mul, boss_part_hp(tier));
     }
 }
 

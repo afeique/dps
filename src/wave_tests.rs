@@ -4217,6 +4217,15 @@ fn tier_boss_spawns_shielding_parts() {
         world.query::<&BossPart>().iter(world).all(|p| p.shields_core),
         "the parts shield the core"
     );
+    // Part HP scales with boss tier (boss_part_hp(2) = 30 + 20×2 = 70).
+    use crate::systems::enemy::boss_part_hp;
+    assert!(
+        world
+            .query_filtered::<&Health, With<BossPart>>()
+            .iter(world)
+            .all(|h| (h.max - boss_part_hp(2)).abs() < 1e-3),
+        "tier-2 boss parts have boss_part_hp(2) HP"
+    );
 
     let mut step = Schedule::default();
     step.add_systems(update_core_shield);
