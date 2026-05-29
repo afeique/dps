@@ -405,11 +405,14 @@ pub fn boss_frenzy(
     mut commands: Commands,
     mut fire: MessageWriter<Fire>,
     sfx: Option<Res<crate::audio::Sfx>>,
+    player: Query<&Transform, With<Ship>>,
     mut bosses: Query<
         (Entity, &Transform, &Health, Option<&mut FireCooldown>),
         (With<Boss>, Without<Raged>, Without<Frenzied>),
     >,
 ) {
+    // Frenzy aims at the player (a focused fan), distinct from the rage ring.
+    let player_pos = player.single().ok().map(|t| t.translation.truncate());
     for (e, tf, hp, fc) in &mut bosses {
         if boss_phase(hp.current / hp.max) != 1 {
             continue; // only on first entry to the mid band
@@ -433,14 +436,25 @@ pub fn boss_frenzy(
             crate::render::reaction_fx::unit_ring(Color::linear_rgb(8.0, 4.0, 0.5)),
             Transform::from_translation(pos.extend(0.3)).with_scale(Vec3::splat(1.0)),
         ));
-        for i in 0..12 {
-            let a = i as f32 / 12.0 * std::f32::consts::TAU;
+        // A focused 5-shot fan aimed at the player (falls back to firing downward
+        // if the player is absent) — reads as "the boss locks on", unlike the
+        // omnidirectional rage ring.
+        let aim = player_pos
+            .map(|p| (p - pos).normalize_or_zero())
+            .filter(|d| *d != Vec2::ZERO)
+            .unwrap_or(Vec2::NEG_Y);
+        let base = aim.to_angle();
+        const FAN: usize = 5;
+        const STEP: f32 = 0.18; // rad between fan shots (~10°)
+        for i in 0..FAN {
+            let off = (i as f32 - (FAN as f32 - 1.0) / 2.0) * STEP;
+            let a = base + off;
             let dir = Vec2::new(a.cos(), a.sin());
             fire.write(Fire {
                 origin: pos + dir * 24.0,
                 dir,
                 damage: 3.0,
-                speed: 260.0,
+                speed: 280.0,
                 faction: Faction::Enemy,
                 element: Element::Kinetic,
                 homing: false,

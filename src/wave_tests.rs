@@ -3982,6 +3982,42 @@ fn boss_frenzy_escalates_in_the_mid_hp_band() {
     assert!(!run(0.2).0, "≤33% is the rage phase — frenzy is skipped there");
 }
 
+/// The frenzy burst is a focused fan aimed at the player (distinct from the
+/// omnidirectional rage ring).
+#[test]
+fn boss_frenzy_aims_at_player() {
+    use crate::components::{Boss, FireCooldown, Ship};
+    use crate::systems::enemy::boss_frenzy;
+
+    #[derive(Resource, Default)]
+    struct Dirs(Vec<Vec2>);
+    fn tally(mut r: MessageReader<Fire>, mut d: ResMut<Dirs>) {
+        for f in r.read() {
+            d.0.push(f.dir);
+        }
+    }
+
+    let mut app = test_app();
+    app.init_resource::<Dirs>();
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Transform::from_xyz(100.0, 0.0, 0.0))); // player to +X
+    world.spawn((
+        Enemy { kind: EnemyKind::Titan },
+        Boss { tier: 1 },
+        Health { current: 50.0, max: 100.0 }, // mid band → frenzies
+        FireCooldown { cooldown: 2.0, timer: 1.0 },
+        Transform::default(),
+    ));
+    let mut step = Schedule::default();
+    step.add_systems((boss_frenzy, tally).chain());
+    step.run(world);
+
+    let dirs = &world.resource::<Dirs>().0;
+    assert!(!dirs.is_empty(), "frenzy fires a fan");
+    let mean_x = dirs.iter().map(|d| d.x).sum::<f32>() / dirs.len() as f32;
+    assert!(mean_x > 0.5, "the fan aims toward the +X player (mean dir.x = {mean_x})");
+}
+
 /// Weak-point parts (BO): a boss is `CoreShielded` while a `shields_core` part
 /// lives, and loses the marker once the parts are gone.
 #[test]
