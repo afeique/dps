@@ -119,7 +119,7 @@ pub fn collect_powerups(
     mut pickup: MessageWriter<crate::messages::Pickup>,
     mut player: Query<(&Transform, &Collider, &mut Health, &mut Lives), With<Ship>>,
     powerups: Query<(Entity, &Transform, &Collider, &Powerup)>,
-    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>, Has<CoreShielded>)>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
     let Ok((ptf, pc, mut hp, mut lives)) = player.single_mut() else {
@@ -143,7 +143,10 @@ pub fn collect_powerups(
             }
             PowerupKind::Bomb => {
                 // Broadcast Death for every enemy so explosions + drops fire normally.
-                for (enemy_e, enemy_tf, enemy, boss, mini_boss) in &enemies {
+                for (enemy_e, enemy_tf, enemy, boss, mini_boss, core_shielded) in &enemies {
+                    if core_shielded {
+                        continue; // the bomb can't kill a shielded boss core (clear its parts first)
+                    }
                     deaths.write(Death {
                         entity: enemy_e,
                         position: enemy_tf.translation.truncate(),

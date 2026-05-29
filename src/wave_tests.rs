@@ -4108,6 +4108,37 @@ fn core_shielded_boss_takes_no_bullet_damage() {
     assert!(hp_after(false) < 100.0, "unshielded core takes damage");
 }
 
+/// The Bomb clears adds + boss parts but can't punch through a live core shield:
+/// a `CoreShielded` boss survives the bomb while an ordinary enemy is cleared.
+#[test]
+fn bomb_spares_a_shielded_boss_core() {
+    use crate::components::{Boss, CoreShielded, Velocity};
+    use crate::resources::EnergyMeter;
+    use crate::systems::skills::{use_skills, Skills};
+
+    let mut app = test_app();
+    app.insert_resource(Skills::default());
+    app.insert_resource(EnergyMeter::default());
+    app.insert_resource(Time::<()>::default());
+    let mut input = ButtonInput::<KeyCode>::default();
+    input.press(KeyCode::KeyX); // trigger the bomb
+    app.insert_resource(input);
+
+    let world = app.world_mut();
+    world.spawn((Ship::default(), Velocity::default(), Transform::default()));
+    let boss = world
+        .spawn((Enemy { kind: EnemyKind::Titan }, Boss { tier: 1 }, CoreShielded, Transform::default()))
+        .id();
+    world.spawn((Enemy { kind: EnemyKind::Hunter }, Transform::from_xyz(60.0, 0.0, 0.0)));
+
+    let mut step = Schedule::default();
+    step.add_systems(use_skills);
+    step.run(world);
+
+    let enemies = world.query_filtered::<Entity, With<Enemy>>().iter(world).collect::<Vec<_>>();
+    assert_eq!(enemies, vec![boss], "only the shielded boss core survives the bomb");
+}
+
 /// `update_boss_parts` parks a part at boss-pos + offset, and despawns it once
 /// the boss is gone.
 #[test]

@@ -78,7 +78,7 @@ pub fn use_skills(
     mut score: ResMut<Score>,
     upgrades: Res<Upgrades>,
     mut player: Query<(Entity, &mut Velocity, &Transform), With<Ship>>,
-    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>)>,
+    enemies: Query<(Entity, &Transform, &Enemy, Option<&Boss>, Has<MiniBoss>, Has<CoreShielded>)>,
     enemy_bullets: Query<(Entity, &Bullet)>,
 ) {
     let dt = time.delta_secs();
@@ -143,7 +143,13 @@ pub fn use_skills(
         if let Some(sfx) = &sfx {
             commands.spawn((AudioPlayer::new(sfx.bomb.clone()), PlaybackSettings::DESPAWN));
         }
-        for (enemy_entity, enemy_tf, enemy, boss, mini_boss) in &enemies {
+        for (enemy_entity, enemy_tf, enemy, boss, mini_boss, core_shielded) in &enemies {
+            // The bomb clears adds + the boss's weak-point parts, but it can't
+            // punch through a live core shield — the exposed core must still be
+            // fought (keeps the "strip the parts first" boss mechanic intact).
+            if core_shielded {
+                continue;
+            }
             deaths.write(Death {
                 entity: enemy_entity,
                 position: enemy_tf.translation.truncate(),
