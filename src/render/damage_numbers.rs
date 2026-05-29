@@ -58,6 +58,29 @@ pub fn spawn_damage_numbers(
     }
 }
 
+/// Spawn a floating cyan "DODGE" at each evade (reuses `DamageNumber` so
+/// `float_damage_numbers` drifts + fades it). Reads `Dodged` from `apply_damage`.
+pub fn spawn_dodge_text(
+    mut commands: Commands,
+    mut dodges: MessageReader<crate::messages::Dodged>,
+) {
+    for ev in dodges.read() {
+        commands.spawn((
+            DamageNumber {
+                life: LIFE,
+                max_life: LIFE,
+            },
+            Text2d::new("DODGE"),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.5, 0.9, 1.0)), // cyan
+            Transform::from_translation((ev.pos + Vec2::new(0.0, 18.0)).extend(3.0)),
+        ));
+    }
+}
+
 /// Drift each number up, fade it by remaining life, and despawn at end of life.
 pub fn float_damage_numbers(
     time: Res<Time>,

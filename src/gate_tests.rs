@@ -28,6 +28,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Knockback>()
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
+        .add_message::<crate::messages::Dodged>()
         .add_message::<crate::messages::Shard>()
         .add_message::<crate::messages::Reaction>()
         .init_resource::<crate::meta::Meta>()

@@ -71,6 +71,7 @@ impl Plugin for GamePlugin {
             .add_message::<PlayerHurt>()
             .add_message::<crate::messages::Crit>()
             .add_message::<crate::messages::Pickup>()
+            .add_message::<crate::messages::Dodged>()
             .add_message::<crate::messages::Shard>()
             .add_message::<crate::messages::Reaction>()
             // ── one-time setup ──────────────────────────────────────────
@@ -109,6 +110,7 @@ impl Plugin for GamePlugin {
                     render::hud::update_ability_bar,
                     render::cursor::update_crosshair,
                     render::damage_numbers::spawn_damage_numbers,
+                    render::damage_numbers::spawn_dodge_text,
                     render::damage_numbers::float_damage_numbers,
                     // Item UI: left-edge loot feed (drain → cards, age out) +
                     // the right-edge equipped-gear panel. Nested as one element

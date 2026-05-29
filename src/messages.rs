@@ -65,6 +65,14 @@ pub struct Crit;
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Pickup;
 
+/// The player evaded a hit (DODGE proc, emitted by `damage::apply_damage`). Drives
+/// a floating "DODGE" text at `pos` (`render::damage_numbers::spawn_dodge_text`) so
+/// the otherwise-invisible evade reads on screen.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Dodged {
+    pub pos: Vec2,
+}
+
 /// A resolved elemental reaction (E4b), emitted by `systems::reactions` — drives
 /// a one-shot expanding-ring shockwave VFX (`render::reaction_fx`). Pure
 /// presentation signal; the gameplay AoE is already applied via `Damage`.

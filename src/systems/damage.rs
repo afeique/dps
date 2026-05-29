@@ -28,6 +28,7 @@ pub fn apply_damage(
     mut dmg: MessageReader<Damage>,
     mut deaths: MessageWriter<Death>,
     mut hurt: MessageWriter<PlayerHurt>,
+    mut dodged: MessageWriter<crate::messages::Dodged>,
     mut score: ResMut<Score>,
     mut streak: ResMut<KillStreak>,
     mut rng: ResMut<GameRng>,
@@ -82,6 +83,7 @@ pub fn apply_damage(
                 + meta.sp_value("DODGE") / 100.0)
                 .min(0.5);
             if dodge > 0.0 && rng.next_f32() < dodge {
+                dodged.write(crate::messages::Dodged { pos: tf.translation.truncate() });
                 continue;
             }
             // Any landed hit on the player breaks the kill streak (spec III.6).

@@ -38,6 +38,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::PlayerHurt>()
         .add_message::<crate::messages::Crit>()
         .add_message::<crate::messages::Pickup>()
+        .add_message::<crate::messages::Dodged>()
         .add_message::<crate::messages::Shard>()
         .add_message::<crate::messages::Reaction>()
         .init_resource::<crate::meta::Meta>()
@@ -4164,6 +4165,40 @@ fn bomb_spares_a_shielded_boss_core() {
 
     let enemies = world.query_filtered::<Entity, With<Enemy>>().iter(world).collect::<Vec<_>>();
     assert_eq!(enemies, vec![boss], "only the shielded boss core survives the bomb");
+}
+
+/// A dodged hit emits a `Dodged` event (drives the floating DODGE text). Control:
+/// without the Dodge upgrade the player never evades, so no event fires.
+#[test]
+fn dodge_emits_a_dodged_event() {
+    use crate::messages::{Damage, Dodged};
+    use crate::systems::shop::{UpgradeId, Upgrades};
+
+    #[derive(Resource, Default)]
+    struct DodgeCount(u32);
+    fn tally(mut r: MessageReader<Dodged>, mut c: ResMut<DodgeCount>) {
+        c.0 += r.read().count() as u32;
+    }
+
+    fn dodges(with_dodge: bool) -> u32 {
+        let mut app = test_app();
+        app.init_resource::<DodgeCount>();
+        if with_dodge {
+            app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Dodge, 100); // → 50% cap
+        }
+        let world = app.world_mut();
+        let player = world.spawn((Ship::default(), Health::new(1.0e6), Transform::default())).id();
+        for _ in 0..60 {
+            world.write_message(Damage { target: player, amount: 1.0 });
+        }
+        let mut step = Schedule::default();
+        step.add_systems((apply_damage, tally).chain());
+        step.run(world);
+        world.resource::<DodgeCount>().0
+    }
+
+    assert_eq!(dodges(false), 0, "no Dodge upgrade → never evades → no event");
+    assert!(dodges(true) > 0, "Dodge (50% cap) over 60 hits → ≥1 evade event (0.5^60 ≈ 0)");
 }
 
 /// `update_boss_parts` parks a part at boss-pos + offset, and despawns it once
