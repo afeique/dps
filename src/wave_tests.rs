@@ -1636,6 +1636,23 @@ fn ship_skins_table_and_clamp() {
     // The selected skin index persists across the RON save.
     let m = Meta { skin: 7, ..Default::default() };
     assert_eq!(Meta::from_ron(&m.to_ron()).skin, 7);
+
+    // The cockpit tint preserves the skin's dominant hue and stays bright.
+    use crate::render::shapes::cockpit_rgb;
+    let dominant = |(r, g, b): (f32, f32, f32)| {
+        if r >= g && r >= b {
+            0
+        } else if g >= b {
+            1
+        } else {
+            2
+        }
+    };
+    for skin in SKINS.iter() {
+        let c = cockpit_rgb(skin);
+        assert_eq!(dominant(c), dominant(skin.edge), "{} cockpit keeps its hue", skin.name);
+        assert!(c.0 >= 2.0 && c.1 >= 2.0 && c.2 >= 2.0, "{} cockpit stays bright", skin.name);
+    }
 }
 
 /// Cores salvage economy (Phase IT, rainboids cores.js): salvage value, batch

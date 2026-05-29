@@ -102,14 +102,31 @@ pub fn ship_ghost() -> Shape {
 
 /// Bright cockpit highlight — spawned as a child of the hull (z above it).
 /// JS cockpit sits at Canvas `(0, -r*0.42)` → Bevy `(0, +r*0.42)`.
+/// The cockpit highlight colour for a skin: the skin's hue normalized to a bright
+/// peak plus a white floor, so it reads as a hot highlight tinted toward the skin
+/// (cyan-white for Aurora, warm-white for Ember, …). Returns linear RGB.
+pub fn cockpit_rgb(skin: &Skin) -> (f32, f32, f32) {
+    let (r, g, b) = skin.edge;
+    let m = r.max(g).max(b).max(0.001);
+    let s = 7.0 / m; // normalize the brightest channel to ~7
+    (r * s + 2.0, g * s + 2.0, b * s + 2.0) // + white floor → stays a bright highlight
+}
+
+/// Default cockpit (Aurora skin) — the no-arg form.
 pub fn ship_cockpit() -> Shape {
+    ship_cockpit_skin(&SKINS[0])
+}
+
+/// The cockpit highlight in a given [`Skin`]'s hue (see [`cockpit_rgb`]).
+pub fn ship_cockpit_skin(skin: &Skin) -> Shape {
     const R: f32 = SHIP_R;
     let cockpit = shapes::Ellipse {
         radii: Vec2::new(R * 0.17, R * 0.21),
         center: Vec2::ZERO,
     };
+    let (r, g, b) = cockpit_rgb(skin);
     ShapeBuilder::with(&cockpit)
-        .fill(Color::linear_rgb(3.0, 7.0, 9.0)) // cyan-white, blooms hot
+        .fill(Color::linear_rgb(r, g, b)) // skin-tinted, blooms hot
         .build()
 }
 

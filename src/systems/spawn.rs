@@ -34,7 +34,7 @@ pub fn spawn_player(mut commands: Commands, meta: Res<crate::meta::Meta>) {
         ))
         .with_children(|ship| {
             ship.spawn((
-                shapes::ship_cockpit(),
+                shapes::ship_cockpit_skin(skin),
                 Transform::from_translation(shapes::SHIP_COCKPIT_OFFSET.extend(1.0)),
             ));
             // Energy charge-glow halo behind the hull (driven by update_charge_glow).
