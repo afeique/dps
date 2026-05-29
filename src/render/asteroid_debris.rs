@@ -20,7 +20,7 @@
 //! `tick_lifetimes` path — no bespoke lifecycle. Deterministic (Wang-hashed off a
 //! `Local` counter), so it needs no `rand` dependency.
 
-use crate::components::{Burning, Collider, Frozen, Lifetime, Velocity};
+use crate::components::{Bleed, Burning, Collider, Corrode, Frozen, Lifetime, Mark, Velocity};
 use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::systems::asteroids::{AsteroidMaterial, ICO_EDGES};
@@ -561,5 +561,71 @@ pub fn emit_frozen_glints(
             Velocity(Vec2::ZERO), // a stationary glint, not a drifting ember
             Lifetime { seconds: life },
         ));
+    }
+}
+
+/// Trailing motes for the remaining damage-over-time / debuff statuses, tinted +
+/// moving per status so each reads at a glance: CORRODE drips acid-green
+/// *downward*, BLEED sheds red flecks that ooze down slowly, MARK exhales violet
+/// void wisps that *rise*. Throttled batch (shared accumulator, capped across all
+/// three) reusing the [`Ember`] primitive. Completes the per-status particle set
+/// (conduct arcs / burn embers / frozen glints already cover the rest).
+pub fn emit_status_motes(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut acc: Local<f32>,
+    mut seed: Local<u32>,
+    corrode: Query<&Transform, With<Corrode>>,
+    bleed: Query<&Transform, With<Bleed>>,
+    mark: Query<&Transform, With<Mark>>,
+) {
+    const MOTE_INTERVAL: f32 = 0.12;
+    const MAX_PER_BATCH: usize = 30;
+    *acc += time.delta_secs();
+    if *acc < MOTE_INTERVAL {
+        return;
+    }
+    *acc = 0.0;
+
+    // `fall` is the base vertical velocity (negative = drips down, positive =
+    // rises); horizontal + jitter are rolled per mote. All randomness lives here
+    // so the per-status loops below never touch `seed` (keeps the borrow simple).
+    let mut emit = |base: Vec2, color: Color, fall: f32| {
+        *seed = seed.wrapping_add(1);
+        let s = *seed;
+        let pos = base + Vec2::new(frand(s ^ 0x1, -7.0, 7.0), frand(s ^ 0x2, -7.0, 7.0));
+        let vel = Vec2::new(frand(s ^ 0x5, -10.0, 10.0), fall + frand(s ^ 0x6, -8.0, 8.0));
+        let life = frand(s ^ 0x3, 0.4, 0.9);
+        let r = frand(s ^ 0x4, 1.2, 2.6);
+        commands.spawn((
+            Ember { max_life: life },
+            ember_disc(color, r),
+            Transform::from_translation(pos.extend(0.12)),
+            Velocity(vel),
+            Lifetime { seconds: life },
+        ));
+    };
+
+    let mut n = 0usize;
+    for tf in &corrode {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        emit(tf.translation.truncate(), Color::linear_rgb(2.0, 9.0, 1.0), -40.0); // acid drips
+        n += 1;
+    }
+    for tf in &bleed {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        emit(tf.translation.truncate(), Color::linear_rgb(9.0, 0.8, 1.2), -12.0); // blood oozes
+        n += 1;
+    }
+    for tf in &mark {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        emit(tf.translation.truncate(), Color::linear_rgb(6.0, 1.0, 9.0), 12.0); // void wisps rise
+        n += 1;
     }
 }

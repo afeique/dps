@@ -334,6 +334,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::emit_burn_embers,
                     // Glinting ice sparkles on frozen enemies.
                     render::asteroid_debris::emit_frozen_glints,
+                    // Corrode acid drips / bleed flecks / void-mark wisps.
+                    render::asteroid_debris::emit_status_motes,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

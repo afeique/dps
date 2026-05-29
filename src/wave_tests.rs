@@ -768,6 +768,43 @@ fn frozen_enemies_glint_with_ice() {
     assert_eq!(v, Vec2::ZERO, "ice glints are stationary, not drifting");
 }
 
+// ── 3m-ii. dot_statuses_emit_directional_motes ───────────────────────────────
+
+/// `emit_status_motes` sheds tinted motes per DoT/debuff status, each moving in a
+/// signature direction: corrode acid drips DOWN, void mark wisps rise UP.
+#[test]
+fn dot_statuses_emit_directional_motes() {
+    use crate::components::{Corrode, Mark};
+    use crate::render::asteroid_debris::{Ember, emit_status_motes};
+
+    fn mote_vy<B: Bundle>(status: B) -> f32 {
+        let mut app = App::new();
+        let world = app.world_mut();
+        world.spawn((status, Transform::default()));
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_millis(150)); // past the emit interval
+        world.insert_resource(time);
+        let mut step = Schedule::default();
+        step.add_systems(emit_status_motes);
+        step.run(world);
+        world
+            .query_filtered::<&Velocity, With<Ember>>()
+            .single(world)
+            .unwrap()
+            .0
+            .y
+    }
+
+    assert!(
+        mote_vy(Corrode { stacks: 1, secs: 4.0 }) < 0.0,
+        "corrode acid should drip downward"
+    );
+    assert!(
+        mote_vy(Mark { secs: 6.0 }) > 0.0,
+        "void-mark wisps should rise upward"
+    );
+}
+
 // ── 3m. banner_alpha_eases_in_and_out ────────────────────────────────────────
 
 /// The stage-banner / toast opacity curve is 0 at spawn, full mid-life, 0 at the
