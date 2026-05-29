@@ -625,6 +625,41 @@ fn warp_in_pops_a_ring_on_spawn() {
     assert_eq!(rings, 1, "a materializing enemy should pop one warp ring");
 }
 
+// ── 3i. hazard_breathe_never_under_represents_radius ─────────────────────────
+
+/// `animate_hazards` breathes the (now-visible) danger zone with an upward-only
+/// pulse, so the silhouette never visually shrinks below the true damage radius —
+/// the player can always trust the rendered edge as "at least this big."
+#[test]
+fn hazard_breathe_never_under_represents_radius() {
+    use crate::combat::element::Element;
+    use crate::systems::hazard::{HazardField, animate_hazards};
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    let h = world
+        .spawn((
+            HazardField { radius: 50.0, element: Element::Toxic, dps: 6.0, life: 3.0, tick: 0.3 },
+            Transform::default(),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(137));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(animate_hazards);
+    step.run(world);
+
+    let s = world.get::<Transform>(h).unwrap().scale.x;
+    assert!(
+        s >= 1.0,
+        "the hazard breathe must never shrink below the true damage radius (got {s})"
+    );
+    assert!(s <= 1.07, "the breathe stays a subtle pulse (got {s})");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

@@ -326,6 +326,8 @@ impl Plugin for GamePlugin {
                     // Enemy spawn-in warp: a cyan ring + a grow-to-full materialize.
                     render::warp_in::flash_warp_in,
                     render::warp_in::tick_warp_in,
+                    // Breathe the (now-visible) hazard danger zones.
+                    systems::hazard::animate_hazards,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

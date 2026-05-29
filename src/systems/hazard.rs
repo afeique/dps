@@ -9,6 +9,7 @@ use crate::components::{PlayerCorrode, Ship};
 use crate::messages::Damage;
 use crate::systems::player_status::apply_player_status;
 use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 
 /// Damage tick cadence (`DAMAGE_TICK_MS` 300). A tick deals `dps × this` — the
 /// chunk (≥1) survives the player-damage `.round()`.
@@ -58,7 +59,29 @@ pub fn plaguebearer_dropper() -> HazardDropper {
     }
 }
 
-/// Spawn a hazard-field entity at `pos`.
+/// A danger-zone silhouette: a translucent element-tinted pool (a flat ground
+/// tint that doesn't bloom — alpha lets the starfield show through) ringed by an
+/// HDR glow rim that Bloom flares, so the zone reads clearly without obscuring
+/// the field. Built at the true `radius`; `animate_hazards` breathes it.
+fn hazard_shape(radius: f32, element: Element) -> Shape {
+    let s = element.color().to_srgba();
+    let fill = Color::srgba(s.red, s.green, s.blue, 0.16); // see-through ground tint
+    let l = element.color().to_linear();
+    let rim = Color::linear_rgb(l.red * 4.5, l.green * 4.5, l.blue * 4.5); // glowing edge
+    let mut path = ShapePath::new();
+    for i in 0..40 {
+        let a = i as f32 / 40.0 * std::f32::consts::TAU;
+        let p = Vec2::new(a.cos() * radius, a.sin() * radius);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close())
+        .fill(fill)
+        .stroke((rim, 2.5))
+        .build()
+}
+
+/// Spawn a hazard-field entity at `pos` — now with a visible danger-zone
+/// silhouette (it was an invisible damage disc before).
 pub fn spawn_hazard(
     commands: &mut Commands,
     pos: Vec2,
@@ -75,8 +98,22 @@ pub fn spawn_hazard(
             life,
             tick: HAZARD_TICK_SECS,
         },
+        hazard_shape(radius, element),
         Transform::from_translation(pos.extend(-0.5)),
     ));
+}
+
+/// Breathe each hazard zone — an upward-only pulse (`1.00..1.06`) so the field
+/// reads as a live, pulsing pool yet never visually *under*-represents its true
+/// damage radius (the gameplay radius is the fixed `HazardField.radius`; this only
+/// scales the silhouette). Pure presentation; phase-desynced per entity.
+pub fn animate_hazards(time: Res<Time>, mut q: Query<(Entity, &mut Transform), With<HazardField>>) {
+    let t = time.elapsed_secs();
+    for (e, mut tf) in &mut q {
+        let phase = (e.to_bits() % 997) as f32 * 0.0063;
+        let breathe = 1.0 + 0.06 * (0.5 + 0.5 * (t * 3.0 + phase).sin());
+        tf.scale = Vec3::splat(breathe);
+    }
 }
 
 /// Tick each hazard: while the player is inside, deal a `dps × HAZARD_TICK_SECS`
