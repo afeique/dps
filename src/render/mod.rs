@@ -32,6 +32,7 @@ pub mod shield_bubble;
 pub mod status_fx;
 pub mod starfield;
 pub mod telegraph_fx;
+pub mod warp_in;
 pub mod wave_title;
 
 use bevy::core_pipeline::tonemapping::{DebandDither, Tonemapping};

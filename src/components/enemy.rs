@@ -94,6 +94,19 @@ pub struct BossPart {
 #[derive(Component, Debug)]
 pub struct CoreShielded;
 
+/// Spawn-in "warp" materialize (rainboids' `warping`): a freshly-spawned wave
+/// enemy grows its silhouette from `0.3×` up to its true `scale` over `dur` while
+/// a warp ring flashes at its arrival point. Driven by `render::warp_in`
+/// (`flash_warp_in` on `Added`, `tick_warp_in` per frame, which drops the marker
+/// when done). **Visual only** — the `Collider` is full-size throughout, so
+/// engagement timing is identical to popping in.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct WarpIn {
+    pub elapsed: f32,
+    pub dur: f32,
+    pub scale: f32,
+}
+
 /// A boss that has crossed its HP-threshold but is in the **rage telegraph**
 /// window (spec IV.7, `TELEGRAPH_FRAMES = 24` ≈ 0.4 s): a red warning ring shows
 /// before the rage burst fires, giving the player a counterplay beat.

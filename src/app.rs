@@ -323,6 +323,9 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::fade_embers,
                     // Idle orbs spin + pulse so they read as live collectibles.
                     systems::drops::animate_orbs,
+                    // Enemy spawn-in warp: a cyan ring + a grow-to-full materialize.
+                    render::warp_in::flash_warp_in,
+                    render::warp_in::tick_warp_in,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

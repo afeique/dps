@@ -560,6 +560,71 @@ fn collecting_an_orb_pops_a_sparkle_ring() {
     assert_eq!(rings, 1, "collecting an orb should pop exactly one sparkle ring");
 }
 
+// ── 3g. warp_in_grows_enemy_then_drops_marker ────────────────────────────────
+
+/// `tick_warp_in` materializes a spawning enemy up to its true scale and drops
+/// the marker once complete, so nothing keeps touching its Transform afterward.
+#[test]
+fn warp_in_grows_enemy_then_drops_marker() {
+    use crate::components::WarpIn;
+    use crate::render::warp_in::tick_warp_in;
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    let e = world
+        .spawn((
+            WarpIn { elapsed: 0.0, dur: 0.35, scale: 2.0 },
+            Transform::from_scale(Vec3::splat(0.6)),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(400)); // past dur → completes
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(tick_warp_in);
+    step.run(world);
+
+    let tf = *world.get::<Transform>(e).unwrap();
+    assert!(
+        (tf.scale.x - 2.0).abs() < 1e-4,
+        "warp-in should settle at the true scale (got {})",
+        tf.scale.x
+    );
+    assert!(
+        world.get::<WarpIn>(e).is_none(),
+        "the WarpIn marker should drop once the materialize completes"
+    );
+}
+
+// ── 3h. warp_in_pops_a_ring_on_spawn ─────────────────────────────────────────
+
+/// A materializing enemy pops exactly one warp ring (`flash_warp_in` on `Added`).
+#[test]
+fn warp_in_pops_a_ring_on_spawn() {
+    use crate::components::WarpIn;
+    use crate::render::reaction_fx::Shockwave;
+    use crate::render::warp_in::flash_warp_in;
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    world.spawn((
+        WarpIn { elapsed: 0.0, dur: 0.35, scale: 1.0 },
+        Transform::default(),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems(flash_warp_in);
+    step.run(world);
+
+    let rings = world
+        .query_filtered::<Entity, With<Shockwave>>()
+        .iter(world)
+        .count();
+    assert_eq!(rings, 1, "a materializing enemy should pop one warp ring");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

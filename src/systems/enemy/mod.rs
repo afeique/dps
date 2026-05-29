@@ -753,7 +753,11 @@ fn spawn_enemy(
         SpeedMul(speed_mul),
         Faction::Enemy,
         shape_for(kind),
-        Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul)),
+        // Start small + carry a WarpIn marker so `render::warp_in` materializes
+        // the silhouette up to `sz_mul`. The Collider above is already full-size,
+        // so the warp is purely cosmetic (engagement timing is unchanged).
+        WarpIn { elapsed: 0.0, dur: 0.35, scale: sz_mul },
+        Transform::from_translation(pos.extend(0.0)).with_scale(Vec3::splat(sz_mul * 0.3)),
     ));
     // Elemental resistance map (E2) — read by the player→enemy damage path.
     e.insert(resistances_for(kind));
