@@ -22,6 +22,7 @@ pub mod loot_feed;
 pub mod minimap;
 pub mod muzzle_flash;
 pub mod nebula;
+pub mod overdrive_aura;
 pub mod reaction_fx;
 pub mod screenshot;
 pub mod shake;

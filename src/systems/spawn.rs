@@ -4,7 +4,7 @@
 //! `js/modules/render/shapes.js` (see `crate::render::shapes`).
 
 use crate::components::*;
-use crate::render::{charge_glow, shapes, shield_bubble};
+use crate::render::{charge_glow, overdrive_aura, shapes, shield_bubble};
 use bevy::prelude::*;
 
 pub fn spawn_player(mut commands: Commands, meta: Res<crate::meta::Meta>) {
@@ -52,6 +52,12 @@ pub fn spawn_player(mut commands: Commands, meta: Res<crate::meta::Meta>) {
                 shield_bubble::ShieldBubble,
                 shield_bubble::bubble_ring(),
                 Transform::from_translation(Vec3::new(0.0, 0.0, 0.3)).with_scale(Vec3::ZERO),
+            ));
+            // Overdrive aura (hidden until update_overdrive_aura shows it).
+            ship.spawn((
+                overdrive_aura::OverdriveAura,
+                overdrive_aura::aura_ring(),
+                Transform::from_translation(Vec3::new(0.0, 0.0, 0.25)).with_scale(Vec3::ZERO),
             ));
         });
 }

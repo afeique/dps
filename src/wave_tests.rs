@@ -2006,6 +2006,33 @@ fn shield_bubble_visible_only_when_invulnerable() {
     assert_eq!(bubble_scale(false), 0.0, "normal play → bubble hidden");
 }
 
+/// The Overdrive aura is visible only while the primary-buff (Overdrive) is active.
+#[test]
+fn overdrive_aura_visible_only_when_buffed() {
+    use crate::components::{Overdrive, Ship};
+    use crate::render::overdrive_aura::{aura_ring, update_overdrive_aura, OverdriveAura};
+
+    fn scale(buffed: bool) -> f32 {
+        let mut app = test_app();
+        let world = app.world_mut();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(0.016));
+        world.insert_resource(time);
+        let mut ship = world.spawn(Ship::default());
+        if buffed {
+            ship.insert(Overdrive { secs: 1.0 });
+        }
+        let a = world.spawn((OverdriveAura, aura_ring(), Transform::default())).id();
+        let mut step = Schedule::default();
+        step.add_systems(update_overdrive_aura);
+        step.run(world);
+        world.get::<Transform>(a).unwrap().scale.x
+    }
+
+    assert!(scale(true) > 0.5, "Overdrive active → aura shows");
+    assert_eq!(scale(false), 0.0, "no Overdrive → aura hidden");
+}
+
 /// A landed hit on an enemy scatters impact sparks; player hits + sub-1 DoT
 /// ticks don't (the player has its own hit-flash; DoT shouldn't fizz).
 #[test]

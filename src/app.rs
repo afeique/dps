@@ -284,6 +284,8 @@ impl Plugin for GamePlugin {
                     render::dash_trail::fade_dash_ghosts,
                     // Invuln shield bubble: pulses into view during i-frames.
                     render::shield_bubble::update_shield_bubble,
+                    // Overdrive aura: pulses while the primary-buff is active.
+                    render::overdrive_aura::update_overdrive_aura,
                     // Golden aura when the account levels up mid-run.
                     render::level_up_aura::level_up_aura,
                 )
