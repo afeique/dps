@@ -523,6 +523,43 @@ fn orbs_pulse_and_spin_around_their_base_scale() {
     assert!(tf.rotation.z.abs() > 0.0, "the orb should be spinning");
 }
 
+// ── 3f. collecting_an_orb_pops_a_sparkle_ring ────────────────────────────────
+
+/// Picking up an orb consumes it AND pops a sparkle ring at the pickup point
+/// (`collect_orbs`, reusing the reaction Shockwave).
+#[test]
+fn collecting_an_orb_pops_a_sparkle_ring() {
+    use crate::render::reaction_fx::Shockwave;
+    use crate::systems::drops::{Orb, collect_orbs};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    world.spawn((
+        Ship::default(),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        Collider { radius: 10.0 },
+        Health::new(40.0),
+    ));
+    world.spawn((
+        Orb { gold: 5, points: 0, heal: 0.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        Collider { radius: 8.0 },
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems(collect_orbs);
+    step.run(world);
+
+    let orbs = world.query_filtered::<Entity, With<Orb>>().iter(world).count();
+    assert_eq!(orbs, 0, "the collected orb should be consumed");
+    let rings = world
+        .query_filtered::<Entity, With<Shockwave>>()
+        .iter(world)
+        .count();
+    assert_eq!(rings, 1, "collecting an orb should pop exactly one sparkle ring");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

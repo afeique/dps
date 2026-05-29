@@ -6,6 +6,7 @@
 
 use crate::components::*;
 use crate::messages::Death;
+use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::resources::{GameRng, KillStreak, Score};
 use crate::systems::enemy;
 use crate::systems::shop::{magnetism_radius, scavenger_mult, UpgradeId, Upgrades};
@@ -382,6 +383,23 @@ pub fn collect_orbs(
             }
             commands.entity(orb_e).despawn();
             pickup.write(crate::messages::Pickup);
+
+            // A small sparkle ring at the pickup point, tinted to the orb type —
+            // the port of rainboids' coin-pickup sparkle (reuses the reaction
+            // Shockwave, animated + despawned by `reaction_fx::tick_shockwaves`).
+            let ring = if orb.heal > 0.0 {
+                Color::linear_rgb(2.0, 9.0, 3.0) // green (health)
+            } else if orb.gold > 0 {
+                Color::linear_rgb(9.0, 7.0, 1.5) // gold
+            } else {
+                Color::linear_rgb(2.0, 8.0, 9.0) // cyan (points)
+            };
+            commands.spawn((
+                Shockwave { age: 0.0, peak: 22.0 },
+                unit_ring(ring),
+                Transform::from_translation(otf.translation.truncate().extend(0.3))
+                    .with_scale(Vec3::splat(1.0)),
+            ));
         }
     }
 }
