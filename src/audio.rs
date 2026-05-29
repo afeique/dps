@@ -205,6 +205,41 @@ fn synth_explosion() -> Vec<u8> {
     wav_pcm16_mono(&samples, SAMPLE_RATE)
 }
 
+/// Asteroid destroy — a dry rock "crunch": gritty low-pass noise (waveshaped for
+/// grit) over a descending saw "thunk" body 240 → 90 Hz, ~0.18 s. Duller and
+/// rockier than the airy `explosion` (no high thump) and distinct from the icy
+/// glass `shatter` (high sine sweep) — the port of rainboids' `asteroidDestroy`.
+fn synth_asteroid_destroy() -> Vec<u8> {
+    let duration = 0.18_f32;
+    let n = (SR * duration) as usize;
+    let attack = (n as f32 * 0.01) as usize;
+    let noise_decay = (-7.0_f32 / SR).exp();
+    let body_decay = (-9.0_f32 / SR).exp();
+
+    let mut samples = Vec::with_capacity(n);
+    let mut noise_state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut body_phase: f32 = 0.0;
+    let mut lp: f32 = 0.0;
+    // Duller cutoff than the explosion's 0.15 → reads as rock, not airy fire.
+    let lp_coeff = 0.10_f32;
+
+    for i in 0..n {
+        let (raw, next) = lcg_noise(noise_state);
+        noise_state = next;
+        lp += lp_coeff * (raw - lp);
+        let noise_amp = env_exp(i, attack, noise_decay);
+        let body_amp = env_exp(i, attack, body_decay);
+        // Light waveshaping (overdrive the low-passed noise) adds rocky grit.
+        let crunch = (lp * 1.6).clamp(-1.0, 1.0);
+        // Descending low-mid saw gives the "thunk" of breaking mass.
+        let body_freq = sweep_freq(240.0, 90.0, i, n);
+        let sig = 0.55 * crunch * noise_amp + 0.45 * saw(body_phase) * body_amp;
+        samples.push((sig * 0.42).clamp(-1.0, 1.0));
+        body_phase = advance_phase(body_phase, body_freq);
+    }
+    wav_pcm16_mono(&samples, SAMPLE_RATE)
+}
+
 /// Player hit — harsh noise/buzz + low tone, ~0.15 s.
 fn synth_player_hit() -> Vec<u8> {
     let duration = 0.15_f32;
@@ -506,6 +541,7 @@ pub struct Sfx {
     pub player_hit:   Handle<AudioSource>,
     pub pickup:       Handle<AudioSource>,
     pub shatter:      Handle<AudioSource>,
+    pub rock:         Handle<AudioSource>,
     pub flare:        Handle<AudioSource>,
     pub crit:         Handle<AudioSource>,
     pub levelup:      Handle<AudioSource>,
@@ -588,6 +624,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
     let player_hit   = assets.add(make_synth(synth_player_hit()));
     let pickup       = assets.add(make_synth(synth_pickup()));
     let shatter      = assets.add(make_synth(synth_shatter()));
+    let rock         = assets.add(make_synth(synth_asteroid_destroy()));
     let flare        = assets.add(make_synth(synth_flare()));
     let crit         = assets.add(make_synth(synth_crit()));
     let levelup      = assets.add(make_synth(synth_levelup()));
@@ -641,6 +678,7 @@ pub fn setup_sfx(mut commands: Commands, mut assets: ResMut<Assets<AudioSource>>
         player_hit,
         pickup,
         shatter,
+        rock,
         flare,
         crit,
         levelup,
@@ -798,6 +836,32 @@ pub fn play_explosion(
     }
 }
 
+/// Play a rock-crunch for every `AsteroidShatter` (split or final destruction).
+/// Tries an `"asteroidDestroy"` WAV first, then the synth `rock`. Capped at
+/// 4/frame so a multi-split chain doesn't stack into a wall of noise — mirrors
+/// `play_explosion`'s structure for enemy deaths.
+pub fn play_asteroid_destroy(
+    mut commands: Commands,
+    mut sfx: ResMut<Sfx>,
+    mut shatters: MessageReader<crate::messages::AsteroidShatter>,
+    time: Res<Time>,
+) {
+    const CAP: u32 = 4;
+    let mut count = 0u32;
+    let now = time.elapsed_secs_f64();
+
+    for _ev in shatters.read() {
+        if count >= CAP {
+            break;
+        }
+        if !try_play_file(&mut commands, &mut sfx, "asteroidDestroy", now) {
+            // Synth fallback — a dry rock crunch.
+            commands.spawn((AudioPlayer::new(sfx.rock.clone()), PlaybackSettings::DESPAWN));
+        }
+        count += 1;
+    }
+}
+
 /// Play a pickup chime when the player collects an orb or powerup. Collapses a
 /// same-frame cluster into one sound and applies the standard per-event throttle.
 pub fn play_pickup(
@@ -887,7 +951,7 @@ mod tests {
     /// don't panic.
     #[test]
     fn reaction_and_crit_synths_produce_wav_buffers() {
-        for bytes in [synth_shatter(), synth_flare(), synth_crit()] {
+        for bytes in [synth_shatter(), synth_flare(), synth_crit(), synth_asteroid_destroy()] {
             assert!(bytes.len() > 44, "WAV has a header + samples (got {})", bytes.len());
             assert_eq!(bytes.len() % 2, 0, "PCM-16 byte count is even");
             assert_eq!(&bytes[0..4], b"RIFF", "WAV RIFF magic");

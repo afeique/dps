@@ -171,6 +171,8 @@ impl Plugin for GamePlugin {
                         audio::play_reaction,
                         audio::play_crit,
                         audio::play_pickup,
+                        // Rock-crunch on every asteroid shatter.
+                        audio::play_asteroid_destroy,
                     ),
                 ),
             )
