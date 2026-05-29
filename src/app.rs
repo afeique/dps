@@ -139,6 +139,8 @@ impl Plugin for GamePlugin {
                         render::status_fx::update_status_auras,
                         render::telegraph_fx::pulse_telegraph_rings,
                         render::reaction_fx::spawn_reaction_fx,
+                        // Element-tinted wavefront rings on every enemy death.
+                        render::reaction_fx::spawn_death_rings,
                         render::reaction_fx::tick_shockwaves,
                     )
                         .chain(),

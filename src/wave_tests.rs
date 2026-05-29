@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use crate::components::*;
 use crate::messages::{Damage, Death, Fire};
+use crate::render::reaction_fx::{self, Shockwave};
 use crate::resources::{PlayBounds, Score};
 use crate::states::GameState;
 use crate::systems::asteroids::{self, Asteroid};
@@ -302,6 +303,56 @@ fn shooting_an_asteroid_emits_a_shatter_vfx() {
     assert!(
         s.radius > 0.0,
         "the shatter must carry a positive radius so the debris burst scales"
+    );
+}
+
+// ── 3c. enemy_death_spawns_wavefront_rings ───────────────────────────────────
+
+/// Each enemy death lays down element-tinted wavefront rings
+/// (`render::reaction_fx::spawn_death_rings`): two for a normal enemy (bright
+/// inner + dim outer), three for a boss (adds a white-hot shock). The player's
+/// own death (`kind == None`) lays none — it has the explosion + shake + flash.
+#[test]
+fn enemy_death_spawns_wavefront_rings() {
+    fn rings_for(kind: Option<EnemyKind>, boss_tier: u8) -> usize {
+        let mut app = App::new();
+        app.add_message::<Death>();
+        let world = app.world_mut();
+
+        // A short writer system seeds the Death the rings react to.
+        let seed = move |mut w: MessageWriter<Death>| {
+            w.write(Death {
+                entity: Entity::PLACEHOLDER,
+                position: Vec2::ZERO,
+                kind,
+                boss_tier,
+                mini_boss: false,
+            });
+        };
+        let mut step = Schedule::default();
+        step.add_systems((seed, reaction_fx::spawn_death_rings).chain());
+        step.run(world);
+
+        world
+            .query_filtered::<Entity, With<Shockwave>>()
+            .iter(world)
+            .count()
+    }
+
+    assert_eq!(
+        rings_for(Some(EnemyKind::Hunter), 0),
+        2,
+        "a normal enemy death should spawn a bright inner + dim outer wavefront ring"
+    );
+    assert_eq!(
+        rings_for(Some(EnemyKind::Hunter), 3),
+        3,
+        "a boss death should add a third white-hot shock ring"
+    );
+    assert_eq!(
+        rings_for(None, 0),
+        0,
+        "the player's own death (kind None) should spawn no element rings"
     );
 }
 

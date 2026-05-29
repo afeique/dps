@@ -5,7 +5,8 @@
 //! ring toward its peak radius and fades it out, then despawns it. Mirrors the
 //! status-aura idiom (a top-level lyon ring, HDR for Bloom) rather than hanabi.
 
-use crate::messages::{Reaction, ReactionFx};
+use crate::messages::{Death, Reaction, ReactionFx};
+use crate::systems::enemy::element_for;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -48,6 +49,43 @@ pub fn spawn_reaction_fx(mut commands: Commands, mut reactions: MessageReader<Re
             unit_ring(color),
             Transform::from_translation(r.center.extend(1.8)).with_scale(Vec3::splat(1.0)),
         ));
+    }
+}
+
+/// HDR-scale a base (sRGB) color so Bloom flares the ring into a glow.
+fn hdr(c: Color, gain: f32) -> Color {
+    let l = c.to_linear();
+    Color::linear_rgb(l.red * gain, l.green * gain, l.blue * gain)
+}
+
+/// Layered, element-tinted wavefront rings on each *enemy* death — the port of
+/// rainboids' `createDebris` staggered `explosionRingColored` rings. The hanabi
+/// burst (`render::explosion`) is the white-hot fire core; these add an
+/// element-colored double wavefront — a bright inner ring + a dimmer, larger
+/// outer ring — so every kill reads its damage element (pyro orange, cryo blue,
+/// volt violet, …). Bosses get a third, white-hot, largest ring; the whole burst
+/// scales with boss tier / mini-boss promotion. Player death (`kind == None`) is
+/// skipped — it already has the explosion + screen shake + flash. Reuses
+/// [`Shockwave`]/[`tick_shockwaves`], so no bespoke grow-fade lifecycle.
+pub fn spawn_death_rings(mut commands: Commands, mut deaths: MessageReader<Death>) {
+    for d in deaths.read() {
+        let Some(kind) = d.kind else { continue }; // skip the player's own death
+        let base = element_for(kind).color();
+        let scale = (1.0 + 0.6 * d.boss_tier as f32) * if d.mini_boss { 1.3 } else { 1.0 };
+        let z = 1.75; // just above the hanabi burst / asteroid rings
+
+        let mut ring = |peak: f32, color: Color| {
+            commands.spawn((
+                Shockwave { age: 0.0, peak },
+                unit_ring(color),
+                Transform::from_translation(d.position.extend(z)).with_scale(Vec3::splat(1.0)),
+            ));
+        };
+        ring(60.0 * scale, hdr(base, 6.0)); // bright inner wavefront
+        ring(95.0 * scale, hdr(base, 3.5)); // dimmer, larger outer wavefront
+        if d.boss_tier > 0 {
+            ring(140.0 * scale, Color::linear_rgb(7.0, 7.0, 8.0)); // white-hot boss shock
+        }
     }
 }
 
