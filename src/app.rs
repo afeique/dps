@@ -319,6 +319,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::tumble_shards,
                     // Line debris: the rock's broken wireframe struts drift apart.
                     render::asteroid_debris::tick_line_debris,
+                    // Lingering ember afterglow at the shatter point.
+                    render::asteroid_debris::fade_embers,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

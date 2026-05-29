@@ -348,6 +348,44 @@ fn asteroid_shatter_spawns_wireframe_line_debris() {
     );
 }
 
+// ── 3b-iii. asteroid_shatter_spawns_lingering_embers ─────────────────────────
+
+/// The shatter also leaves a scatter of lingering ember motes
+/// (`createDebris` §4/§5): `6 + 5*size_scale`, so a large rock (r=38, scale
+/// clamps to 1.5) leaves 13.
+#[test]
+fn asteroid_shatter_spawns_lingering_embers() {
+    use crate::messages::AsteroidShatter;
+    use crate::render::asteroid_debris::{Ember, spawn_asteroid_debris};
+
+    let mut app = App::new();
+    app.add_message::<AsteroidShatter>();
+    let world = app.world_mut();
+
+    let seed = move |mut w: MessageWriter<AsteroidShatter>| {
+        w.write(AsteroidShatter {
+            center: Vec2::ZERO,
+            hue: 200.0,
+            sat: 0.9,
+            light: 0.6,
+            radius: 38.0,
+            verts: [Vec2::ZERO; 12],
+        });
+    };
+    let mut step = Schedule::default();
+    step.add_systems((seed, spawn_asteroid_debris).chain());
+    step.run(world);
+
+    let embers = world
+        .query_filtered::<Entity, With<Ember>>()
+        .iter(world)
+        .count();
+    assert_eq!(
+        embers, 13,
+        "a large rock (r=38) shatter should leave 6 + 5*1.5 = 13 lingering embers"
+    );
+}
+
 // ── 3c. enemy_death_spawns_wavefront_rings ───────────────────────────────────
 
 /// Each enemy death lays down element-tinted wavefront rings

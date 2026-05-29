@@ -28,6 +28,7 @@ use crate::systems::enemy::element_for;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 use std::f32::consts::TAU;
 
 /// Equilateral triangle in 3D unit space (XY plane), centered at the origin —
@@ -56,6 +57,8 @@ const LINE_HALF_W: f32 = 1.1;
 /// HDR gain on the line-debris color — a touch under the shards since the struts
 /// are numerous; keeps them from washing out the bloom.
 const LINE_HDR_GAIN: f32 = 2.2;
+/// HDR gain on lingering embers (soft glow motes, Bloom flares them).
+const EMBER_GAIN: f32 = 2.0;
 
 // ─── deterministic hash helpers (dependency-free, like systems::asteroids) ───
 
@@ -165,6 +168,36 @@ pub fn spawn_asteroid_debris(
                 },
                 Transform::from_translation(ev.center.extend(0.17)),
                 Velocity(dir * frand(s ^ 0xB2, 80.0, 200.0)),
+                Lifetime { seconds: life },
+            ));
+        }
+
+        // Lingering embers (§4/§5): soft glow motes that drift slowly out and
+        // linger ~1.3–2.0 s as the rock's afterglow (asteroids get no fiery
+        // hanabi burst, so this is their "cooling" trail). The first is a white-
+        // hot core; the rest take the rock's hue ±30°, brightened.
+        let ember_count = (6.0 + 5.0 * size_scale) as u32;
+        for i in 0..ember_count {
+            *seed = seed.wrapping_add(1);
+            let s = *seed;
+            let ang = frand(s ^ 0xE1, 0.0, TAU);
+            let drift = frand(s ^ 0xE2, 12.0, 55.0); // slow, unlike the shards
+            let life = frand(s ^ 0xE3, 1.3, 2.0);
+            let r = frand(s ^ 0xE4, 2.0, 4.5);
+            let color = if i == 0 {
+                Color::linear_rgb(EMBER_GAIN, EMBER_GAIN, EMBER_GAIN) // white-hot core
+            } else {
+                let eh = ev.hue + frand(s ^ 0xE5, -30.0, 30.0);
+                let el = frand(s ^ 0xE6, 0.55, 0.80);
+                let l = Color::hsl(eh.rem_euclid(360.0), ev.sat, el).to_linear();
+                Color::linear_rgb(l.red * EMBER_GAIN, l.green * EMBER_GAIN, l.blue * EMBER_GAIN)
+            };
+            let dir = Vec2::new(ang.cos(), ang.sin());
+            commands.spawn((
+                Ember { max_life: life },
+                ember_disc(color, r),
+                Transform::from_translation(ev.center.extend(0.14)),
+                Velocity(dir * drift),
                 Lifetime { seconds: life },
             ));
         }
@@ -414,5 +447,35 @@ pub fn tick_line_debris(
                     .insert((Mesh2d(meshes.add(mesh)), MeshMaterial2d(mat.0.clone())));
             }
         }
+    }
+}
+
+// ─── Lingering embers — afterglow motes (createDebris §4/§5) ──────────────────
+
+/// One soft glow mote. Drifts via `Velocity`, fades via `fade_embers`, despawns
+/// via the shared `Lifetime` path. `max_life` scales the fade.
+#[derive(Component)]
+pub struct Ember {
+    max_life: f32,
+}
+
+/// A small filled 12-gon disc in `color` (HDR so Bloom turns it into a soft glow).
+fn ember_disc(color: Color, r: f32) -> Shape {
+    let mut path = ShapePath::new();
+    for i in 0..12 {
+        let a = i as f32 / 12.0 * TAU;
+        let p = Vec2::new(a.cos() * r, a.sin() * r);
+        path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
+    }
+    ShapeBuilder::with(&path.close()).fill(color).build()
+}
+
+/// Shrink each ember toward nothing as its life runs out. A `sqrt` curve keeps it
+/// near full size for most of its life then drops fast at the end, so embers read
+/// as lingering then winking out rather than steadily shrinking.
+pub fn fade_embers(mut q: Query<(&Ember, &Lifetime, &mut Transform)>) {
+    for (em, life, mut tf) in &mut q {
+        let frac = (life.seconds / em.max_life).clamp(0.0, 1.0);
+        tf.scale = Vec3::splat(frac.sqrt());
     }
 }
