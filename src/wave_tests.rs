@@ -41,6 +41,7 @@ fn test_app() -> App {
         .add_message::<crate::messages::Dodged>()
         .add_message::<crate::messages::Shard>()
         .add_message::<crate::messages::Reaction>()
+        .add_message::<crate::messages::AsteroidShatter>()
         .init_resource::<crate::meta::Meta>()
         .init_resource::<Score>()
         .init_resource::<crate::resources::KillStreak>()
@@ -241,6 +242,67 @@ fn asteroid_splits_when_shot() {
         .iter(world)
         .count();
     assert_eq!(bullet_count, 0, "the bullet should be despawned on asteroid impact");
+}
+
+// ── 3b. shooting_an_asteroid_emits_a_shatter_vfx ─────────────────────────────
+
+/// Every asteroid hit seeds the death-burst VFX (`render::asteroid_debris`): a
+/// single `AsteroidShatter` at the rock's position, carrying a positive radius so
+/// the debris fan/ring scale. The shatter fires whether the rock splits or is
+/// destroyed outright — here a tier-2 split case.
+#[test]
+fn shooting_an_asteroid_emits_a_shatter_vfx() {
+    use crate::messages::AsteroidShatter;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+
+    world.spawn((
+        Asteroid { tier: 2 },
+        Collider { radius: 36.0 },
+        Velocity(Vec2::new(0.0, -50.0)),
+        Transform::from_xyz(20.0, -10.0, 0.0),
+    ));
+    world.spawn((
+        Bullet {
+            kind: BulletKind::Player,
+            damage: 10.0,
+            pierce: 0,
+        },
+        Collider { radius: 3.0 },
+        Faction::Player,
+        Transform::from_xyz(20.0, -10.0, 0.0),
+    ));
+
+    #[derive(Resource, Default)]
+    struct Shatters(Vec<AsteroidShatter>);
+    world.insert_resource(Shatters::default());
+
+    fn tally(mut reader: MessageReader<AsteroidShatter>, mut out: ResMut<Shatters>) {
+        for ev in reader.read() {
+            out.0.push(*ev);
+        }
+    }
+
+    let mut step = Schedule::default();
+    step.add_systems((asteroids::asteroid_hits, tally).chain());
+    step.run(world);
+
+    let shatters = &world.resource::<Shatters>().0;
+    assert_eq!(
+        shatters.len(),
+        1,
+        "exactly one AsteroidShatter should fire per asteroid hit"
+    );
+    let s = shatters[0];
+    assert!(
+        s.center.distance(Vec2::new(20.0, -10.0)) < 0.001,
+        "the shatter should originate at the asteroid's position"
+    );
+    assert!(
+        s.radius > 0.0,
+        "the shatter must carry a positive radius so the debris burst scales"
+    );
 }
 
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────

@@ -74,6 +74,7 @@ impl Plugin for GamePlugin {
             .add_message::<crate::messages::Dodged>()
             .add_message::<crate::messages::Shard>()
             .add_message::<crate::messages::Reaction>()
+            .add_message::<crate::messages::AsteroidShatter>()
             // ── one-time setup ──────────────────────────────────────────
             .add_systems(
                 Startup,
@@ -305,7 +306,12 @@ impl Plugin for GamePlugin {
                 (
                     render::impact_spark::spawn_impact_sparks,
                     render::impact_spark::fade_impact_sparks,
+                    // Asteroid death burst: hue-matched 3D wireframe shards + a
+                    // colored ring on every shatter (port of `createDebris` §7b).
+                    render::asteroid_debris::spawn_asteroid_debris,
+                    render::asteroid_debris::tumble_shards,
                 )
+                    .chain()
                     .run_if(in_state(GameState::Playing)),
             )
             // ── shop (on-demand; pauses the sim) ────────────────────────

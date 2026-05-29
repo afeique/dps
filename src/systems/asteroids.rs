@@ -6,6 +6,7 @@
 //! jitter, and vertex offsets — no `rand` dependency.
 
 use crate::components::*;
+use crate::messages::AsteroidShatter;
 use crate::resources::PlayBounds;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -333,14 +334,22 @@ pub fn spawn_one_asteroid(commands: &mut Commands, bounds: &PlayBounds, seed: u3
 /// - If `tier == 0`, destroy the asteroid outright.
 pub fn asteroid_hits(
     mut commands: Commands,
+    mut shatter: MessageWriter<AsteroidShatter>,
     bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
-    asteroids: Query<(Entity, &Transform, &Collider, &Asteroid, &Velocity)>,
+    asteroids: Query<(
+        Entity,
+        &Transform,
+        &Collider,
+        &Asteroid,
+        &Velocity,
+        Option<&Tumbler>,
+    )>,
 ) {
     for (bullet_e, btf, bc, bullet) in &bullets {
         if bullet.kind != BulletKind::Player {
             continue;
         }
-        for (ast_e, atf, ac, asteroid, parent_vel) in &asteroids {
+        for (ast_e, atf, ac, asteroid, parent_vel, tumbler) in &asteroids {
             let reach = bc.radius + ac.radius;
             let d2 = btf
                 .translation
@@ -355,6 +364,18 @@ pub fn asteroid_hits(
 
             // Split or destroy.
             let pos = atf.translation.truncate();
+
+            // Seed the death-burst VFX (render::asteroid_debris) — every hit
+            // shatters the parent into a fan of hue-matched wireframe shards +
+            // a ring, fired whether it splits into children or is destroyed
+            // outright. Use the rock's live HSL so the debris is its own color;
+            // fall back to a warm grey for tumbler-less (test) asteroids.
+            let (hue, sat, light, radius) = match tumbler {
+                Some(t) => (t.hue, t.sat, t.light, t.radius),
+                None => (40.0, 0.2, 0.6, shape_base_radius(asteroid.tier)),
+            };
+            shatter.write(AsteroidShatter { center: pos, hue, sat, light, radius });
+
             commands.entity(ast_e).despawn();
 
             if asteroid.tier > 0 {

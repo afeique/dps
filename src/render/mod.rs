@@ -5,6 +5,7 @@
 //! placeholder `RegularPolygon` meshes with lyon-tessellated ports of
 //! `js/modules/render/shapes.js`, and adds the particle/bullet pipelines.
 
+pub mod asteroid_debris;
 pub mod bullets;
 pub mod charge_glow;
 pub mod cursor;

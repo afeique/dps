@@ -85,6 +85,23 @@ pub struct Reaction {
     pub kind: ReactionFx,
 }
 
+/// An asteroid was shattered by a player bullet (split or final destruction),
+/// emitted by `systems::asteroids::asteroid_hits`. Drives the death burst
+/// (`render::asteroid_debris`): a radial fan of 3D-tumbling wireframe-triangle
+/// shards in the rock's own hue + an expanding colored ring — the port of
+/// rainboids' `createDebris` recipe (`combat-manager.js`). Pure presentation;
+/// the split/destroy gameplay is already handled in `asteroid_hits`. `hue`/`sat`/
+/// `light` are the rock's live HSL (so the burst reads as that rock shattering),
+/// and `radius` (px) scales the shard count, fly-out speed, and ring size.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct AsteroidShatter {
+    pub center: Vec2,
+    pub hue: f32,
+    pub sat: f32,
+    pub light: f32,
+    pub radius: f32,
+}
+
 /// Which reaction fired — selects the shockwave's color + radius.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReactionFx {
