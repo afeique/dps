@@ -137,6 +137,8 @@ impl Plugin for GamePlugin {
                     (
                         render::status_fx::spawn_status_auras,
                         render::status_fx::update_status_auras,
+                        // Crackling lightning between nearby conducting enemies.
+                        render::status_fx::conduct_arcs,
                         render::telegraph_fx::pulse_telegraph_rings,
                         render::reaction_fx::spawn_reaction_fx,
                         // Element-tinted wavefront rings on every enemy death.

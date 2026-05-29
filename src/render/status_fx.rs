@@ -9,6 +9,7 @@ use crate::components::{
     Bleed, Burning, Chill, Collider, Conduct, Corrode, Frozen, Mark, Oil, PlayerBurn, PlayerChill,
     PlayerCorrode, Stunned,
 };
+use crate::systems::power_weapon::bolt_points;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -226,6 +227,65 @@ pub fn update_status_auras(
             AuraKind::Conduct => atf.scale = Vec3::splat(1.0 + 0.10 * (t * 16.0).sin()),
             // Everything else: a gentle slow pulse.
             _ => atf.scale = Vec3::splat(1.0 + 0.06 * (t * 4.0).sin()),
+        }
+    }
+}
+
+// ─── Conduct lightning arcs ──────────────────────────────────────────────────
+
+/// A per-frame crackling arc between two conducting enemies — rebuilt fresh each
+/// frame (so the bolt jitters and the pairing tracks motion/deaths).
+#[derive(Component)]
+pub struct ConductArc;
+
+/// Maximum gap (px) lightning will jump between conducting enemies.
+const ARC_DIST: f32 = 150.0;
+/// Cap on arcs drawn per frame (keeps a dense `Conduct` cluster from exploding).
+const MAX_ARCS: usize = 24;
+
+/// Crackling lightning between nearby `Conduct`-afflicted enemies — the VOLT
+/// "chains to nearby enemies" read (`elements.js`). Immediate-mode: despawn last
+/// frame's arcs, then arc each close pair (distance-gated + capped), reusing the
+/// power-weapon zig-zag [`bolt_points`] for the jag and an electric HDR yellow so
+/// Bloom flares it. Pure presentation — the conduct gameplay is the status timer.
+pub fn conduct_arcs(
+    mut commands: Commands,
+    time: Res<Time>,
+    existing: Query<Entity, With<ConductArc>>,
+    enemies: Query<&Transform, With<Conduct>>,
+) {
+    for e in &existing {
+        commands.entity(e).despawn();
+    }
+    let pts: Vec<Vec2> = enemies.iter().map(|t| t.translation.truncate()).collect();
+    if pts.len() < 2 {
+        return;
+    }
+    let seed = time.elapsed_secs();
+    let color = Color::linear_rgb(9.0, 8.0, 2.0); // electric yellow-white → bloom
+    let mut count = 0usize;
+    'outer: for i in 0..pts.len() {
+        for j in (i + 1)..pts.len() {
+            let len = pts[i].distance(pts[j]);
+            if len > ARC_DIST {
+                continue;
+            }
+            let bpts = bolt_points(len.max(0.001), seed + i as f32 * 7.13 + j as f32 * 3.7);
+            let mut path = ShapePath::new().move_to(bpts[0]);
+            for p in &bpts[1..] {
+                path = path.line_to(*p);
+            }
+            let angle = (pts[j] - pts[i]).to_angle();
+            commands.spawn((
+                ConductArc,
+                ShapeBuilder::with(&path).stroke((color, 1.6)).build(),
+                Transform::from_translation(pts[i].extend(0.45))
+                    .with_rotation(Quat::from_rotation_z(angle)),
+            ));
+            count += 1;
+            if count >= MAX_ARCS {
+                break 'outer;
+            }
         }
     }
 }

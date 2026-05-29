@@ -660,6 +660,39 @@ fn hazard_breathe_never_under_represents_radius() {
     assert!(s <= 1.07, "the breathe stays a subtle pulse (got {s})");
 }
 
+// ── 3j. conducting_enemies_arc_when_near_not_far ─────────────────────────────
+
+/// `conduct_arcs` jumps lightning between nearby conducting enemies but not
+/// distant ones (the VOLT "chains to nearby enemies" read).
+#[test]
+fn conducting_enemies_arc_when_near_not_far() {
+    use crate::components::Conduct;
+    use crate::render::status_fx::{ConductArc, conduct_arcs};
+
+    fn arcs_at(dist: f32) -> usize {
+        let mut app = App::new();
+        let world = app.world_mut();
+        world.spawn((Conduct { secs: 3.0 }, Transform::from_xyz(0.0, 0.0, 0.0)));
+        world.spawn((Conduct { secs: 3.0 }, Transform::from_xyz(dist, 0.0, 0.0)));
+
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_millis(50));
+        world.insert_resource(time);
+
+        let mut step = Schedule::default();
+        step.add_systems(conduct_arcs);
+        step.run(world);
+
+        world
+            .query_filtered::<Entity, With<ConductArc>>()
+            .iter(world)
+            .count()
+    }
+
+    assert!(arcs_at(60.0) >= 1, "two nearby conducting enemies should arc lightning");
+    assert_eq!(arcs_at(400.0), 0, "conducting enemies too far apart should not arc");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`
