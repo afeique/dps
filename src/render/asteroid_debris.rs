@@ -20,7 +20,7 @@
 //! `tick_lifetimes` path — no bespoke lifecycle. Deterministic (Wang-hashed off a
 //! `Local` counter), so it needs no `rand` dependency.
 
-use crate::components::{Lifetime, Velocity};
+use crate::components::{Burning, Lifetime, Velocity};
 use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::systems::asteroids::{AsteroidMaterial, ICO_EDGES};
@@ -477,5 +477,48 @@ pub fn fade_embers(mut q: Query<(&Ember, &Lifetime, &mut Transform)>) {
     for (em, life, mut tf) in &mut q {
         let frac = (life.seconds / em.max_life).clamp(0.0, 1.0);
         tf.scale = Vec3::splat(frac.sqrt());
+    }
+}
+
+/// Emit rising fire embers off burning enemies — the `Burning` status had only a
+/// ring aura; now each afflicted enemy trails hot orange motes that drift up and
+/// fade, so fire damage reads as actual flame. Throttled (a batch every
+/// `BURN_EMBER_INTERVAL`, capped per batch) so a screen of burning foes can't
+/// flood the field. Reuses the [`Ember`] primitive ([`fade_embers`] + the shared
+/// Velocity/Lifetime paths). Pure presentation.
+pub fn emit_burn_embers(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut acc: Local<f32>,
+    mut seed: Local<u32>,
+    burning: Query<&Transform, With<Burning>>,
+) {
+    const BURN_EMBER_INTERVAL: f32 = 0.07;
+    const MAX_PER_BATCH: usize = 40;
+    *acc += time.delta_secs();
+    if *acc < BURN_EMBER_INTERVAL {
+        return;
+    }
+    *acc = 0.0;
+    for (n, tf) in burning.iter().enumerate() {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        *seed = seed.wrapping_add(1);
+        let s = *seed;
+        let pos = tf.translation.truncate()
+            + Vec2::new(frand(s ^ 0x1, -8.0, 8.0), frand(s ^ 0x2, -6.0, 6.0));
+        let life = frand(s ^ 0x3, 0.4, 0.8);
+        let r = frand(s ^ 0x4, 1.5, 3.0);
+        // Hot pyro orange (HDR → bloom); green channel jitters for flame variety.
+        let color = Color::linear_rgb(9.0, frand(s ^ 0x5, 2.0, 4.0), 0.3);
+        commands.spawn((
+            Ember { max_life: life },
+            ember_disc(color, r),
+            Transform::from_translation(pos.extend(0.13)),
+            // Rise + a little lateral drift.
+            Velocity(Vec2::new(frand(s ^ 0x6, -15.0, 15.0), frand(s ^ 0x7, 30.0, 70.0))),
+            Lifetime { seconds: life },
+        ));
     }
 }

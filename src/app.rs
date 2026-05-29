@@ -330,6 +330,8 @@ impl Plugin for GamePlugin {
                     render::warp_in::tick_warp_in,
                     // Breathe the (now-visible) hazard danger zones.
                     systems::hazard::animate_hazards,
+                    // Rising fire embers off burning enemies.
+                    render::asteroid_debris::emit_burn_embers,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

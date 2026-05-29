@@ -693,6 +693,42 @@ fn conducting_enemies_arc_when_near_not_far() {
     assert_eq!(arcs_at(400.0), 0, "conducting enemies too far apart should not arc");
 }
 
+// ── 3k. burning_enemies_emit_rising_embers ───────────────────────────────────
+
+/// `emit_burn_embers` trails rising fire motes off a burning enemy once the emit
+/// interval elapses.
+#[test]
+fn burning_enemies_emit_rising_embers() {
+    use crate::components::Burning;
+    use crate::render::asteroid_debris::{Ember, emit_burn_embers};
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    world.spawn((Burning { dps: 5.0, secs: 3.0 }, Transform::default()));
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(100)); // past the emit interval
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(emit_burn_embers);
+    step.run(world);
+
+    let embers = world
+        .query_filtered::<Entity, With<Ember>>()
+        .iter(world)
+        .count();
+    assert_eq!(embers, 1, "a burning enemy should emit one rising ember per batch");
+
+    let vy = world
+        .query_filtered::<&Velocity, With<Ember>>()
+        .single(world)
+        .unwrap()
+        .0
+        .y;
+    assert!(vy > 0.0, "burn embers should rise (positive Y velocity)");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`
