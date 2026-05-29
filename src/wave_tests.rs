@@ -768,6 +768,31 @@ fn frozen_enemies_glint_with_ice() {
     assert_eq!(v, Vec2::ZERO, "ice glints are stationary, not drifting");
 }
 
+// ── 3m. banner_alpha_eases_in_and_out ────────────────────────────────────────
+
+/// The stage-banner / toast opacity curve is 0 at spawn, full mid-life, 0 at the
+/// end, ramping smoothly between — so transitions ease instead of popping.
+#[test]
+fn banner_alpha_eases_in_and_out() {
+    use crate::render::wave_title::banner_alpha;
+    let total = 2.8_f32;
+
+    assert!(banner_alpha(total, total) < 0.01, "fully transparent at spawn");
+    assert!(
+        (banner_alpha(total / 2.0, total) - 1.0).abs() < 1e-3,
+        "full opacity through the hold"
+    );
+    assert!(banner_alpha(0.0, total) < 0.01, "fully transparent at end");
+    assert!(
+        banner_alpha(total - 0.15, total) > banner_alpha(total, total),
+        "opacity rises during the fade-in"
+    );
+    assert!(
+        banner_alpha(0.2, total) < banner_alpha(0.6, total),
+        "opacity falls during the fade-out"
+    );
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

@@ -15,6 +15,18 @@ pub struct WaveTitle {
 
 const TITLE_LIFE: f32 = 2.8;
 
+/// Banner opacity over its life (counts down from `total` to 0): ramp up over the
+/// first `FADE_IN` s, hold at full, then ramp down over the last `FADE_OUT` s — so
+/// the stage banner / toast eases in and out instead of popping. Pure + tested.
+pub fn banner_alpha(life: f32, total: f32) -> f32 {
+    const FADE_IN: f32 = 0.3;
+    const FADE_OUT: f32 = 0.55;
+    let elapsed = total - life;
+    let fin = (elapsed / FADE_IN).clamp(0.0, 1.0);
+    let fout = (life / FADE_OUT).clamp(0.0, 1.0);
+    fin.min(fout)
+}
+
 /// Map a 1-based wave number to its "stage-substage" label: 3 waves per stage,
 /// so W1→"1-1", W3→"1-3", W4→"2-1", W30→"10-3" (spec V — 10 stages × 3).
 pub fn stage_label(wave: u64) -> String {
@@ -56,21 +68,31 @@ pub fn show_wave_title(
                     font_size: 44.0,
                     ..default()
                 },
-                TextColor(Color::srgb(0.7, 0.85, 1.0)),
+                // Start transparent; `tick_wave_title` fades it in (no 1-frame pop).
+                TextColor(Color::srgb(0.7, 0.85, 1.0).with_alpha(0.0)),
             ));
         });
 }
 
-/// Count down each banner and despawn it (with its child Text) at end of life.
+/// Count down each banner, ease its child Text's opacity in/out
+/// ([`banner_alpha`]), and despawn it (with its child Text) at end of life.
 pub fn tick_wave_title(
     time: Res<Time>,
     mut commands: Commands,
-    mut q: Query<(Entity, &mut WaveTitle)>,
+    mut q: Query<(Entity, &mut WaveTitle, &Children)>,
+    mut texts: Query<&mut TextColor>,
 ) {
-    for (e, mut t) in &mut q {
+    for (e, mut t, children) in &mut q {
         t.life -= time.delta_secs();
         if t.life <= 0.0 {
             commands.entity(e).despawn();
+            continue;
+        }
+        let a = banner_alpha(t.life, TITLE_LIFE);
+        for &child in children {
+            if let Ok(mut tc) = texts.get_mut(child) {
+                tc.0 = tc.0.with_alpha(a);
+            }
         }
     }
 }
@@ -137,21 +159,31 @@ pub fn show_pulse_toast(
                     font_size: 26.0,
                     ..default()
                 },
-                TextColor(Color::srgb(1.0, 0.6, 0.25)),
+                // Start transparent; faded in by `tick_pulse_toast`.
+                TextColor(Color::srgb(1.0, 0.6, 0.25).with_alpha(0.0)),
             ));
         });
 }
 
-/// Count down + despawn pulse toasts.
+/// Count down pulse toasts, ease their opacity in/out ([`banner_alpha`]), and
+/// despawn at end of life.
 pub fn tick_pulse_toast(
     time: Res<Time>,
     mut commands: Commands,
-    mut q: Query<(Entity, &mut PulseToast)>,
+    mut q: Query<(Entity, &mut PulseToast, &Children)>,
+    mut texts: Query<&mut TextColor>,
 ) {
-    for (e, mut t) in &mut q {
+    for (e, mut t, children) in &mut q {
         t.life -= time.delta_secs();
         if t.life <= 0.0 {
             commands.entity(e).despawn();
+            continue;
+        }
+        let a = banner_alpha(t.life, PULSE_TOAST_LIFE);
+        for &child in children {
+            if let Ok(mut tc) = texts.get_mut(child) {
+                tc.0 = tc.0.with_alpha(a);
+            }
         }
     }
 }
