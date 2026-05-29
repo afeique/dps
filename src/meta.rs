@@ -325,7 +325,10 @@ pub fn award_xp(
     upgrades: Res<crate::systems::shop::Upgrades>,
 ) {
     use crate::systems::shop::{xp_boost_mult, UpgradeId};
-    let mult = xp_boost_mult(upgrades.owned(UpgradeId::XpBoost));
+    // XP scales by the XP Boost passive × the run difficulty (harder = more XP,
+    // matching the difficulty gold reward — the risk/reward half of Phase X).
+    let mult = xp_boost_mult(upgrades.owned(UpgradeId::XpBoost))
+        * crate::systems::difficulty::difficulty_reward_mult(meta.difficulty);
     for d in deaths.read() {
         if d.kind.is_some() {
             let base = if d.boss_tier > 0 { XP_PER_BOSS } else { XP_PER_KILL };

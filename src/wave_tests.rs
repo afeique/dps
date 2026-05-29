@@ -4158,6 +4158,27 @@ fn run_difficulty_scales_enemy_hp() {
 
     let m = Meta { difficulty: 2, ..Default::default() };
     assert_eq!(Meta::from_ron(&m.to_ron()).difficulty, 2, "difficulty persists");
+
+    // Difficulty also scales the XP reward (risk/reward for progression).
+    use crate::meta::{award_xp, XP_PER_KILL};
+    let mut app = test_app();
+    app.world_mut().resource_mut::<Meta>().difficulty = 2; // Brutal → ×1.7
+    let world = app.world_mut();
+    world.write_message(Death {
+        entity: Entity::PLACEHOLDER,
+        position: Vec2::ZERO,
+        kind: Some(EnemyKind::Hunter),
+        boss_tier: 0,
+        mini_boss: false,
+    });
+    let mut step = Schedule::default();
+    step.add_systems(award_xp);
+    step.run(world);
+    assert_eq!(
+        world.resource::<Meta>().xp,
+        (XP_PER_KILL as f32 * 1.7).round() as u64,
+        "Brutal scales the per-kill XP reward"
+    );
 }
 
 /// The boss healthbar picks the lowest-HP boss to display, and shows nothing
