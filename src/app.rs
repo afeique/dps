@@ -311,6 +311,9 @@ impl Plugin for GamePlugin {
                     // Asteroid death burst: hue-matched 3D wireframe shards + a
                     // colored ring on every shatter (port of `createDebris` §7b).
                     render::asteroid_debris::spawn_asteroid_debris,
+                    // Element-tinted shrapnel shards on every enemy death (same
+                    // wireframe-shard primitive, tinted to the kill's element).
+                    render::asteroid_debris::spawn_enemy_shrapnel,
                     render::asteroid_debris::tumble_shards,
                 )
                     .chain()

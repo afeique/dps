@@ -356,6 +356,56 @@ fn enemy_death_spawns_wavefront_rings() {
     );
 }
 
+// ── 3d. enemy_death_spawns_element_shrapnel ──────────────────────────────────
+
+/// Each enemy death sprays a fan of element-tinted wireframe shards
+/// (`render::asteroid_debris::spawn_enemy_shrapnel`): 6 for a normal enemy,
+/// `6 + tier*4` for a boss. The player's own death (`kind == None`) sprays none.
+#[test]
+fn enemy_death_spawns_element_shrapnel() {
+    use crate::render::asteroid_debris::{AsteroidShard, spawn_enemy_shrapnel};
+
+    fn shards_for(kind: Option<EnemyKind>, boss_tier: u8) -> usize {
+        let mut app = App::new();
+        app.add_message::<Death>();
+        let world = app.world_mut();
+
+        let seed = move |mut w: MessageWriter<Death>| {
+            w.write(Death {
+                entity: Entity::PLACEHOLDER,
+                position: Vec2::ZERO,
+                kind,
+                boss_tier,
+                mini_boss: false,
+            });
+        };
+        let mut step = Schedule::default();
+        step.add_systems((seed, spawn_enemy_shrapnel).chain());
+        step.run(world);
+
+        world
+            .query_filtered::<Entity, With<AsteroidShard>>()
+            .iter(world)
+            .count()
+    }
+
+    assert_eq!(
+        shards_for(Some(EnemyKind::Hunter), 0),
+        6,
+        "a normal enemy death should spray 6 element-tinted shards"
+    );
+    assert_eq!(
+        shards_for(Some(EnemyKind::Hunter), 3),
+        18,
+        "a tier-3 boss death should spray 6 + tier*4 = 18 shards"
+    );
+    assert_eq!(
+        shards_for(None, 0),
+        0,
+        "the player's own death (kind None) should spray no shards"
+    );
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`

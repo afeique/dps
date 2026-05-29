@@ -1,10 +1,15 @@
-//! Asteroid death burst — the port of rainboids' `createDebris`
-//! (`combat-manager.js` §7b) + `asteroid-shard.js`. When a player bullet
-//! shatters an asteroid (`systems::asteroids::asteroid_hits` → `AsteroidShatter`),
-//! we spawn a radial fan of **3D-tumbling wireframe triangles** plus one
-//! expanding colored ring — all tinted from the rock's own live HSL so the burst
-//! reads as that specific rock breaking apart, matching the wireframe-asteroid
-//! visual language (stroke-only triangles, no fill) rather than a generic puff.
+//! Wireframe-shard death bursts — the port of rainboids' `createDebris`
+//! (`combat-manager.js` §7b) + `asteroid-shard.js`. The signature primitive is a
+//! radial fan of **3D-tumbling wireframe triangles** ([`burst_shards`]), reused
+//! by two events:
+//!   * **Asteroid shatter** (`spawn_asteroid_debris` ← `AsteroidShatter`): shards
+//!     in the rock's own live HSL + one expanding colored ring, so the burst
+//!     reads as that specific rock breaking apart.
+//!   * **Enemy death** (`spawn_enemy_shrapnel` ← `Death`): a modest fan tinted to
+//!     the kill's damage element, completing the kill burst alongside the fire
+//!     core (`render::explosion`) + wavefront rings (`reaction_fx`).
+//! Stroke-only triangles (no fill) match the wireframe-asteroid visual language
+//! rather than a generic puff.
 //!
 //! Each shard is an equilateral triangle in 3D unit space, spun on all three
 //! axes (`spin`) and perspective-projected each frame; `tumble_shards` rebuilds
@@ -16,9 +21,10 @@
 //! `Local` counter), so it needs no `rand` dependency.
 
 use crate::components::{Lifetime, Velocity};
-use crate::messages::AsteroidShatter;
+use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::systems::asteroids::AsteroidMaterial;
+use crate::systems::enemy::element_for;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -115,48 +121,108 @@ pub fn spawn_asteroid_debris(
 
         // 10 shards for small rocks → ~28 for the largest (§7b `10 + 12*scale`).
         let count = (10.0 + 12.0 * size_scale) as u32;
-        for i in 0..count {
-            *seed = seed.wrapping_add(1);
-            let s = *seed;
-            // Evenly-spaced angles + jitter so the burst reads as an organic
-            // shatter, not a fixed pinwheel.
-            let angle = (i as f32 / count as f32) * TAU + frand(s ^ 0x1, -0.35, 0.35);
-            let speed = frand(s ^ 0x2, 110.0, 280.0) * size_scale.max(0.6);
-            let size = frand(s ^ 0x3, 4.0, 9.0);
-            let max_life = frand(s ^ 0x4, 1.1, 1.7);
-            // Most shards take the rock's color; every 5th is a white spark pop.
-            let color = if i % 5 == 0 {
-                [1.0, 1.0, 1.0]
-            } else if i % 3 == 0 {
-                bright
-            } else if i % 3 == 1 {
-                base
-            } else {
-                dim
-            };
-            let dir = Vec2::new(angle.cos(), angle.sin());
-            commands.spawn((
-                AsteroidShard {
-                    rot: Quat::from_euler(
-                        EulerRot::XYZ,
-                        frand(s ^ 0x5, 0.0, TAU),
-                        frand(s ^ 0x6, 0.0, TAU),
-                        frand(s ^ 0x7, 0.0, TAU),
-                    ),
-                    spin: Vec3::new(
-                        frand(s ^ 0x8, -5.0, 5.0),
-                        frand(s ^ 0x9, -7.0, 7.0),
-                        frand(s ^ 0xA, -9.0, 9.0),
-                    ),
-                    size,
-                    color,
-                    max_life,
-                },
-                Transform::from_translation(ev.center.extend(0.16)),
-                Velocity(dir * speed),
-                Lifetime { seconds: max_life },
-            ));
-        }
+        burst_shards(
+            &mut commands,
+            &mut seed,
+            ev.center,
+            0.16,
+            count,
+            size_scale.max(0.6),
+            base,
+            bright,
+            dim,
+        );
+    }
+}
+
+/// Spawn a radial fan of `count` tumbling wireframe-triangle shards from
+/// `center` at depth `z`, cycling the `base`/`bright`/`dim` palette (every 5th a
+/// white spark) with jittered angles, fly-out speed (`110..280 × speed_scale`),
+/// size, spin, and lifetime. Shared by the asteroid shatter and the enemy-death
+/// shrapnel — the `AsteroidShard`/`tumble_shards` primitive is source-agnostic.
+/// Advances `seed` per shard so repeated bursts don't stamp identical fans.
+#[allow(clippy::too_many_arguments)]
+fn burst_shards(
+    commands: &mut Commands,
+    seed: &mut u32,
+    center: Vec2,
+    z: f32,
+    count: u32,
+    speed_scale: f32,
+    base: [f32; 3],
+    bright: [f32; 3],
+    dim: [f32; 3],
+) {
+    for i in 0..count {
+        *seed = seed.wrapping_add(1);
+        let s = *seed;
+        // Evenly-spaced angles + jitter so the burst reads as an organic
+        // shatter, not a fixed pinwheel.
+        let angle = (i as f32 / count.max(1) as f32) * TAU + frand(s ^ 0x1, -0.35, 0.35);
+        let speed = frand(s ^ 0x2, 110.0, 280.0) * speed_scale;
+        let size = frand(s ^ 0x3, 4.0, 9.0);
+        let max_life = frand(s ^ 0x4, 1.1, 1.7);
+        // Most shards take the source color; every 5th is a white spark pop.
+        let color = if i % 5 == 0 {
+            [1.0, 1.0, 1.0]
+        } else if i % 3 == 0 {
+            bright
+        } else if i % 3 == 1 {
+            base
+        } else {
+            dim
+        };
+        let dir = Vec2::new(angle.cos(), angle.sin());
+        commands.spawn((
+            AsteroidShard {
+                rot: Quat::from_euler(
+                    EulerRot::XYZ,
+                    frand(s ^ 0x5, 0.0, TAU),
+                    frand(s ^ 0x6, 0.0, TAU),
+                    frand(s ^ 0x7, 0.0, TAU),
+                ),
+                spin: Vec3::new(
+                    frand(s ^ 0x8, -5.0, 5.0),
+                    frand(s ^ 0x9, -7.0, 7.0),
+                    frand(s ^ 0xA, -9.0, 9.0),
+                ),
+                size,
+                color,
+                max_life,
+            },
+            Transform::from_translation(center.extend(z)),
+            Velocity(dir * speed),
+            Lifetime { seconds: max_life },
+        ));
+    }
+}
+
+/// Element-tinted shrapnel shards on each enemy death — the directional shard
+/// layer of `createDebris` (§7b), reusing [`burst_shards`]. Completes the
+/// enemy-kill burst alongside the white-hot fire core (`render::explosion`) and
+/// the element wavefront rings (`reaction_fx::spawn_death_rings`): a modest fan
+/// of wireframe triangles tinted to the kill's damage element, scaling with boss
+/// tier / mini-boss. Player death (`kind == None`) is skipped — its FX is the
+/// explosion + screen shake + flash, not a hue-coded shatter.
+pub fn spawn_enemy_shrapnel(
+    mut commands: Commands,
+    mut deaths: MessageReader<Death>,
+    mut seed: Local<u32>,
+) {
+    for d in deaths.read() {
+        let Some(kind) = d.kind else { continue }; // skip the player's own death
+        let c = element_for(kind).color().to_linear();
+        let base = [c.red, c.green, c.blue];
+        // Bright = pushed toward white for the highlight shards; dim = darkened.
+        let bright = [
+            (c.red * 1.4 + 0.2).min(1.0),
+            (c.green * 1.4 + 0.2).min(1.0),
+            (c.blue * 1.4 + 0.2).min(1.0),
+        ];
+        let dim = [c.red * 0.55, c.green * 0.55, c.blue * 0.55];
+        // Modest fan (enemies die far more often than rocks) + a boss bonus.
+        let count = 6 + d.boss_tier as u32 * 4 + if d.mini_boss { 3 } else { 0 };
+        burst_shards(&mut commands, &mut seed, d.position, 0.16, count, 0.7, base, bright, dim);
     }
 }
 
