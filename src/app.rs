@@ -332,6 +332,8 @@ impl Plugin for GamePlugin {
                     systems::hazard::animate_hazards,
                     // Rising fire embers off burning enemies.
                     render::asteroid_debris::emit_burn_embers,
+                    // Glinting ice sparkles on frozen enemies.
+                    render::asteroid_debris::emit_frozen_glints,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

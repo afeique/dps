@@ -20,7 +20,7 @@
 //! `tick_lifetimes` path — no bespoke lifecycle. Deterministic (Wang-hashed off a
 //! `Local` counter), so it needs no `rand` dependency.
 
-use crate::components::{Burning, Lifetime, Velocity};
+use crate::components::{Burning, Collider, Frozen, Lifetime, Velocity};
 use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::systems::asteroids::{AsteroidMaterial, ICO_EDGES};
@@ -518,6 +518,47 @@ pub fn emit_burn_embers(
             Transform::from_translation(pos.extend(0.13)),
             // Rise + a little lateral drift.
             Velocity(Vec2::new(frand(s ^ 0x6, -15.0, 15.0), frand(s ^ 0x7, 30.0, 70.0))),
+            Lifetime { seconds: life },
+        ));
+    }
+}
+
+/// Glinting ice sparkles on frozen enemies — `Frozen` had only a ring aura; now
+/// each iced foe twinkles with tiny stationary cyan-white motes popping at random
+/// points within its body, so a freeze reads as "encased in shimmering ice".
+/// Throttled batch (every `GLINT_INTERVAL`, capped); reuses the [`Ember`]
+/// primitive (Bloom turns each bright dot into a soft star). Pure presentation.
+pub fn emit_frozen_glints(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut acc: Local<f32>,
+    mut seed: Local<u32>,
+    frozen: Query<(&Transform, &Collider), With<Frozen>>,
+) {
+    const GLINT_INTERVAL: f32 = 0.11;
+    const MAX_PER_BATCH: usize = 30;
+    *acc += time.delta_secs();
+    if *acc < GLINT_INTERVAL {
+        return;
+    }
+    *acc = 0.0;
+    for (n, (tf, col)) in frozen.iter().enumerate() {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        *seed = seed.wrapping_add(1);
+        let s = *seed;
+        // A random point inside the enemy's body so the shimmer covers it.
+        let ang = frand(s ^ 0x1, 0.0, TAU);
+        let rad = frand(s ^ 0x2, 0.0, col.radius * 0.9);
+        let pos = tf.translation.truncate() + Vec2::new(ang.cos(), ang.sin()) * rad;
+        let life = frand(s ^ 0x3, 0.25, 0.5);
+        let r = frand(s ^ 0x4, 1.0, 2.2);
+        commands.spawn((
+            Ember { max_life: life },
+            ember_disc(Color::linear_rgb(6.0, 8.5, 9.0), r), // icy white-cyan
+            Transform::from_translation(pos.extend(0.14)),
+            Velocity(Vec2::ZERO), // a stationary glint, not a drifting ember
             Lifetime { seconds: life },
         ));
     }

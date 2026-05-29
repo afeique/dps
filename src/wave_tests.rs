@@ -729,6 +729,45 @@ fn burning_enemies_emit_rising_embers() {
     assert!(vy > 0.0, "burn embers should rise (positive Y velocity)");
 }
 
+// ── 3l. frozen_enemies_glint_with_ice ────────────────────────────────────────
+
+/// `emit_frozen_glints` twinkles ice motes on a frozen enemy once the glint
+/// interval elapses; unlike burn embers they're stationary.
+#[test]
+fn frozen_enemies_glint_with_ice() {
+    use crate::components::Frozen;
+    use crate::render::asteroid_debris::{Ember, emit_frozen_glints};
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    world.spawn((
+        Frozen { secs: 2.0 },
+        Collider { radius: 16.0 },
+        Transform::default(),
+    ));
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(150)); // past the glint interval
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(emit_frozen_glints);
+    step.run(world);
+
+    let glints = world
+        .query_filtered::<Entity, With<Ember>>()
+        .iter(world)
+        .count();
+    assert_eq!(glints, 1, "a frozen enemy should glint one ice mote per batch");
+
+    let v = world
+        .query_filtered::<&Velocity, With<Ember>>()
+        .single(world)
+        .unwrap()
+        .0;
+    assert_eq!(v, Vec2::ZERO, "ice glints are stationary, not drifting");
+}
+
 // ── 4. firing_enemy_emits_fire ────────────────────────────────────────────────
 
 /// An enemy whose `FireCooldown.timer == 0` should emit at least one `Fire`
