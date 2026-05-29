@@ -114,6 +114,7 @@ impl Plugin for GamePlugin {
                     (
                         render::damage_numbers::spawn_damage_numbers,
                         render::damage_numbers::spawn_dodge_text,
+                        render::damage_numbers::spawn_crit_text,
                         render::damage_numbers::heal_numbers,
                         render::damage_numbers::float_damage_numbers,
                     ),

@@ -53,11 +53,14 @@ pub struct PlayerHurt {
     pub amount: f32,
 }
 
-/// A player bullet landed a critical hit. Emitted by `collision::bullet_hits_enemy`
-/// when `roll_crit` returns a >1× multiplier; consumed by the `precision` mission
-/// (spec V.6) to count crits this wave.
+/// A player bullet landed a critical hit at `pos`. Emitted by
+/// `collision::bullet_hits_enemy` when `roll_crit` returns a >1× multiplier;
+/// consumed by the `precision` mission (spec V.6, counts crits) + the crit SFX
+/// (`audio::play_crit`) + the floating "CRIT!" text (`render::damage_numbers`).
 #[derive(Message, Debug, Clone, Copy)]
-pub struct Crit;
+pub struct Crit {
+    pub pos: Vec2,
+}
 
 /// The player collected an orb or powerup this frame (emitted by `drops::collect_orbs`
 /// / `powerups::collect_powerups`). Drives the pickup chime (`audio::play_pickup`),

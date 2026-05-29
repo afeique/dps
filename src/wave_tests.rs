@@ -4226,6 +4226,21 @@ fn heal_numbers_float_on_hp_gain() {
     assert_eq!(count(world), 1, "HP loss floats nothing");
 }
 
+/// A `Crit` event floats a "CRIT!" label (drives the orange crit text).
+#[test]
+fn crit_event_floats_crit_text() {
+    use crate::messages::Crit;
+    use crate::render::damage_numbers::{spawn_crit_text, DamageNumber};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.write_message(Crit { pos: Vec2::new(10.0, 20.0) });
+    let mut step = Schedule::default();
+    step.add_systems(spawn_crit_text);
+    step.run(world);
+    assert_eq!(world.query::<&DamageNumber>().iter(world).count(), 1, "a crit floats one CRIT! label");
+}
+
 /// `update_boss_parts` parks a part at boss-pos + offset, and despawns it once
 /// the boss is gone.
 #[test]
@@ -5075,13 +5090,13 @@ fn mission_precision_counts_crits() {
 
     // 24 crits → still incomplete.
     for _ in 0..24 {
-        world.write_message(Crit);
+        world.write_message(Crit { pos: Vec2::ZERO });
     }
     step.run(world);
     assert!(!world.resource::<Mission>().done, "24 crits is not enough");
 
     // One more (25 total) → complete.
-    world.write_message(Crit);
+    world.write_message(Crit { pos: Vec2::ZERO });
     step.run(world);
     assert!(world.resource::<Mission>().done, "25 crits completes Precision");
 }

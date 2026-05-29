@@ -217,7 +217,8 @@ pub fn bullet_hits_enemy(
                 // Streak multiplier × per-hit crit roll (spec III.6).
                 let crit_mult = roll_crit(&mut rng, crit_p, crit_dmg_stacks, crit_dmg_bonus);
                 if crit_mult > 1.0 {
-                    crits.write(crate::messages::Crit); // feeds the precision mission
+                    // feeds the precision mission + the crit SFX + the "CRIT!" text
+                    crits.write(crate::messages::Crit { pos: etf.translation.truncate() });
                 }
                 // EXECUTIONER: extra damage vs an enemy already below 25% HP.
                 let exec = if exec_bonus > 0.0 && ehp.current < ehp.max * EXECUTE_THRESHOLD {

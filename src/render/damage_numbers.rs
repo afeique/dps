@@ -93,6 +93,27 @@ pub fn heal_numbers(
     *prev = Some(hp.current);
 }
 
+/// Spawn a floating orange "CRIT!" at each critical hit (reuses `DamageNumber`
+/// so it drifts + fades), offset above the hit so it reads alongside the damage
+/// number. Reads `Crit` from `bullet_hits_enemy`.
+pub fn spawn_crit_text(mut commands: Commands, mut crits: MessageReader<crate::messages::Crit>) {
+    for ev in crits.read() {
+        commands.spawn((
+            DamageNumber {
+                life: LIFE,
+                max_life: LIFE,
+            },
+            Text2d::new("CRIT!"),
+            TextFont {
+                font_size: 15.0,
+                ..default()
+            },
+            TextColor(Color::srgb(1.0, 0.55, 0.1)), // hot orange
+            Transform::from_translation((ev.pos + Vec2::new(0.0, 30.0)).extend(3.0)),
+        ));
+    }
+}
+
 /// Spawn a floating cyan "DODGE" at each evade (reuses `DamageNumber` so
 /// `float_damage_numbers` drifts + fades it). Reads `Dodged` from `apply_damage`.
 pub fn spawn_dodge_text(
