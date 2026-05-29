@@ -3719,6 +3719,13 @@ fn minimap_maps_world_to_panel() {
 
     let c = world_to_minimap(Vec2::new(9_999.0, -9_999.0), half, size);
     assert!((0.0..=150.0).contains(&c.x) && (0.0..=150.0).contains(&c.y), "clamps in-bounds");
+
+    // A boss minimap dot is larger + a different colour than a regular enemy's.
+    use crate::render::minimap::dot_style;
+    let (boss_sz, boss_col) = dot_style(true);
+    let (enemy_sz, enemy_col) = dot_style(false);
+    assert!(boss_sz > enemy_sz, "boss dot is larger");
+    assert_ne!(boss_col, enemy_col, "boss dot is a distinct colour");
 }
 
 // ── 33. wave_start_spawns_asteroids ───────────────────────────────────────────

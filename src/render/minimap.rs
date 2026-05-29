@@ -6,7 +6,7 @@
 //! positions are panel-relative). `world_to_minimap` — the world→panel mapping —
 //! is the unit-tested core; the dot rendering itself is visual.
 
-use crate::components::{Enemy, Ship};
+use crate::components::{Boss, Enemy, Ship};
 use crate::resources::PlayBounds;
 use bevy::prelude::*;
 
@@ -55,15 +55,25 @@ fn dot_node(m: Vec2, sz: f32) -> Node {
     }
 }
 
-/// Rebuild the minimap dots each frame: red for enemies, a brighter cyan for the
-/// player.
+/// Minimap dot size + colour by role: a larger amber dot for a boss (so the
+/// player can locate it), a small red dot for a regular enemy. Pure for testing.
+pub fn dot_style(is_boss: bool) -> (f32, Color) {
+    if is_boss {
+        (6.0, Color::srgb(1.0, 0.7, 0.2)) // amber, larger — the boss
+    } else {
+        (3.0, Color::srgb(1.0, 0.3, 0.3)) // red — a regular enemy
+    }
+}
+
+/// Rebuild the minimap dots each frame: a big amber dot for bosses, small red
+/// for enemies, a brighter cyan for the player.
 pub fn update_minimap(
     mut commands: Commands,
     bounds: Res<PlayBounds>,
     panel: Query<Entity, With<MinimapPanel>>,
     dots: Query<Entity, With<MinimapDot>>,
     player: Query<&Transform, With<Ship>>,
-    enemies: Query<&Transform, With<Enemy>>,
+    enemies: Query<(&Transform, Has<Boss>), With<Enemy>>,
 ) {
     let Ok(panel) = panel.single() else {
         return;
@@ -73,13 +83,10 @@ pub fn update_minimap(
     }
     let half = bounds.half;
     commands.entity(panel).with_children(|p| {
-        for etf in enemies.iter().take(MAX_DOTS) {
+        for (etf, is_boss) in enemies.iter().take(MAX_DOTS) {
             let m = world_to_minimap(etf.translation.truncate(), half, MAP_SIZE);
-            p.spawn((
-                MinimapDot,
-                dot_node(m, 3.0),
-                BackgroundColor(Color::srgb(1.0, 0.3, 0.3)),
-            ));
+            let (size, color) = dot_style(is_boss);
+            p.spawn((MinimapDot, dot_node(m, size), BackgroundColor(color)));
         }
         if let Ok(ptf) = player.single() {
             let m = world_to_minimap(ptf.translation.truncate(), half, MAP_SIZE);
