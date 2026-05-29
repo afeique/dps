@@ -317,6 +317,8 @@ impl Plugin for GamePlugin {
                     // wireframe-shard primitive, tinted to the kill's element).
                     render::asteroid_debris::spawn_enemy_shrapnel,
                     render::asteroid_debris::tumble_shards,
+                    // Line debris: the rock's broken wireframe struts drift apart.
+                    render::asteroid_debris::tick_line_debris,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

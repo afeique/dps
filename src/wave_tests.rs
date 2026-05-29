@@ -306,6 +306,48 @@ fn shooting_an_asteroid_emits_a_shatter_vfx() {
     );
 }
 
+// ── 3b-ii. asteroid_shatter_spawns_wireframe_line_debris ─────────────────────
+
+/// The shatter flings one line-debris strut per icosahedron edge (30) — the
+/// rock's wireframe cage coming apart (`render::asteroid_debris`, createDebris §7).
+#[test]
+fn asteroid_shatter_spawns_wireframe_line_debris() {
+    use crate::messages::AsteroidShatter;
+    use crate::render::asteroid_debris::{LineDebris, spawn_asteroid_debris};
+
+    let mut app = App::new();
+    app.add_message::<AsteroidShatter>();
+    let world = app.world_mut();
+
+    // Non-degenerate projected verts so the struts have length + off-origin mids.
+    let mut verts = [Vec2::ZERO; 12];
+    for (i, v) in verts.iter_mut().enumerate() {
+        *v = Vec2::new(i as f32 * 6.0 - 33.0, i as f32 * 3.0 - 18.0);
+    }
+    let seed = move |mut w: MessageWriter<AsteroidShatter>| {
+        w.write(AsteroidShatter {
+            center: Vec2::ZERO,
+            hue: 200.0,
+            sat: 0.9,
+            light: 0.6,
+            radius: 38.0,
+            verts,
+        });
+    };
+    let mut step = Schedule::default();
+    step.add_systems((seed, spawn_asteroid_debris).chain());
+    step.run(world);
+
+    let lines = world
+        .query_filtered::<Entity, With<LineDebris>>()
+        .iter(world)
+        .count();
+    assert_eq!(
+        lines, 30,
+        "a shatter should fling one line-debris strut per icosahedron edge (30)"
+    );
+}
+
 // ── 3c. enemy_death_spawns_wavefront_rings ───────────────────────────────────
 
 /// Each enemy death lays down element-tinted wavefront rings

@@ -370,11 +370,11 @@ pub fn asteroid_hits(
             // a ring, fired whether it splits into children or is destroyed
             // outright. Use the rock's live HSL so the debris is its own color;
             // fall back to a warm grey for tumbler-less (test) asteroids.
-            let (hue, sat, light, radius) = match tumbler {
-                Some(t) => (t.hue, t.sat, t.light, t.radius),
-                None => (40.0, 0.2, 0.6, shape_base_radius(asteroid.tier)),
+            let (hue, sat, light, radius, verts) = match tumbler {
+                Some(t) => (t.hue, t.sat, t.light, t.radius, project(&t.verts, t.rot)),
+                None => (40.0, 0.2, 0.6, shape_base_radius(asteroid.tier), [Vec2::ZERO; 12]),
             };
-            shatter.write(AsteroidShatter { center: pos, hue, sat, light, radius });
+            shatter.write(AsteroidShatter { center: pos, hue, sat, light, radius, verts });
 
             commands.entity(ast_e).despawn();
 

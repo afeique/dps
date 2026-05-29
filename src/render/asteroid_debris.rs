@@ -23,7 +23,7 @@
 use crate::components::{Lifetime, Velocity};
 use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
-use crate::systems::asteroids::AsteroidMaterial;
+use crate::systems::asteroids::{AsteroidMaterial, ICO_EDGES};
 use crate::systems::enemy::element_for;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -51,6 +51,11 @@ const EDGE_HALF_W: f32 = 1.0;
 const HDR_GAIN: f32 = 2.4;
 /// Extra HDR gain on the wavefront ring so it pops brighter than the shards.
 const RING_GAIN: f32 = 3.2;
+/// Half-width (px) of a line-debris strut quad.
+const LINE_HALF_W: f32 = 1.1;
+/// HDR gain on the line-debris color — a touch under the shards since the struts
+/// are numerous; keeps them from washing out the bloom.
+const LINE_HDR_GAIN: f32 = 2.2;
 
 // ─── deterministic hash helpers (dependency-free, like systems::asteroids) ───
 
@@ -132,6 +137,37 @@ pub fn spawn_asteroid_debris(
             bright,
             dim,
         );
+
+        // Line debris (§7): the rock's broken wireframe struts detach and drift
+        // apart — one segment per icosahedron edge, in the rock's base color,
+        // flying outward from its midpoint, spinning, and fading fast (~0.8s).
+        // Built from the verts captured at the break, so the cage that flies
+        // apart is the exact one the player was looking at.
+        for &(a, b) in ICO_EDGES.iter() {
+            *seed = seed.wrapping_add(1);
+            let s = *seed;
+            let (p1, p2) = (ev.verts[a], ev.verts[b]);
+            let mid = (p1 + p2) * 0.5;
+            let dir = if mid.length_squared() < 0.01 {
+                let ang = frand(s ^ 0xB1, 0.0, TAU);
+                Vec2::new(ang.cos(), ang.sin())
+            } else {
+                mid.normalize()
+            };
+            let life = frand(s ^ 0xB4, 0.6, 0.95);
+            commands.spawn((
+                LineDebris {
+                    p1,
+                    p2,
+                    color: base,
+                    max_life: life,
+                    spin: frand(s ^ 0xB3, -3.0, 3.0),
+                },
+                Transform::from_translation(ev.center.extend(0.17)),
+                Velocity(dir * frand(s ^ 0xB2, 80.0, 200.0)),
+                Lifetime { seconds: life },
+            ));
+        }
     }
 }
 
@@ -296,6 +332,79 @@ pub fn tumble_shards(
                 }
             }
             None => {
+                let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+                    .with_inserted_indices(Indices::U32(idx));
+                commands
+                    .entity(e)
+                    .insert((Mesh2d(meshes.add(mesh)), MeshMaterial2d(mat.0.clone())));
+            }
+        }
+    }
+}
+
+// ─── Line debris — the rock's detached wireframe struts (createDebris §7) ─────
+
+/// One detached wireframe strut. The segment (`p1`→`p2`, local offsets from the
+/// entity origin) is baked into the mesh; the entity spins via its Transform,
+/// drifts via `Velocity`, and fades its HDR brightness with remaining life.
+#[derive(Component)]
+pub struct LineDebris {
+    p1: Vec2,
+    p2: Vec2,
+    color: [f32; 3],
+    max_life: f32,
+    /// In-plane spin (rad/sec).
+    spin: f32,
+}
+
+/// Build a single edge as a thin quad in `color` (4 verts, 2 tris).
+fn edge_quad(p1: Vec2, p2: Vec2, color: [f32; 4]) -> (Vec<[f32; 3]>, Vec<[f32; 4]>, Vec<u32>) {
+    let dir = (p2 - p1).normalize_or_zero();
+    let perp = Vec2::new(-dir.y, dir.x) * LINE_HALF_W;
+    let pts = [p1 + perp, p1 - perp, p2 - perp, p2 + perp];
+    let pos = pts.iter().map(|p| [p.x, p.y, 0.0]).collect();
+    let col = vec![color; 4];
+    let idx = vec![0, 1, 2, 0, 2, 3];
+    (pos, col, idx)
+}
+
+/// Spin + drift + fade each strut. The segment geometry is static, so after the
+/// lazy first-frame attach this only refreshes the COLOR attribute (brightness
+/// rides remaining life). Despawn is the shared `Lifetime`/`tick_lifetimes` path.
+pub fn tick_line_debris(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mat: Res<AsteroidMaterial>,
+    mut q: Query<(
+        Entity,
+        &LineDebris,
+        &Lifetime,
+        &mut Velocity,
+        &mut Transform,
+        Option<&Mesh2d>,
+    )>,
+) {
+    let dt = time.delta_secs();
+    // Gentle drag so struts ease to a drift as they fade.
+    let drag = 0.97_f32.powf(dt * 60.0);
+    for (e, ld, life, mut vel, mut tf, mesh2d) in &mut q {
+        tf.rotation *= Quat::from_rotation_z(ld.spin * dt);
+        vel.0 *= drag;
+        let frac = (life.seconds / ld.max_life).clamp(0.0, 1.0);
+        let b = LINE_HDR_GAIN * frac;
+        let c = [ld.color[0] * b, ld.color[1] * b, ld.color[2] * b, 1.0];
+        match mesh2d {
+            Some(m) => {
+                if let Some(mesh) = meshes.get_mut(&m.0) {
+                    // Positions are static — only the fading color changes.
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![c; 4]);
+                }
+            }
+            None => {
+                let (pos, col, idx) = edge_quad(ld.p1, ld.p2, c);
                 let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
                     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
                     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)

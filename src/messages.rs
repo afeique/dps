@@ -100,6 +100,11 @@ pub struct AsteroidShatter {
     pub sat: f32,
     pub light: f32,
     pub radius: f32,
+    /// The rock's 12 projected wireframe vertices (screen offsets from `center`)
+    /// at the instant it broke, so the line-debris struts (`createDebris` §7)
+    /// match the cage the player was looking at. `ZERO`-filled for tumbler-less
+    /// (test) asteroids — the line debris then degenerate to nothing.
+    pub verts: [Vec2; 12],
 }
 
 /// Which reaction fired — selects the shockwave's color + radius.
