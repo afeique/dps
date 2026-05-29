@@ -4201,6 +4201,31 @@ fn dodge_emits_a_dodged_event() {
     assert!(dodges(true) > 0, "Dodge (50% cap) over 60 hits → ≥1 evade event (0.5^60 ≈ 0)");
 }
 
+/// A jump in player HP floats a green "+N" heal number; an HP loss floats nothing.
+#[test]
+fn heal_numbers_float_on_hp_gain() {
+    use crate::components::Ship;
+    use crate::render::damage_numbers::{heal_numbers, DamageNumber};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let player = world.spawn((Ship::default(), Health::new(40.0), Transform::default())).id();
+    let mut step = Schedule::default();
+    step.add_systems(heal_numbers);
+    let count = |w: &mut World| w.query::<&DamageNumber>().iter(w).count();
+
+    step.run(world); // first sighting → adopt 40, no number
+    assert_eq!(count(world), 0, "no number on first sighting");
+
+    world.get_mut::<Health>(player).unwrap().current = 55.0;
+    step.run(world);
+    assert_eq!(count(world), 1, "HP gain floats one +N");
+
+    world.get_mut::<Health>(player).unwrap().current = 50.0;
+    step.run(world);
+    assert_eq!(count(world), 1, "HP loss floats nothing");
+}
+
 /// `update_boss_parts` parks a part at boss-pos + offset, and despawns it once
 /// the boss is gone.
 #[test]

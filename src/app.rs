@@ -109,9 +109,14 @@ impl Plugin for GamePlugin {
                     render::hud::update_boss_bar,
                     render::hud::update_ability_bar,
                     render::cursor::update_crosshair,
-                    render::damage_numbers::spawn_damage_numbers,
-                    render::damage_numbers::spawn_dodge_text,
-                    render::damage_numbers::float_damage_numbers,
+                    // Floating combat text (damage / dodge / heal) — nested as one
+                    // element so the outer Update tuple stays under Bevy's 20 limit.
+                    (
+                        render::damage_numbers::spawn_damage_numbers,
+                        render::damage_numbers::spawn_dodge_text,
+                        render::damage_numbers::heal_numbers,
+                        render::damage_numbers::float_damage_numbers,
+                    ),
                     // Item UI: left-edge loot feed (drain → cards, age out) +
                     // the right-edge equipped-gear panel. Nested as one element
                     // so the outer Update tuple stays within Bevy's 20 limit.

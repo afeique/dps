@@ -7,7 +7,7 @@
 //! is already despawned this tick are skipped (the explosion covers the kill).
 //! Deferred from spec: crit gold / heal green / per-pattern styling.
 
-use crate::components::Ship;
+use crate::components::{Health, Ship};
 use crate::messages::Damage;
 use bevy::prelude::*;
 
@@ -56,6 +56,41 @@ pub fn spawn_damage_numbers(
             Transform::from_translation(pos.extend(3.0)),
         ));
     }
+}
+
+/// Float a green "+N" whenever the player's HP jumps up (vampirism, orbs, Combat
+/// Medic, Field Medic, …) — heals were previously invisible. A single watcher
+/// (a `Local` of last-frame HP) avoids threading a message through every heal
+/// site; the `+0.5` floor skips the sub-1 passive-regen drip so it doesn't spam.
+pub fn heal_numbers(
+    mut commands: Commands,
+    mut prev: Local<Option<f32>>,
+    player: Query<(&Health, &Transform), With<Ship>>,
+) {
+    let Ok((hp, tf)) = player.single() else {
+        *prev = None; // no player (GameOver / between runs) — re-adopt on respawn
+        return;
+    };
+    if let Some(p) = *prev {
+        if hp.current > p + 0.5 {
+            let amount = (hp.current - p).round() as i64;
+            let pos = tf.translation.truncate() + Vec2::new(0.0, 16.0);
+            commands.spawn((
+                DamageNumber {
+                    life: LIFE,
+                    max_life: LIFE,
+                },
+                Text2d::new(format!("+{amount}")),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.35, 1.0, 0.45)), // green
+                Transform::from_translation(pos.extend(3.0)),
+            ));
+        }
+    }
+    *prev = Some(hp.current);
 }
 
 /// Spawn a floating cyan "DODGE" at each evade (reuses `DamageNumber` so
