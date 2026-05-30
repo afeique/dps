@@ -233,6 +233,40 @@ pub fn wireframe_geometry(
     (pos, col, idx)
 }
 
+/// Collapse the wireframe struts + glint nodes that sit on the **back** of the
+/// (now-solid) rock to zero-area points, so they don't ghost through the body.
+/// A vertex with `z > 0` is on the far side (near is `z < 0` under `fov/(fov+z)`);
+/// an edge is "back" when *both* endpoints are far (silhouette edges, with one
+/// near endpoint, stay visible), a node when its own vertex is far. Operates in
+/// place on the full vertex array — faces (`face_verts`), then `ICO_EDGES.len()`
+/// edge quads, then 12 node quads — keeping the vertex count constant so the lazy
+/// index buffer stays valid.
+pub fn cull_back_struts(
+    pos: &mut [[f32; 3]],
+    screen: &[Vec2; 12],
+    depth: &[f32; 12],
+    face_verts: usize,
+) {
+    let edge_base = face_verts;
+    for (k, &(a, b)) in ICO_EDGES.iter().enumerate() {
+        if depth[a] > 0.0 && depth[b] > 0.0 {
+            let p = [screen[a].x, screen[a].y, 0.0];
+            for v in &mut pos[edge_base + k * 4..edge_base + k * 4 + 4] {
+                *v = p;
+            }
+        }
+    }
+    let node_base = edge_base + ICO_EDGES.len() * 4;
+    for (i, d) in depth.iter().enumerate() {
+        if *d > 0.0 {
+            let p = [screen[i].x, screen[i].y, 0.0];
+            for v in &mut pos[node_base + i * 4..node_base + i * 4 + 4] {
+                *v = p;
+            }
+        }
+    }
+}
+
 /// Build the solid faceted body: each of the 20 triangular faces flat-shaded
 /// (the dimmed average of its three vertex hues), emitted **back-to-front** by
 /// average depth so the painter's order gives correct occlusion on the convex
@@ -378,6 +412,8 @@ pub fn tumble_asteroids(
         idx.extend(eidx.into_iter().map(|i| i + face_verts));
         let node_half = (tum.radius * 0.06).clamp(1.6, 3.2);
         push_vertex_nodes(&mut pos, &mut col, &mut idx, &screen, &colors, node_half);
+        // Hide the struts/glints on the back of the solid so they don't show through.
+        cull_back_struts(&mut pos, &screen, &depth, face_verts as usize);
 
         match mesh2d {
             Some(m) => {

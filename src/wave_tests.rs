@@ -5725,6 +5725,44 @@ fn asteroid_solid_faces() {
     );
 }
 
+/// Back-facing struts/glints are collapsed to zero-area points (so they don't
+/// ghost through the solid body), while front struts are left untouched — and the
+/// vertex count is unchanged so the index buffer stays valid.
+#[test]
+fn back_struts_are_culled_behind_the_solid() {
+    use crate::systems::asteroids::{
+        ICO_VERTS, cull_back_struts, face_geometry, project, push_vertex_nodes, wireframe_geometry,
+    };
+
+    let screen = project(&ICO_VERTS, Quat::IDENTITY);
+    let colors = [[1.0_f32, 1.0, 1.0, 1.0]; 12];
+
+    // Assemble the full vertex array exactly as `tumble_asteroids` does.
+    let (mut pos, mut col, mut idx) = face_geometry(&screen, &[0.0; 12], &colors);
+    let fv = pos.len();
+    let (ep, ec, ei) = wireframe_geometry(&screen, &colors);
+    pos.extend(ep);
+    col.extend(ec);
+    idx.extend(ei.into_iter().map(|i| i + fv as u32));
+    push_vertex_nodes(&mut pos, &mut col, &mut idx, &screen, &colors, 2.0);
+    let before = pos.clone();
+    let count = pos.len();
+
+    // All-far depths → every strut + node collapses to a single point each.
+    cull_back_struts(&mut pos, &screen, &[1.0; 12], fv);
+    assert_eq!(pos.len(), count, "culling never changes the vertex count");
+    let edge0 = &pos[fv..fv + 4];
+    assert!(
+        edge0.iter().all(|v| *v == edge0[0]),
+        "an all-back edge collapses to one zero-area point"
+    );
+
+    // All-near depths → nothing is touched.
+    let mut front = before.clone();
+    cull_back_struts(&mut front, &screen, &[-1.0; 12], fv);
+    assert_eq!(front, before, "front-facing struts are left untouched");
+}
+
 /// The muzzle flash tints to the active firing element: warm for pyro, cool for
 /// cryo, and always HDR-bright so Bloom flares it.
 #[test]
