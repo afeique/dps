@@ -14,6 +14,7 @@ use crate::combat::reaction::{flare_damage, shatter_triggers, PendingReactions, 
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
+use crate::systems::asteroids::Asteroid;
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
     amplifier_mult, executioner_bonus, explosion_radius, glass_cannon_dmg, knock_chance,
@@ -504,10 +505,12 @@ const PLAYER_ENEMY_CONTACT_DMG: f32 = 5.0;
 /// post-hit i-frames, which were removed) is what gates contact damage to one
 /// hit per collision.
 const OVERLAP_SEPARATION_RATIO: f32 = 0.6;
-/// Velocity kick driving the two bodies apart on contact (juice; the JS uses a
-/// full momentum impulse — `BOUNCE_RESTITUTION 0.9`). It persists because
-/// `ship_control` accumulates velocity rather than overwriting it.
-const CONTACT_BOUNCE: f32 = 220.0;
+/// Bounciness of a contact's momentum impulse (`BOUNCE_RESTITUTION`): 0.8 ≈ a
+/// springy near-elastic exchange of velocity along the collision normal.
+const CONTACT_RESTITUTION: f32 = 0.8;
+/// A small fixed separation pop added on top of the impulse so even a glancing or
+/// stationary contact still parts with a bit of juice.
+const CONTACT_POP: f32 = 70.0;
 
 /// Player ↔ enemy contact (spec III.6): the player takes 25, the enemy takes 5,
 /// and both are physically separated + bounced apart. There is **no** post-hit
@@ -574,8 +577,64 @@ pub fn enemy_contact_player(
         etf.translation.x -= push.x;
         etf.translation.y -= push.y;
 
-        // Velocity bounce apart (juice).
-        pvel.0 += n * CONTACT_BOUNCE;
-        evel.0 -= n * CONTACT_BOUNCE;
+        // Momentum-based collision response: an elastic impulse along the normal,
+        // with mass ∝ area (radius²) so a big enemy shoves the ship hard while a
+        // small drone barely budges it. Only fires when the bodies are actually
+        // approaching (closing speed along `n`), so it exchanges momentum rather
+        // than injecting energy; a small fixed pop guarantees clean separation.
+        let (mp, me) = (pc.radius * pc.radius, ec.radius * ec.radius);
+        let closing = (pvel.0 - evel.0).dot(n);
+        if closing < 0.0 {
+            let j = -(1.0 + CONTACT_RESTITUTION) * closing / (1.0 / mp + 1.0 / me);
+            pvel.0 += (j / mp) * n;
+            evel.0 -= (j / me) * n;
+        }
+        pvel.0 += n * CONTACT_POP;
+        evel.0 -= n * CONTACT_POP;
+    }
+}
+
+/// Player ↔ asteroid contact: a **pure physics bounce** (no damage — rocks are
+/// inert). The ship used to fly straight through asteroids; now it caroms off,
+/// with the same momentum impulse as enemy contact (mass ∝ area, so a big rock
+/// shoves the ship hard while barely moving itself). Runs in the collision group.
+pub fn player_hits_asteroid(
+    mut player: Query<(&mut Transform, &mut Velocity, &Collider), With<Ship>>,
+    mut asteroids: Query<
+        (&mut Transform, &mut Velocity, &Collider),
+        (With<Asteroid>, Without<Ship>),
+    >,
+) {
+    let Ok((mut ptf, mut pvel, pc)) = player.single_mut() else {
+        return;
+    };
+    for (mut atf, mut avel, ac) in &mut asteroids {
+        let ppos = ptf.translation.truncate();
+        let apos = atf.translation.truncate();
+        let reach = pc.radius + ac.radius;
+        let delta = ppos - apos;
+        let dist = delta.length();
+        if dist >= reach {
+            continue;
+        }
+        let n = if dist > 1e-4 { delta / dist } else { Vec2::Y };
+
+        // Separate the overlap (push both out along the normal).
+        let push = n * ((reach - dist) * OVERLAP_SEPARATION_RATIO);
+        ptf.translation.x += push.x;
+        ptf.translation.y += push.y;
+        atf.translation.x -= push.x;
+        atf.translation.y -= push.y;
+
+        // Momentum impulse (elastic, mass ∝ area).
+        let (mp, ma) = (pc.radius * pc.radius, ac.radius * ac.radius);
+        let closing = (pvel.0 - avel.0).dot(n);
+        if closing < 0.0 {
+            let j = -(1.0 + CONTACT_RESTITUTION) * closing / (1.0 / mp + 1.0 / ma);
+            pvel.0 += (j / mp) * n;
+            avel.0 -= (j / ma) * n;
+        }
+        pvel.0 += n * CONTACT_POP;
+        avel.0 -= n * CONTACT_POP;
     }
 }

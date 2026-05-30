@@ -3611,6 +3611,78 @@ fn tangerine_contact_burns_player() {
     assert!(world.get::<PlayerBurn>(p).is_some(), "Tangerine's PYRO ram burns the player");
 }
 
+/// Contact resolves with a momentum impulse: a player ramming a stationary,
+/// equal-mass enemy loses its forward momentum (bounces back) and shoves the
+/// enemy ahead — momentum is exchanged, not injected.
+#[test]
+fn contact_exchanges_momentum() {
+    use crate::systems::collision::enemy_contact_player;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((
+            Ship::default(),
+            Health::new(100.0),
+            Velocity(Vec2::new(300.0, 0.0)), // charging +X
+            Collider { radius: 16.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Velocity(Vec2::ZERO),
+            Collider { radius: 16.0 },
+            Transform::from_xyz(20.0, 0.0, 0.0), // overlapping (reach 32)
+        ))
+        .id();
+
+    let mut step = Schedule::default();
+    step.add_systems(enemy_contact_player);
+    step.run(world);
+
+    let pvx = world.get::<Velocity>(p).unwrap().0.x;
+    let evx = world.get::<Velocity>(e).unwrap().0.x;
+    assert!(pvx < 300.0, "the player sheds forward momentum on impact (now {pvx})");
+    assert!(evx > 0.0, "the enemy is shoved forward by the impact ({evx})");
+}
+
+/// The player physically caroms off asteroids (was: flew through them) — a pure
+/// momentum bounce that deals no damage (rocks are inert).
+#[test]
+fn player_caroms_off_asteroids_without_damage() {
+    use crate::systems::asteroids::Asteroid;
+    use crate::systems::collision::player_hits_asteroid;
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let p = world
+        .spawn((
+            Ship::default(),
+            Health::new(40.0),
+            Velocity(Vec2::new(0.0, 200.0)), // flying +Y into the rock
+            Collider { radius: 16.0 },
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ))
+        .id();
+    world.spawn((
+        Asteroid { tier: 2 },
+        Velocity(Vec2::ZERO),
+        Collider { radius: 36.0 },
+        Transform::from_xyz(0.0, 30.0, 0.0), // overlapping (reach 52)
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems(player_hits_asteroid);
+    step.run(world);
+
+    let pv = world.get::<Velocity>(p).unwrap().0;
+    let hp = world.get::<Health>(p).unwrap().current;
+    assert!(pv.y < 200.0, "the player bounces back off the rock (vy now {})", pv.y);
+    assert_eq!(hp, 40.0, "an asteroid bounce deals no damage");
+}
+
 // ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
 
 /// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,

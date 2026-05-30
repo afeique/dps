@@ -527,7 +527,12 @@ impl Plugin for GamePlugin {
                         systems::skills::deflector_blocks,
                         systems::skills::tractor_absorb,
                         systems::collision::enemy_bullet_hits_player,
-                        systems::collision::enemy_contact_player,
+                        // Hull contacts: enemy ram + asteroid carom — nested into
+                        // one slot to stay under Bevy's 20-element tuple ceiling.
+                        (
+                            systems::collision::enemy_contact_player,
+                            systems::collision::player_hits_asteroid,
+                        ),
                         systems::asteroids::asteroid_hits,
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,
