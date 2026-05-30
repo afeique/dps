@@ -3720,6 +3720,38 @@ fn enemies_turn_to_face_their_heading() {
     );
 }
 
+/// A moving enemy puffs thruster exhaust off its rear: the plume spawns behind
+/// the nose (opposite the heading) and drifts backward.
+#[test]
+fn moving_enemies_emit_rear_thrust() {
+    use crate::render::asteroid_debris::{Ember, emit_enemy_thrust};
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    // Enemy at origin flying +X.
+    world.spawn((
+        Enemy { kind: EnemyKind::Hunter },
+        Velocity(Vec2::new(200.0, 0.0)),
+        Collider { radius: 16.0 },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(80)); // past the emit interval
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(emit_enemy_thrust);
+    step.run(world);
+
+    let (tf, vel) = world
+        .query_filtered::<(&Transform, &Velocity), With<Ember>>()
+        .single(world)
+        .unwrap();
+    assert!(tf.translation.x < 0.0, "exhaust spawns behind the +X-heading nose");
+    assert!(vel.0.x < 0.0, "exhaust drifts backward (−X) off the rear");
+}
+
 // ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
 
 /// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,

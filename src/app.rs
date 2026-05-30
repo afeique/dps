@@ -338,6 +338,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::emit_status_motes,
                     // Enemies bank to face their heading (fly nose-first).
                     systems::enemy::face_heading,
+                    // Hot thruster exhaust off the rear of moving enemies.
+                    render::asteroid_debris::emit_enemy_thrust,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

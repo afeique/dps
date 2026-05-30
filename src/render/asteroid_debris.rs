@@ -20,7 +20,9 @@
 //! `tick_lifetimes` path — no bespoke lifecycle. Deterministic (Wang-hashed off a
 //! `Local` counter), so it needs no `rand` dependency.
 
-use crate::components::{Bleed, Burning, Collider, Corrode, Frozen, Lifetime, Mark, Velocity};
+use crate::components::{
+    Bleed, BossPart, Burning, Collider, Corrode, Enemy, Frozen, Lifetime, Mark, Velocity,
+};
 use crate::messages::{AsteroidShatter, Death};
 use crate::render::reaction_fx::{Shockwave, unit_ring};
 use crate::systems::asteroids::{AsteroidMaterial, ICO_EDGES};
@@ -561,6 +563,57 @@ pub fn emit_frozen_glints(
             Velocity(Vec2::ZERO), // a stationary glint, not a drifting ember
             Lifetime { seconds: life },
         ));
+    }
+}
+
+/// Thruster exhaust off moving enemies — now that they bank to face their heading
+/// (`enemy::face_heading`), a hot plume puffs from the *rear* so they read as
+/// ships thrusting through space rather than gliding. Spawned behind the nose,
+/// opposite the heading, with a little backward drift so it falls into a trail;
+/// throttled + capped. Reuses the [`Ember`] primitive. Parked `BossPart` turrets
+/// (and near-stationary enemies) are skipped.
+pub fn emit_enemy_thrust(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut acc: Local<f32>,
+    mut seed: Local<u32>,
+    enemies: Query<(&Transform, &Velocity, &Collider), (With<Enemy>, Without<BossPart>)>,
+) {
+    const THRUST_INTERVAL: f32 = 0.05;
+    const MAX_PER_BATCH: usize = 48;
+    *acc += time.delta_secs();
+    if *acc < THRUST_INTERVAL {
+        return;
+    }
+    *acc = 0.0;
+    let mut n = 0usize;
+    for (tf, vel, col) in &enemies {
+        if n >= MAX_PER_BATCH {
+            break;
+        }
+        let speed = vel.0.length();
+        if speed < 30.0 {
+            continue; // coasting / barely moving — no plume
+        }
+        let heading = vel.0 / speed;
+        let perp = Vec2::new(-heading.y, heading.x);
+        *seed = seed.wrapping_add(1);
+        let s = *seed;
+        // Behind the nose (enemy shapes are +X-forward = the heading), jittered.
+        let pos = tf.translation.truncate() - heading * (col.radius * 0.85)
+            + perp * frand(s ^ 0x1, -3.0, 3.0);
+        let life = frand(s ^ 0x2, 0.18, 0.38);
+        let r = frand(s ^ 0x3, 1.4, 2.8);
+        // Hot orange-yellow exhaust (HDR → bloom) drifting backward off the rear.
+        let color = Color::linear_rgb(9.0, frand(s ^ 0x4, 4.0, 6.0), 1.5);
+        commands.spawn((
+            Ember { max_life: life },
+            ember_disc(color, r),
+            Transform::from_translation(pos.extend(0.11)),
+            Velocity(-heading * frand(s ^ 0x5, 20.0, 60.0)),
+            Lifetime { seconds: life },
+        ));
+        n += 1;
     }
 }
 
