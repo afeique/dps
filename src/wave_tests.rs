@@ -3683,6 +3683,43 @@ fn player_caroms_off_asteroids_without_damage() {
     assert_eq!(hp, 40.0, "an asteroid bounce deals no damage");
 }
 
+/// Enemies bank toward their heading instead of always facing one way: an enemy
+/// flying +Y turns its facing toward +Y (≈ +π/2), rate-limited so it eases rather
+/// than snapping.
+#[test]
+fn enemies_turn_to_face_their_heading() {
+    use crate::systems::enemy::face_heading;
+
+    let mut app = App::new();
+    let world = app.world_mut();
+    let e = world
+        .spawn((
+            Enemy { kind: EnemyKind::Hunter },
+            Velocity(Vec2::new(0.0, 200.0)), // heading +Y
+            Transform::from_rotation(Quat::from_rotation_z(0.0)),
+        ))
+        .id();
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_millis(50));
+    world.insert_resource(time);
+
+    let mut step = Schedule::default();
+    step.add_systems(face_heading);
+    step.run(world);
+
+    let ang = world
+        .get::<Transform>(e)
+        .unwrap()
+        .rotation
+        .to_euler(EulerRot::ZYX)
+        .0;
+    assert!(
+        ang > 0.0 && ang <= std::f32::consts::FRAC_PI_2 + 1e-3,
+        "turns toward the +Y heading without snapping past it (ang {ang})"
+    );
+}
+
 // ── 19. weapon_trait_homing_explode_helpers ───────────────────────────────────
 
 /// `_HOMING` / `_EXPLODE` trait math (spec III.2): homing rad/sec = min(0.4,

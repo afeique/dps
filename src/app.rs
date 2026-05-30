@@ -336,6 +336,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::emit_frozen_glints,
                     // Corrode acid drips / bleed flecks / void-mark wisps.
                     render::asteroid_debris::emit_status_motes,
+                    // Enemies bank to face their heading (fly nose-first).
+                    systems::enemy::face_heading,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),

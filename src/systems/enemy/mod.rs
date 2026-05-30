@@ -356,6 +356,35 @@ pub fn boss_part_hp(tier: u8) -> f32 {
     30.0 + 20.0 * tier as f32
 }
 
+/// Per-enemy turn rate (rad/sec) when banking toward its heading.
+const FACE_TURN_RATE: f32 = 6.0;
+
+/// Turn each enemy to face its **heading** (velocity), so it flies nose-first and
+/// banks through its manoeuvres instead of sliding around always pointing one
+/// way. The turn is rate-limited (shortest-arc) for a realistic-flight read.
+/// Enemy shapes are authored **+X-forward** (the JS "nose right" convention, with
+/// "rotation applied by the ECS"), so the heading angle maps straight to the
+/// Transform's Z rotation. Firing is aim-based (independent of facing), so this is
+/// purely visual; parked `BossPart` turrets are excluded. Runs in `Update`.
+pub fn face_heading(
+    time: Res<Time>,
+    mut q: Query<(&Velocity, &mut Transform), (With<Enemy>, Without<BossPart>)>,
+) {
+    let dt = time.delta_secs();
+    let max = FACE_TURN_RATE * dt;
+    for (vel, mut tf) in &mut q {
+        if vel.0.length_squared() < 4.0 {
+            continue; // barely moving — hold the current facing
+        }
+        let target = vel.0.to_angle(); // +X-forward → heading angle is the Z rotation
+        let cur = tf.rotation.to_euler(EulerRot::ZYX).0;
+        // Shortest signed arc from `cur` to `target`, then clamp to the turn rate.
+        let diff = (target - cur + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        tf.rotation = Quat::from_rotation_z(cur + diff.clamp(-max, max));
+    }
+}
+
 /// HP-threshold boss rage (spec IV.7, one-shot): when a boss drops to ≤33% HP it
 /// enters the **telegraph** window — a red warning ring + a `RageTelegraph` timer
 /// — rather than raging instantly. `tick_rage_telegraph` fires `activate_rage`
