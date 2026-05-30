@@ -691,10 +691,11 @@ pub fn tick_overdrive(
     }
 }
 
-/// Tick cooldown; on `KeyE` / West, if energy ≥ cost, spend it and fire the
-/// active power weapon.
+/// Tick cooldown; on **Space / right-click** (or gamepad West), if energy ≥ cost,
+/// spend it and fire the active power weapon.
 pub fn fire_power_weapon(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     gamepads: Query<&Gamepad>,
     time: Res<Time>,
     mut pw: ResMut<PowerWeapon>,
@@ -709,7 +710,9 @@ pub fn fire_power_weapon(
     pw.cooldown = (pw.cooldown - time.delta_secs()).max(0.0);
 
     let pad_fire = gamepads.iter().any(|gp| gp.just_pressed(GamepadButton::West));
-    if !keys.just_pressed(KeyCode::KeyE) && !pad_fire {
+    let kbm_fire =
+        keys.just_pressed(KeyCode::Space) || mouse.just_pressed(MouseButton::Right);
+    if !kbm_fire && !pad_fire {
         return;
     }
     if pw.cooldown > 0.0 {

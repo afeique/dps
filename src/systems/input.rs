@@ -2,7 +2,9 @@
 //!
 //! Twin-stick scheme: **WASD / arrows** (or a gamepad left stick) set a
 //! screen-space MOVE direction; the **mouse** aims (`update_aim` → the ship
-//! faces the cursor and fires toward it). Keyboard + gamepad are OR-combined.
+//! faces the cursor and fires toward it). **Left mouse** (or gamepad South / RT)
+//! fires the primary; **Space / right mouse** (or gamepad West) fires the power
+//! weapon (`power_weapon::fire_power_weapon`). Keyboard + gamepad are OR-combined.
 //! Keeping input isolated here means the sim only ever reads `Intent`.
 
 use crate::components::Intent;
@@ -15,6 +17,7 @@ const STICK_DEADZONE: f32 = 0.12;
 
 pub fn gather_input(
     keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     gamepads: Query<&Gamepad>,
     mut q: Query<&mut Intent>,
 ) {
@@ -34,7 +37,9 @@ pub fn gather_input(
     if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
         move_dir.x -= 1.0;
     }
-    if keys.pressed(KeyCode::Space) {
+
+    // ── Primary fire: left mouse (Space now fires the power weapon) ─────────
+    if mouse.pressed(MouseButton::Left) {
         firing = true;
     }
 
