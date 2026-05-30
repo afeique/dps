@@ -67,6 +67,15 @@ pub fn frontal_blocked(enemy_pos: Vec2, player_pos: Vec2, hit_pos: Vec2, arc: f3
     to_player.angle_to(to_hit).abs() < arc * 0.5
 }
 
+/// Elemental status-on-hit tuning (E5b). A non-Kinetic player/tower bullet stamps
+/// its element's signature status on the enemy, which is what lets towers combo:
+/// a Frost (Cryo) shot freezes its target, so the next heavy hit (Inferno/Gun)
+/// SHATTERS it; Toxic stacks corrode vulnerability; Volt makes it conduct; etc.
+/// Burn DoT is a fraction of the landed hit, floored so chip shots still tick.
+const STATUS_BURN_DPS_FRAC: f32 = 0.5;
+const STATUS_BURN_MIN_DPS: f32 = 3.0;
+const STATUS_BURN_SECS: f32 = 2.0;
+
 pub fn bullet_hits_enemy(
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
@@ -326,6 +335,41 @@ pub fn bullet_hits_enemy(
                 // `_STUN` trait proc: briefly stun the enemy (spec III.6).
                 if stun_p > 0.0 && rng.next_f32() < stun_p {
                     commands.entity(enemy_e).insert(Stunned { secs: 1.0 });
+                }
+                // Elemental status-on-hit (E5b): the bullet's element stamps its
+                // signature status, enabling tower combos. Inserted via Commands,
+                // so it lands NEXT tick — the current hit uses the prior state
+                // (so a Frost shot freezes, and a later heavy hit shatters).
+                if let Some(set) = belem_set {
+                    for el in set.iter() {
+                        match el {
+                            Element::Pyro => {
+                                commands.entity(enemy_e).insert(Burning {
+                                    dps: (amount * STATUS_BURN_DPS_FRAC).max(STATUS_BURN_MIN_DPS),
+                                    secs: STATUS_BURN_SECS,
+                                });
+                            }
+                            Element::Cryo => {
+                                commands.entity(enemy_e).insert(Frozen { secs: FREEZE_SECS });
+                            }
+                            Element::Volt => {
+                                commands.entity(enemy_e).insert(Conduct { secs: CONDUCT_SECS });
+                            }
+                            Element::Toxic => {
+                                let stacks = (ecorrode.map_or(0, |c| c.stacks) + 1)
+                                    .min(CORRODE_MAX_STACKS);
+                                commands
+                                    .entity(enemy_e)
+                                    .insert(Corrode { stacks, secs: CORRODE_SECS });
+                            }
+                            Element::Void => {
+                                commands.entity(enemy_e).insert(Mark { secs: MARK_SECS });
+                            }
+                            // Kinetic has no status; Radiant's purge is a per-hit
+                            // damage gate (handled in `enemy_defense_damage`).
+                            Element::Kinetic | Element::Radiant => {}
+                        }
+                    }
                 }
                 // `_KNOCK` trait proc: shove the enemy away from the impact.
                 if knock_p > 0.0 && rng.next_f32() < knock_p {
@@ -591,6 +635,39 @@ pub fn enemy_contact_player(
         }
         pvel.0 += n * CONTACT_POP;
         evel.0 -= n * CONTACT_POP;
+    }
+}
+
+/// Per-enemy "leak" damage to the Core when one reaches it. Bosses punch far
+/// harder, so letting one breach is a serious blow against `tower::CORE_MAX_HP`.
+pub const CORE_LEAK_DAMAGE: f32 = 50.0;
+pub const CORE_LEAK_BOSS: f32 = 200.0;
+
+/// Enemy → Core contact (a tower-defense **leak**): an enemy that reaches the
+/// Core detonates against it — the Core loses integrity and the enemy is
+/// consumed (despawned with no score/drops: it was not *killed*). This is the
+/// Core's analog of `enemy_contact_player`, but the Core has no shield and the
+/// attacker does not survive, so there is no bounce/separation — contact ends
+/// the enemy. `tower::core_lose_check` reads the depleted `Health` and ends the run.
+pub fn enemy_contact_core(
+    mut commands: Commands,
+    mut core: Query<(&Transform, &Collider, &mut Health), With<Core>>,
+    enemies: Query<(Entity, &Transform, &Collider, Has<Boss>), (With<Enemy>, Without<Core>)>,
+) {
+    let Ok((ctf, cc, mut chp)) = core.single_mut() else {
+        return;
+    };
+    let cpos = ctf.translation.truncate();
+    for (e, etf, ec, is_boss) in &enemies {
+        let reach = cc.radius + ec.radius;
+        if cpos.distance_squared(etf.translation.truncate()) >= reach * reach {
+            continue; // not yet at the Core
+        }
+        chp.current -= if is_boss { CORE_LEAK_BOSS } else { CORE_LEAK_DAMAGE };
+        // `try_despawn`: the same enemy may have been killed by a turret/commander
+        // shot this very tick (it's at the Core, under fire), so a plain despawn
+        // would race with `apply_damage` and warn.
+        commands.entity(e).try_despawn();
     }
 }
 

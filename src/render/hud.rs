@@ -12,10 +12,11 @@
 //! so it lives in `render` and runs in `Update` (not the FixedUpdate sim).
 
 use crate::components::loadout::{AbilityCooldowns, EquippedAbilities};
-use crate::components::{Boss, CoreShielded, Health, Lives, Shield, Ship};
+use crate::components::{Boss, Core, CoreShielded, Enemy, Health, Lives, Shield, Ship};
 use crate::resources::{EnergyMeter, KillStreak, Score};
 use crate::systems::missions::Mission;
 use crate::systems::power_weapon::PowerWeapon;
+use crate::systems::tower::SelectedTower;
 use crate::systems::wave::Wave;
 use crate::systems::weapons::CurrentWeapon;
 use bevy::prelude::*;
@@ -28,7 +29,17 @@ pub enum HudText {
     Econ,
     Streak,
     Mission,
+    /// Tower-defense build readout: the armed turret (or the build menu).
+    Build,
 }
+
+/// The Core integrity bar root (top-center, always visible during a run).
+#[derive(Component)]
+pub struct CoreBarRoot;
+
+/// The Core integrity bar fill; width tracks the Core's HP fraction.
+#[derive(Component)]
+pub struct CoreBarFill;
 
 /// Marks the health-bar fill node (width % + color updated each frame).
 #[derive(Component)]
@@ -161,6 +172,49 @@ pub fn setup_hud(mut commands: Commands) {
             ));
         });
 
+    // ── Core integrity bar (top-center) — the defense objective's health ─────
+    commands
+        .spawn((
+            CoreBarRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(14.0),
+                left: Val::Percent(50.0),
+                margin: UiRect::left(Val::Px(-230.0)), // center the 460px bar
+                width: Val::Px(460.0),
+                height: Val::Px(18.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BorderColor::all(Color::srgba(0.4, 0.8, 1.0, 0.7)),
+            BackgroundColor(Color::srgba(0.02, 0.06, 0.09, 0.85)),
+        ))
+        .with_children(|track| {
+            // Fill (absolute so the centered label sits on top of it).
+            track.spawn((
+                CoreBarFill,
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(0.0),
+                    left: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.2, 0.75, 1.0)),
+            ));
+            track.spawn((
+                Text::new("CORE"),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.85, 0.95, 1.0)),
+            ));
+        });
+
     // Triforce spare-tank glyphs — a row of 3 just right of the health bar.
     commands
         .spawn(Node {
@@ -255,6 +309,20 @@ pub fn setup_hud(mut commands: Commands) {
         },
     ));
 
+    // Tower-defense build readout, left column under the mission line.
+    commands.spawn((
+        HudText::Build,
+        Text::new(""),
+        font.clone(),
+        TextColor(Color::srgb(0.65, 0.95, 0.85)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(140.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
+    ));
+
     // Kill-streak banner, bottom-center (full-width container, centered child).
     commands
         .spawn(Node {
@@ -339,6 +407,8 @@ pub fn update_hud(
     streak: Res<KillStreak>,
     wave: Res<Wave>,
     mission: Res<Mission>,
+    sel: Res<SelectedTower>,
+    enemies: Query<(), With<Enemy>>,
     time: Res<Time>,
     mut texts: Query<(&mut Text, &HudText)>,
     mut bar: Query<(&mut Node, &mut BackgroundColor), With<HealthBarFill>>,
@@ -401,11 +471,34 @@ pub fn update_hud(
                 )
             }
             HudText::Econ => format!(
-                "WAVE {}\nGOLD {}\nPOINTS {}",
+                "WAVE {}\nENEMIES {}\nGOLD {}\nPOINTS {}",
                 wave.number(),
+                enemies.iter().count(),
                 score.gold,
                 score.points
             ),
+            HudText::Build => {
+                let prep = if wave.awaiting_first_wave() {
+                    "▶ PREP — build your defense, then ENTER to begin\n"
+                } else {
+                    ""
+                };
+                match sel.kind {
+                    Some(k) => format!(
+                        "{prep}BUILDING {} ({}g)\nclick place · U upgrade · X sell · 0 cancel",
+                        k.name(),
+                        k.cost()
+                    ),
+                    None => {
+                        use crate::systems::tower::TowerKind;
+                        let mut s = format!("{prep}BUILD  ");
+                        for (i, k) in TowerKind::ALL.iter().enumerate() {
+                            s.push_str(&format!("{} {} ({}g)  ", i + 1, k.name(), k.cost()));
+                        }
+                        s
+                    }
+                }
+            }
             HudText::Mission => {
                 let mark = if mission.done { "  ✓" } else { "" };
                 format!("MISSION  {}{mark}", mission.kind.label())
@@ -458,6 +551,29 @@ pub fn update_boss_bar(
             }
         }
         None => root_node.display = Display::None,
+    }
+}
+
+/// Drive the Core integrity bar: width tracks the Core's HP fraction, colour
+/// shifts blue → amber → red as it falls. Empties (and the bar reads 0) once the
+/// Core is gone (game over follows from `tower::core_lose_check`).
+pub fn update_core_bar(
+    core: Query<&Health, With<Core>>,
+    mut fill: Query<(&mut Node, &mut BackgroundColor), With<CoreBarFill>>,
+) {
+    let frac = core
+        .single()
+        .map(|hp| (hp.current / hp.max).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+    if let Ok((mut node, mut color)) = fill.single_mut() {
+        node.width = Val::Percent(frac * 100.0);
+        color.0 = if frac > 0.5 {
+            Color::srgb(0.2, 0.75, 1.0) // healthy cyan
+        } else if frac > 0.25 {
+            Color::srgb(1.0, 0.7, 0.2) // amber
+        } else {
+            Color::srgb(1.0, 0.3, 0.25) // critical red
+        };
     }
 }
 

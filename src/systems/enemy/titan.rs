@@ -25,7 +25,7 @@
 //!   • `wander.x` encodes the locked charge angle; `wander.y` encodes the
 //!     sticky orbit sign (+1.0 / −1.0).  `phase` drives the idle countdown.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
+use crate::components::{AiState, Core, Enemy, EnemyKind, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -152,7 +152,7 @@ pub fn shape() -> Shape {
 pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
-    player: Query<&Transform, With<Ship>>,
+    player: Query<&Transform, With<Core>>,
     mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();

@@ -301,6 +301,20 @@ impl Wave {
         self.spawned_pulses
     }
 
+    /// True while sitting in the pre-wave-1 build window (nothing spawned yet).
+    /// Drives the HUD prep hint + the ENTER-to-start gate.
+    pub fn awaiting_first_wave(&self) -> bool {
+        !self.started && self.idx == 0
+    }
+
+    /// Skip the remaining pre-wave-1 prep so the assault begins next tick. Used
+    /// by the ENTER gate and by demo/screenshot mode.
+    pub fn skip_prep(&mut self) {
+        if self.awaiting_first_wave() {
+            self.start_timer = 0.0;
+        }
+    }
+
     /// Advance to the next wave after the survivor-card reward is taken: clear
     /// the gate, bump the index, and start the between-wave breather.
     pub fn advance_after_reward(&mut self) {
@@ -392,8 +406,25 @@ fn spawn_pulse(
 // ---------------------------------------------------------------------------
 
 /// Reset wave state — `OnEnter(Playing)`, so each new game starts at wave 1.
+/// Pre-wave-1 build window (seconds) — time to set up an opening defense before
+/// the first assault. Skippable with ENTER (`prewave_start_input`).
+const PREP_SECS: f32 = 20.0;
+
 pub fn reset(mut wave: ResMut<Wave>) {
     *wave = Wave::default();
+    // Tower-defense: open with a build window instead of the 1 s shooter intro.
+    wave.start_timer = PREP_SECS;
+}
+
+/// ENTER / Space during the pre-wave-1 build window skips the remaining prep and
+/// launches the assault immediately (Playing).
+pub fn prewave_start_input(keys: Res<ButtonInput<KeyCode>>, mut wave: ResMut<Wave>) {
+    if wave.awaiting_first_wave()
+        && wave.start_timer > 0.0
+        && (keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space))
+    {
+        wave.start_timer = 0.0;
+    }
 }
 
 /// Per-tick campaign driver (FixedUpdate). Pulse pacing + kill-gated advance.

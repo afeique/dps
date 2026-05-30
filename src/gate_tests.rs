@@ -127,30 +127,45 @@ fn iframes_expire_after_their_window() {
 }
 
 #[test]
-fn player_death_flips_to_gameover_without_scoring_a_kill() {
+fn player_lethal_hit_revives_commander_not_gameover() {
+    // Tower-defense conversion: the commander ship is no longer the lose
+    // condition. A lethal hit revives it at full HP with a brief invuln window
+    // instead of despawning + flipping to GameOver — only the Core dying ends
+    // the run (`tower::core_lose_check`).
     let mut app = test_app();
     let world = app.world_mut();
-    let player = spawn_player(world, 10.0); // dies to one 25-dmg contact (no tank)
+    let player = spawn_player(world, 10.0); // would die to one 25-dmg contact
     spawn_enemy_at(world, Vec2::ZERO);
 
     let mut step = Schedule::default();
     step.add_systems((enemy_contact_player, apply_damage).chain());
     step.run(world);
 
+    let hp = world
+        .get::<Health>(player)
+        .expect("the commander is revived, not despawned");
     assert!(
-        world.get::<Health>(player).is_none(),
-        "the player ship should be despawned on death"
+        (hp.current - hp.max).abs() < 0.01,
+        "revive restores full HP (got {}/{})",
+        hp.current,
+        hp.max
+    );
+    assert!(
+        world.get::<Invulnerable>(player).is_some(),
+        "revive grants a brief invuln window"
     );
     assert_eq!(
         world.resource::<Score>().kills,
         0,
-        "the player's own death is not a kill"
+        "the player's own near-death is not a kill"
     );
-    if let NextState::Pending(state) = world.resource::<NextState<GameState>>() {
-        assert_eq!(*state, GameState::GameOver, "death should queue GameOver");
-    } else {
-        panic!("player death should queue a state transition, got Unchanged");
-    }
+    assert!(
+        matches!(
+            world.resource::<NextState<GameState>>(),
+            NextState::Unchanged
+        ),
+        "a lethal hit on the commander does NOT queue GameOver"
+    );
 }
 
 #[test]

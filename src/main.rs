@@ -36,6 +36,8 @@ mod loadout_tests;
 #[cfg(test)]
 mod meta_tests;
 #[cfg(test)]
+mod tower_tests;
+#[cfg(test)]
 mod wave_tests;
 
 use app::GamePlugin;

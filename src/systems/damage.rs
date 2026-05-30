@@ -18,7 +18,6 @@ use crate::components::{
 };
 use crate::messages::{Damage, Death, PlayerHurt};
 use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
-use crate::states::GameState;
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{dodge_chance, regen_rate, thorns_frac, UpgradeId, Upgrades, REGEN_DELAY};
 use bevy::prelude::*;
@@ -36,7 +35,6 @@ pub fn apply_damage(
     equipment: Res<Equipment>,
     meta: Res<crate::meta::Meta>,
     mut last_stand: ResMut<LastStandUsed>,
-    mut next_state: ResMut<NextState<GameState>>,
     mut q: Query<(
         &mut Health,
         &Transform,
@@ -153,15 +151,15 @@ pub fn apply_damage(
                     hp.current = hp.max;
                     continue;
                 }
-                deaths.write(Death {
-                    entity: ev.target,
-                    position,
-                    kind: None,
-                    boss_tier: 0,
-                    mini_boss: false,
-                });
-                next_state.set(GameState::GameOver);
-                commands.entity(ev.target).despawn();
+                // Tower-defense: the commander ship is NOT the lose condition —
+                // only the Core dying is (`tower::core_lose_check`). Rather than
+                // ending the run, revive at full HP with a brief invuln window so
+                // a lethal hit knocks the player back into the fight, not out of it.
+                hp.current = hp.max;
+                commands
+                    .entity(ev.target)
+                    .insert(Invulnerable { seconds: 2.0 });
+                continue;
             } else {
                 // Split-on-death (Hydra, EN): spawn the lings at the death spot
                 // before the parent despawns. Lings get `lings: 0` (no re-split).

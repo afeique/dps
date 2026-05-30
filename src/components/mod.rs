@@ -50,6 +50,15 @@ pub enum Faction {
     Enemy,
 }
 
+/// The tower-defense **objective**: a central station the player defends. Enemy
+/// AIs navigate toward it (it replaces the player as their seek target) and ram
+/// it; each contact subtracts from its `Health` (see `collision::enemy_contact_core`)
+/// and the run ends (`GameOver`) when it is destroyed (`tower::core_lose_check`).
+/// Exactly one exists during `Playing`; the commander ship is no longer the lose
+/// condition. Inert to every other system (not an `Enemy`, not a `Ship`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Core;
+
 /// Auto-despawn after `seconds` elapse (bullets, transient FX).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Lifetime {

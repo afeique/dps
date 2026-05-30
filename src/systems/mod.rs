@@ -36,5 +36,6 @@ pub mod sp_alloc;
 pub mod spawn;
 pub mod status;
 pub mod survivor;
+pub mod tower;
 pub mod wave;
 pub mod weapons;

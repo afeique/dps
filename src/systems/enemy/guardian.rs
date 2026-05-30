@@ -6,7 +6,7 @@
 //!   • `js/modules/enemy/movement.js`    — `squareMovement` / `squareBurstState`
 //!   • `js/modules/render/shapes.js`     — `drawEnemyGuardianShape`
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
+use crate::components::{AiState, Core, Enemy, EnemyKind, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -177,7 +177,7 @@ pub fn shape() -> Shape {
 pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
-    _player: Query<&Transform, With<Ship>>,
+    _player: Query<&Transform, With<Core>>,
     mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();

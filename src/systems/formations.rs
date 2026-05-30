@@ -14,7 +14,7 @@
 //!   formation only *overrides* movement for its window, then releases members
 //!   back to their AI.
 
-use crate::components::{Enemy, FormationMember, Ship, Velocity};
+use crate::components::{Core, Enemy, FormationMember, Ship, Velocity};
 use crate::resources::GameRng;
 use bevy::prelude::*;
 
@@ -173,8 +173,13 @@ pub fn update_formations(
     time: Res<Time>,
     mut commands: Commands,
     mut formations: ResMut<Formations>,
-    player: Query<&Transform, With<Ship>>,
-    mut members: Query<(&mut Transform, &mut Velocity), (With<Enemy>, Without<Ship>)>,
+    player: Query<&Transform, With<Core>>,
+    // `Without<Core>` keeps the mut-`Transform` members disjoint from the Core
+    // read above (the orbit centre); `Without<Ship>` excludes the commander.
+    mut members: Query<
+        (&mut Transform, &mut Velocity),
+        (With<Enemy>, Without<Ship>, Without<Core>),
+    >,
 ) {
     let dt = time.delta_secs();
     let Ok(ptf) = player.single() else {

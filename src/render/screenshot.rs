@@ -6,6 +6,9 @@
 //! unaffected.
 
 use crate::components::{Intent, Invulnerable, Ship};
+use crate::states::GameState;
+use crate::systems::tower::{tower_shape, Tower, TowerKind};
+use crate::systems::wave::Wave;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
@@ -29,6 +32,7 @@ impl Plugin for ScreenshotPlugin {
                 app.add_systems(
                     Update,
                     (
+                        demo_drive,
                         keep_player_alive,
                         force_fire.after(crate::systems::input::gather_input),
                     ),
@@ -56,6 +60,37 @@ fn capture_then_exit(
     if *frame >= 280 {
         info!("DPS_SCREENSHOT: exiting");
         std::process::exit(0);
+    }
+}
+
+/// Screenshot/demo-only: auto-start a run (Title → Playing), skip the pre-wave
+/// build window, and drop a ring of demo turrets around the Core — so a capture
+/// shows a populated tower-defense scene instead of the title or an empty prep.
+/// Env-gated (`DPS_DEMO`), so it never runs in normal play.
+fn demo_drive(
+    state: Res<State<GameState>>,
+    mut next: ResMut<NextState<GameState>>,
+    mut wave: ResMut<Wave>,
+    mut commands: Commands,
+    mut placed: Local<bool>,
+) {
+    match state.get() {
+        GameState::Title => next.set(GameState::Playing),
+        GameState::Playing if !*placed => {
+            *placed = true;
+            wave.skip_prep();
+            let kinds = [TowerKind::Gun, TowerKind::Frost, TowerKind::Inferno, TowerKind::Flak];
+            for (i, &kind) in kinds.iter().enumerate() {
+                let a = i as f32 / kinds.len() as f32 * std::f32::consts::TAU;
+                let pos = Vec2::new(a.cos(), a.sin()) * 150.0;
+                commands.spawn((
+                    Tower::new(kind),
+                    tower_shape(kind),
+                    Transform::from_translation(pos.extend(0.4)),
+                ));
+            }
+        }
+        _ => {}
     }
 }
 

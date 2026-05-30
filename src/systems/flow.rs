@@ -8,11 +8,16 @@
 //! A fresh run resets the run-scoped resources via `reset_run` on
 //! `OnEnter(Playing)` (Wave + energy reset by their own OnEnter systems).
 
-use crate::components::{Bullet, Enemy};
+use crate::components::{Bullet, Core, Enemy, Ship};
+use crate::systems::tower::Tower;
 use crate::resources::{KillStreak, Score};
 use crate::states::GameState;
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
+
+/// Gold the player starts each run with, to fund an opening defense before any
+/// kills (tower-defense economy). Kills fund everything after.
+pub const STARTING_GOLD: u64 = 200;
 
 // ── Screen markers ─────────────────────────────────────────────────────────
 
@@ -87,7 +92,9 @@ pub fn enter_title(mut commands: Commands) {
         &mut commands,
         TitleScreen,
         "DARK PRISM SOLID",
-        "ENTER launch    B build    A armory   S skills   L loadout",
+        "TOWER DEFENSE — defend the Core\n\
+         ENTER launch    WASD fly · mouse aim\n\
+         1-5 pick turret · click build · U upgrade · X sell",
         Color::srgb(0.55, 0.85, 1.0),
     );
 }
@@ -114,6 +121,9 @@ pub fn reset_run(
     mut last_stand: ResMut<crate::resources::LastStandUsed>,
 ) {
     *score = Score::default();
+    // Tower-defense: seed enough gold to set up an opening defense (kills fund
+    // the rest). Without this the player can't build before the first wave.
+    score.gold = STARTING_GOLD;
     streak.break_streak();
     upgrades.reset();
     equipment.reset();
@@ -129,23 +139,23 @@ pub fn reset_run(
 pub fn enter_game_over(
     mut commands: Commands,
     score: Res<Score>,
-    leftovers: Query<Entity, Or<(With<Enemy>, With<Bullet>)>>,
+    leftovers: Query<Entity, Or<(With<Enemy>, With<Bullet>, With<Ship>, With<Core>, With<Tower>)>>,
 ) {
     for e in &leftovers {
         commands.entity(e).despawn();
     }
     let subtitle = format!(
-        "{} points · {} gold · wave reached\nPress ENTER to return to the title",
+        "The Core has fallen.\n{} points · {} gold\nPress ENTER to return to the title",
         score.points, score.gold
     );
     spawn_overlay(
         &mut commands,
         GameOverScreen,
-        "GAME OVER",
+        "CORE DESTROYED",
         &subtitle,
         Color::srgb(1.0, 0.35, 0.3),
     );
-    info!("GAME OVER — press ENTER to return to the title");
+    info!("CORE DESTROYED — press ENTER to return to the title");
 }
 
 /// In `GameOver`, ENTER / R returns to the title (a new run starts from there).
@@ -168,7 +178,7 @@ pub fn check_campaign_complete(wave: Res<Wave>, mut next: ResMut<NextState<GameS
 pub fn enter_game_complete(
     mut commands: Commands,
     score: Res<Score>,
-    leftovers: Query<Entity, Or<(With<Enemy>, With<Bullet>)>>,
+    leftovers: Query<Entity, Or<(With<Enemy>, With<Bullet>, With<Ship>, With<Core>, With<Tower>)>>,
 ) {
     for e in &leftovers {
         commands.entity(e).despawn();

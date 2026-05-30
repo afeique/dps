@@ -17,7 +17,7 @@
 //!   - No bullet firing: fire_cooldown is declared in stats; actual firing is
 //!     wired by the parent integrator's enemy_fire system.
 
-use crate::components::{AiState, Enemy, EnemyKind, Ship, SpeedMul, Velocity};
+use crate::components::{AiState, Core, Enemy, EnemyKind, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
 use bevy::prelude::*;
@@ -165,7 +165,7 @@ const DRIFT_TOWARD: f32 = 24.0; // 0.4 px/frame * 60 fps = 24 u/s
 pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
-    player: Query<&Transform, With<Ship>>,
+    player: Query<&Transform, With<Core>>,
     mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
 ) {
     let dt = time.delta_secs();

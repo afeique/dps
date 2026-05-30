@@ -55,6 +55,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::LootFeed>()
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
+            .init_resource::<systems::tower::SelectedTower>()
             .init_resource::<crate::combat::reaction::PendingReactions>()
             // Meta-progression (ME): load the persistent account profile at boot.
             .insert_resource(crate::meta::load_meta())
@@ -91,6 +92,8 @@ impl Plugin for GamePlugin {
                     render::cursor::spawn_crosshair,
                     render::flash::setup_screen_flash.after(render::spawn_camera),
                     systems::asteroids::setup_asteroid_material,
+                    // Tower-defense placement preview (hidden until a kind is armed).
+                    systems::tower::setup_tower_ghost,
                     audio::setup_sfx,
                     // Apply the saved ability loadout from Meta (ME persistence).
                     systems::loadout_screen::apply_saved_loadout,
@@ -108,6 +111,7 @@ impl Plugin for GamePlugin {
                     render::nebula::parallax_nebula,
                     render::hud::update_hud,
                     render::hud::update_boss_bar,
+                    render::hud::update_core_bar,
                     render::hud::update_ability_bar,
                     render::cursor::update_crosshair,
                     // Floating combat text (damage / dodge / heal) — nested as one
@@ -199,6 +203,11 @@ impl Plugin for GamePlugin {
                 (
                     systems::flow::reset_run,
                     systems::spawn::spawn_player,
+                    // The defense objective — enemies seek it, and losing it ends
+                    // the run (the commander ship no longer does).
+                    systems::tower::spawn_core,
+                    // Clear any armed build selection from a prior run.
+                    systems::tower::reset_selection,
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
                     systems::formations::clear_formations,
@@ -373,6 +382,20 @@ impl Plugin for GamePlugin {
                 )
                     .run_if(in_state(GameState::Playing)),
             )
+            // ── tower defense: build input + placement preview ──────────────────
+            .add_systems(
+                Update,
+                systems::tower::tower_build_input
+                    .after(systems::input::update_aim)
+                    .run_if(in_state(GameState::Playing)),
+            )
+            // Ghost self-hides outside Playing / when nothing is armed.
+            .add_systems(Update, systems::tower::update_tower_ghost)
+            // ENTER skips the pre-wave-1 build window and launches the assault.
+            .add_systems(
+                Update,
+                systems::wave::prewave_start_input.run_if(in_state(GameState::Playing)),
+            )
             // ── pause overlay ───────────────────────────────────────────
             .add_systems(OnEnter(GameState::Paused), systems::flow::enter_paused)
             .add_systems(
@@ -405,6 +428,8 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     systems::flow::check_campaign_complete,
+                    // Lose condition: the Core's integrity hitting zero ends the run.
+                    systems::tower::core_lose_check,
                     systems::survivor::check_survivor,
                     systems::missions::update_missions,
                     render::wave_title::show_wave_title,
@@ -492,6 +517,9 @@ impl Plugin for GamePlugin {
                         systems::enemy::firing::enemy_firing,
                         systems::weapons::player_fire,
                         systems::weapons::spawn_bullets,
+                        // Turrets auto-target the nearest enemy and spawn their
+                        // own projectiles (directly, not via the Fire message).
+                        systems::tower::tower_fire,
                     )
                         .chain(),
                     // Bullet trajectory systems (W), grouped to keep the outer
@@ -531,11 +559,13 @@ impl Plugin for GamePlugin {
                         systems::skills::deflector_blocks,
                         systems::skills::tractor_absorb,
                         systems::collision::enemy_bullet_hits_player,
-                        // Hull contacts: enemy ram + asteroid carom — nested into
-                        // one slot to stay under Bevy's 20-element tuple ceiling.
+                        // Hull contacts: enemy ram + asteroid carom + Core leak —
+                        // nested into one slot to stay under Bevy's 20-element ceiling.
                         (
                             systems::collision::enemy_contact_player,
                             systems::collision::player_hits_asteroid,
+                            // Enemies that reach the Core detonate against it.
+                            systems::collision::enemy_contact_core,
                         ),
                         systems::asteroids::asteroid_hits,
                         systems::power_weapon::update_nova,

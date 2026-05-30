@@ -7333,7 +7333,7 @@ fn formation_lerps_and_expires() {
 
     let mut app = test_app();
     let world = app.world_mut();
-    world.spawn((Ship::default(), Transform::default())); // player at origin
+    world.spawn((Core, Transform::default())); // Core = formation orbit centre, at origin
 
     let mut ents = Vec::new();
     for _ in 0..3 {
