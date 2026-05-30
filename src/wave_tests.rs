@@ -5521,6 +5521,33 @@ fn asteroid_wireframe_mesh() {
     assert_ne!(colors[a], colors[b], "the gradient varies vertex-to-vertex");
 }
 
+/// The vertex glint nodes append a quad per icosahedron vertex (12 → 48 verts /
+/// 72 indices), all in range, each brighter than the struts they derive from —
+/// and the vertex count is constant so the lazily-built index buffer stays valid.
+#[test]
+fn asteroid_vertex_glint_nodes() {
+    use crate::systems::asteroids::{ICO_VERTS, project, push_vertex_nodes, wireframe_geometry};
+
+    let screen = project(&ICO_VERTS, Quat::IDENTITY);
+    let colors = [[1.0_f32, 0.5, 0.25, 1.0]; 12];
+    let (mut pos, mut col, mut idx) = wireframe_geometry(&screen, &colors);
+    let (edge_verts, edge_idx) = (pos.len(), idx.len());
+
+    push_vertex_nodes(&mut pos, &mut col, &mut idx, &screen, &colors, 2.0);
+
+    assert_eq!(pos.len(), edge_verts + 12 * 4, "a quad per vertex node");
+    assert_eq!(col.len(), pos.len(), "one color per position");
+    assert_eq!(idx.len(), edge_idx + 12 * 6, "two triangles per node");
+    assert!(
+        idx.iter().all(|&i| (i as usize) < pos.len()),
+        "node indices stay in range (else the GPU reads garbage)"
+    );
+    assert!(
+        col[edge_verts][0] > colors[0][0],
+        "glint nodes are brighter than the struts they derive from"
+    );
+}
+
 // ── 60. lightning_bolt_points ─────────────────────────────────────────────────
 
 /// The Lance/Arc bolt geometry (spec III.7): anchored endpoints on the beam line,

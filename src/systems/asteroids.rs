@@ -128,6 +128,9 @@ const EDGE_HALF_W: f32 = 1.6;
 const PULSE_RATE: f32 = 2.5;
 /// HDR gain on the wireframe color so Bloom turns it neon.
 const HDR_GAIN: f32 = 2.6;
+/// Extra brightness on the vertex glint nodes (over the struts) so the joints of
+/// the wireframe read as bright facets — the rock glints like a cut gem.
+const NODE_GAIN: f32 = 1.7;
 
 /// Build the tumble state for a tier/seed: jittered + scaled vertices, random
 /// 3-axis spin, a moving base hue (20 % gold, else a teal→violet band), a hue
@@ -217,6 +220,39 @@ pub fn wireframe_geometry(
     (pos, col, idx)
 }
 
+/// Append a bright glint node (a small `half`-sized quad) at each of the 12
+/// vertices, brighter than the struts (`NODE_GAIN`) and inheriting the vertex's
+/// pulsing depth-faded hue — so the icosahedron's joints sparkle like a cut gem's
+/// facets. Appended *after* the edge quads, so the static index buffer built once
+/// in `tumble_asteroids` stays valid (vertex count is constant: 30 edges + 12
+/// nodes every frame).
+pub fn push_vertex_nodes(
+    pos: &mut Vec<[f32; 3]>,
+    col: &mut Vec<[f32; 4]>,
+    idx: &mut Vec<u32>,
+    screen: &[Vec2; 12],
+    colors: &[[f32; 4]; 12],
+    half: f32,
+) {
+    for i in 0..12 {
+        let c = screen[i];
+        let base = pos.len() as u32;
+        for off in [
+            Vec2::new(-half, -half),
+            Vec2::new(half, -half),
+            Vec2::new(half, half),
+            Vec2::new(-half, half),
+        ] {
+            let p = c + off;
+            pos.push([p.x, p.y, 0.0]);
+        }
+        let vc = colors[i];
+        let node = [vc[0] * NODE_GAIN, vc[1] * NODE_GAIN, vc[2] * NODE_GAIN, 1.0];
+        col.extend_from_slice(&[node, node, node, node]);
+        idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+}
+
 /// Spawn one asteroid of `tier` at `pos` with `vel` and a deterministic tumble
 /// seeded by `seed`. Shared by the wave spawner and the split path. The
 /// renderable `Mesh2d` is attached lazily by `tumble_asteroids` (needs `Assets`),
@@ -272,7 +308,11 @@ pub fn tumble_asteroids(
             depth[i] = p.z;
         }
         let colors = vertex_colors(&tum, &depth, t);
-        let (pos, col, idx) = wireframe_geometry(&screen, &colors);
+        let (mut pos, mut col, mut idx) = wireframe_geometry(&screen, &colors);
+        // Bright glint nodes at the 12 vertices (sized to the rock) so the joints
+        // sparkle. Constant vertex count keeps the lazily-built index buffer valid.
+        let node_half = (tum.radius * 0.06).clamp(1.6, 3.2);
+        push_vertex_nodes(&mut pos, &mut col, &mut idx, &screen, &colors, node_half);
 
         match mesh2d {
             Some(m) => {
