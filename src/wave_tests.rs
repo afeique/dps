@@ -5422,35 +5422,40 @@ fn rage_triggers_screen_flash() {
     );
 }
 
-// ── 57. tight_controls_track_input ────────────────────────────────────────────
+// ── 57. inertial_controls_carry_momentum ──────────────────────────────────────
 
-/// The tightened control model: velocity tracks the input target with no
-/// overshoot, reaches it under sustained input, and sheds it fast on release
-/// (low momentum).
+/// The floaty "space" control model: thrust accelerates the ship up to its
+/// hard speed cap, and releasing input lets it COAST — it keeps most of its
+/// momentum and drifts rather than stopping dead.
 #[test]
-fn tight_controls_track_input() {
-    use crate::systems::movement::tracked_velocity;
+fn inertial_controls_carry_momentum() {
+    use crate::systems::movement::inertial_velocity;
 
     let dt = 1.0 / 64.0;
-    let resp = 1100.0 * 0.02; // base ship: thrust × RESPONSE_K ≈ 22/s
-    let target = Vec2::new(520.0, 0.0);
+    let accel = 1100.0; // base ship thrust (now an acceleration)
+    let cap = 520.0;
+    let thrust = Vec2::new(1.0, 0.0); // input is a unit direction
 
-    // A single step moves toward the target but never past it.
-    let one = tracked_velocity(Vec2::ZERO, target, resp, dt);
-    assert!(one.x > 0.0 && one.x < target.x, "one step: toward target, no overshoot ({one:?})");
-
-    // Sustained input reaches (≈) the target speed.
+    // Sustained thrust builds up toward — and is capped at — the top speed.
     let mut v = Vec2::ZERO;
-    for _ in 0..90 {
-        v = tracked_velocity(v, target, resp, dt);
+    for _ in 0..120 {
+        v = inertial_velocity(v, thrust, accel, cap, dt);
     }
-    assert!(v.x > 505.0 && v.x <= target.x + 1e-3, "approaches target speed ({v:?})");
+    let thrusting = v.length();
+    assert!(thrusting > 0.8 * cap, "thrust builds near the cap ({thrusting})");
+    assert!(thrusting <= cap + 1e-3, "never exceeds the hard cap ({thrusting})");
 
-    // Releasing input (target 0) sheds speed quickly — low momentum.
-    for _ in 0..20 {
-        v = tracked_velocity(v, Vec2::ZERO, resp, dt);
+    // Release input for ~0.5 s → it coasts, keeping most of its speed (floaty),
+    // while still bleeding off some (drag works).
+    for _ in 0..32 {
+        v = inertial_velocity(v, Vec2::ZERO, accel, cap, dt);
     }
-    assert!(v.length() < 40.0, "stops fast when input released ({v:?})");
+    let coasting = v.length();
+    assert!(
+        coasting > 0.55 * thrusting,
+        "coasts and keeps its momentum, not a dead stop ({coasting} vs {thrusting})"
+    );
+    assert!(coasting < thrusting, "but drag still bleeds speed off ({coasting})");
 }
 
 // ── 58. asteroid_icosahedron_geometry ─────────────────────────────────────────

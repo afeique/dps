@@ -7,19 +7,22 @@ use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{momentum_bonus, UpgradeId, Upgrades};
 use bevy::prelude::*;
 
-/// Velocity response rate per unit of `Ship.thrust` (1/sec). Tuned so the base
-/// thrust (1100) yields a tight ~22/s tracking: the ship reaches — and, when
-/// WASD is released, sheds — speed in ~30 ms, so control is precise and almost
-/// momentum-free. The Afterburner upgrade (+thrust) makes it snappier still.
-const RESPONSE_K: f32 = 0.02;
+/// Fraction of velocity **retained per second** while coasting — the "space
+/// drift" of the inertial model. 0.65 ⇒ the ship sheds ~35%/s with no input
+/// (half-life ~1.6 s), so it glides and carries momentum instead of stopping
+/// dead. Lower = draggier/tighter, higher = floatier.
+const DAMPING: f32 = 0.65;
 
-/// Track `current` velocity toward `target` with framerate-independent
-/// exponential smoothing at `response` (1/sec). Higher response = tighter,
-/// lower-momentum control; the result never overshoots `target`.
+/// One step of inertial "space" movement: accelerate by `thrust_dir × accel × dt`
+/// (thrust_dir is the input, length ≤ 1), apply the framerate-independent
+/// [`DAMPING`] drag, then hard-cap the speed to `max_speed`. The ship keeps its
+/// momentum — releasing input coasts rather than snapping to a stop, and an
+/// external impulse (a collision bounce, a knockback) persists and drifts off.
 #[inline]
-pub fn tracked_velocity(current: Vec2, target: Vec2, response: f32, dt: f32) -> Vec2 {
-    let t = 1.0 - (-response * dt).exp();
-    current.lerp(target, t)
+pub fn inertial_velocity(vel: Vec2, thrust_dir: Vec2, accel: f32, max_speed: f32, dt: f32) -> Vec2 {
+    let mut v = vel + thrust_dir * accel * dt;
+    v *= DAMPING.powf(dt);
+    v.clamp_length_max(max_speed)
 }
 
 /// Turn the ship's `Intent` into movement + rotation.
@@ -48,13 +51,12 @@ pub fn ship_control(
         let top_speed =
             ship.max_speed * (1.0 + momentum_bonus(*sustained, momentum) + item_speed);
 
-        // Tight twin-stick control (WASD / left-stick, screen-space, independent
-        // of facing): track velocity toward the input target rather than
-        // accelerating + coasting. `move_dir` is clamped to len ≤1, so the target
-        // tops out at `top_speed`; releasing input sheds speed just as fast, so
-        // there's almost no glide — precise, low-momentum control.
-        let target = intent.move_dir * top_speed;
-        vel.0 = tracked_velocity(vel.0, target, ship.thrust * RESPONSE_K, dt);
+        // Inertial "space" control (WASD / left-stick, screen-space, independent
+        // of facing): the input *thrusts* the ship and momentum persists, with a
+        // gentle drag so it drifts to rest rather than stopping the instant input
+        // releases — floaty space movement. `move_dir` (len ≤1) scales the thrust;
+        // the speed is hard-capped at `top_speed`.
+        vel.0 = inertial_velocity(vel.0, intent.move_dir, ship.thrust, top_speed, dt);
 
         // Face the mouse aim point instantly. Forward is +Y, so rotate by
         // (aim_angle - PI/2); the player then fires along this facing.
@@ -82,14 +84,16 @@ pub fn confine_player(
     bounds: Res<PlayBounds>,
     mut q: Query<(&mut Transform, &mut Velocity), With<Ship>>,
 ) {
+    // Springier than before so hitting the wall in the floaty model reads as a
+    // momentum-preserving bounce rather than a dead stop.
     for (mut tf, mut vel) in &mut q {
         if tf.translation.x.abs() > bounds.half.x {
             tf.translation.x = tf.translation.x.clamp(-bounds.half.x, bounds.half.x);
-            vel.0.x *= -0.5;
+            vel.0.x *= -0.7;
         }
         if tf.translation.y.abs() > bounds.half.y {
             tf.translation.y = tf.translation.y.clamp(-bounds.half.y, bounds.half.y);
-            vel.0.y *= -0.5;
+            vel.0.y *= -0.7;
         }
     }
 }
