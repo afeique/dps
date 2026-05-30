@@ -49,6 +49,8 @@ fn test_app() -> App {
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
+        .init_resource::<crate::systems::weapons::CurrentWeapon>()
+        .init_resource::<crate::systems::weapons::ElementInfusion>()
         .init_resource::<crate::systems::items::Equipment>()
         .init_resource::<crate::systems::formations::Formations>()
         .init_resource::<crate::combat::reaction::PendingReactions>()
@@ -5545,6 +5547,23 @@ fn asteroid_vertex_glint_nodes() {
     assert!(
         col[edge_verts][0] > colors[0][0],
         "glint nodes are brighter than the struts they derive from"
+    );
+}
+
+/// The muzzle flash tints to the active firing element: warm for pyro, cool for
+/// cryo, and always HDR-bright so Bloom flares it.
+#[test]
+fn muzzle_flash_tints_by_element() {
+    use crate::combat::element::Element;
+    use crate::render::muzzle_flash::muzzle_color;
+
+    let pyro = muzzle_color(Element::Pyro).to_linear();
+    let cryo = muzzle_color(Element::Cryo).to_linear();
+    assert!(pyro.red > pyro.blue, "a pyro muzzle skews warm (red over blue)");
+    assert!(cryo.blue > cryo.red, "a cryo muzzle skews cool (blue over red)");
+    assert!(
+        pyro.red > 1.0 && cryo.blue > 1.0,
+        "the flash stays HDR-bright so it blooms"
     );
 }
 
