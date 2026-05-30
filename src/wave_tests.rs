@@ -5550,6 +5550,35 @@ fn asteroid_vertex_glint_nodes() {
     );
 }
 
+/// The solid faceted body: one flat-shaded triangle per icosahedron face (20 → 60
+/// verts / 60 indices), all in range, dimmer than the struts so the wireframe
+/// reads over it. The constant vertex count keeps the lazy index buffer valid.
+#[test]
+fn asteroid_solid_faces() {
+    use crate::systems::asteroids::{ICO_FACES, ICO_VERTS, face_geometry, project};
+
+    let rot = Quat::from_rotation_x(0.6);
+    let screen = project(&ICO_VERTS, rot);
+    let mut depth = [0.0_f32; 12];
+    for (i, d) in depth.iter_mut().enumerate() {
+        *d = (rot * ICO_VERTS[i]).z;
+    }
+    let colors = [[2.0_f32, 1.0, 0.5, 1.0]; 12];
+
+    let (pos, col, idx) = face_geometry(&screen, &depth, &colors);
+    assert_eq!(pos.len(), ICO_FACES.len() * 3, "3 verts per face");
+    assert_eq!(col.len(), pos.len(), "one color per vertex");
+    assert_eq!(idx.len(), ICO_FACES.len() * 3, "one triangle per face");
+    assert!(
+        idx.iter().all(|&i| (i as usize) < pos.len()),
+        "face indices stay in range"
+    );
+    assert!(
+        col[0][0] < colors[0][0],
+        "the face fill is dimmer than the strut color (so the wireframe reads over it)"
+    );
+}
+
 /// The muzzle flash tints to the active firing element: warm for pyro, cool for
 /// cryo, and always HDR-bright so Bloom flares it.
 #[test]

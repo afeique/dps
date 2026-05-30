@@ -97,6 +97,15 @@ pub const ICO_EDGES: [(usize, usize); 30] = [
     (10, 11),
 ];
 
+/// The 20 icosahedron faces (vertex-index triples) for the canonical `ICO_VERTS`
+/// layout — used to fill the solid faceted body behind the wireframe.
+pub const ICO_FACES: [(usize, usize, usize); 20] = [
+    (0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11),
+    (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8),
+    (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9),
+    (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7), (9, 8, 1),
+];
+
 /// Perspective focal length for the wireframe projection (spec VI.1 `fov 300`).
 const FOV: f32 = 300.0;
 
@@ -122,8 +131,12 @@ pub struct Tumbler {
     pulse_phase: f32,
 }
 
-/// Edge half-width (px) of the wireframe struts.
-const EDGE_HALF_W: f32 = 1.6;
+/// Edge half-width (px) of the wireframe struts — thin now that the solid faces
+/// carry the shape; the struts just highlight the facet seams.
+const EDGE_HALF_W: f32 = 0.8;
+/// Brightness multiplier for the solid face fill (flat-shaded per facet). Kept
+/// dim so the body reads as a gem and the HDR struts still glow over it.
+const FACE_DIM: f32 = 0.42;
 /// Brightness-pulse rate (rad/sec).
 const PULSE_RATE: f32 = 2.5;
 /// HDR gain on the wireframe color so Bloom turns it neon.
@@ -220,6 +233,52 @@ pub fn wireframe_geometry(
     (pos, col, idx)
 }
 
+/// Build the solid faceted body: each of the 20 triangular faces flat-shaded
+/// (the dimmed average of its three vertex hues), emitted **back-to-front** by
+/// average depth so the painter's order gives correct occlusion on the convex
+/// hull — only the front facets show, as a low-poly gem. The vertex *count* is
+/// constant (20×3), so the lazily-built index buffer stays valid; the per-frame
+/// sort lives in the vertex order, not the indices.
+pub fn face_geometry(
+    screen: &[Vec2; 12],
+    depth: &[f32; 12],
+    colors: &[[f32; 4]; 12],
+) -> (Vec<[f32; 3]>, Vec<[f32; 4]>, Vec<u32>) {
+    // Sort face indices far → near (larger z = farther under `fov/(fov+z)`), so
+    // the nearer facets are emitted last and overdraw the ones behind them.
+    let mut order: [usize; 20] = [0; 20];
+    for (i, o) in order.iter_mut().enumerate() {
+        *o = i;
+    }
+    let avg_z = |&(a, b, c): &(usize, usize, usize)| (depth[a] + depth[b] + depth[c]) / 3.0;
+    order.sort_by(|&x, &y| {
+        avg_z(&ICO_FACES[y])
+            .partial_cmp(&avg_z(&ICO_FACES[x]))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut pos = Vec::with_capacity(60);
+    let mut col = Vec::with_capacity(60);
+    let mut idx = Vec::with_capacity(60);
+    for fi in order {
+        let (a, b, c) = ICO_FACES[fi];
+        let base = pos.len() as u32;
+        for &v in &[a, b, c] {
+            pos.push([screen[v].x, screen[v].y, 0.0]);
+        }
+        // Flat shade: dimmed average of the 3 vertex colors.
+        let face = [
+            (colors[a][0] + colors[b][0] + colors[c][0]) / 3.0 * FACE_DIM,
+            (colors[a][1] + colors[b][1] + colors[c][1]) / 3.0 * FACE_DIM,
+            (colors[a][2] + colors[b][2] + colors[c][2]) / 3.0 * FACE_DIM,
+            1.0,
+        ];
+        col.extend_from_slice(&[face, face, face]);
+        idx.extend_from_slice(&[base, base + 1, base + 2]);
+    }
+    (pos, col, idx)
+}
+
 /// Append a bright glint node (a small `half`-sized quad) at each of the 12
 /// vertices, brighter than the struts (`NODE_GAIN`) and inheriting the vertex's
 /// pulsing depth-faded hue — so the icosahedron's joints sparkle like a cut gem's
@@ -308,9 +367,15 @@ pub fn tumble_asteroids(
             depth[i] = p.z;
         }
         let colors = vertex_colors(&tum, &depth, t);
-        let (mut pos, mut col, mut idx) = wireframe_geometry(&screen, &colors);
-        // Bright glint nodes at the 12 vertices (sized to the rock) so the joints
-        // sparkle. Constant vertex count keeps the lazily-built index buffer valid.
+        // Solid faceted body first (back-to-front), then the thin wireframe struts
+        // over it, then the bright vertex glints — one mesh, constant vertex count
+        // so the lazily-built index buffer stays valid.
+        let (mut pos, mut col, mut idx) = face_geometry(&screen, &depth, &colors);
+        let face_verts = pos.len() as u32; // 60 (20 faces × 3)
+        let (epos, ecol, eidx) = wireframe_geometry(&screen, &colors);
+        pos.extend(epos);
+        col.extend(ecol);
+        idx.extend(eidx.into_iter().map(|i| i + face_verts));
         let node_half = (tum.radius * 0.06).clamp(1.6, 3.2);
         push_vertex_nodes(&mut pos, &mut col, &mut idx, &screen, &colors, node_half);
 
