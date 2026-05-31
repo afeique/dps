@@ -38,6 +38,9 @@ impl Plugin for ScreenshotPlugin {
                         // DPS_RADIAL=1: hold F so the screenshot shows the radial.
                         (|mut keys: ResMut<ButtonInput<KeyCode>>| keys.press(KeyCode::KeyF))
                             .run_if(|| std::env::var("DPS_RADIAL").is_ok()),
+                        // DPS_BLAST=1: emit staged Deaths just before the capture
+                        // so the screenshot lands on fresh explosions (FX dev).
+                        blast_probe.run_if(|| std::env::var("DPS_BLAST").is_ok()),
                     ),
                 );
             }
@@ -94,6 +97,37 @@ fn demo_drive(
             }
         }
         _ => {}
+    }
+}
+
+/// FX-dev only (`DPS_BLAST=1`): emit a spread of `Death` messages a few frames
+/// before the frame-150 capture, each tagged with a different element so the
+/// screenshot shows several fresh explosions (incl. the 3D perspective rings) at
+/// once. Staggered across frames 138/142/146 so cores + expanding rings overlap.
+fn blast_probe(
+    mut deaths: MessageWriter<crate::messages::Death>,
+    mut frame: Local<u32>,
+) {
+    use crate::components::EnemyKind;
+    *frame += 1;
+    let kinds = [
+        (EnemyKind::Tangerine, Vec2::new(-180.0, 90.0)),  // pyro (orange)
+        (EnemyKind::FrostLance, Vec2::new(170.0, 70.0)),  // cryo (blue)
+        (EnemyKind::TeslaWraith, Vec2::new(-120.0, -110.0)), // volt (violet)
+        (EnemyKind::Plaguebearer, Vec2::new(140.0, -120.0)), // toxic (green)
+        (EnemyKind::Hunter, Vec2::new(0.0, 150.0)),       // kinetic (pale)
+    ];
+    let fire_on = matches!(*frame, 138 | 142 | 146);
+    if fire_on {
+        for (kind, pos) in kinds {
+            deaths.write(crate::messages::Death {
+                entity: Entity::PLACEHOLDER,
+                position: pos,
+                kind: Some(kind),
+                boss_tier: 0,
+                mini_boss: false,
+            });
+        }
     }
 }
 
