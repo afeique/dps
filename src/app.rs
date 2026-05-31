@@ -150,8 +150,6 @@ impl Plugin for GamePlugin {
                         render::reaction_fx::spawn_reaction_fx,
                         // Element-tinted wavefront rings on every enemy death.
                         render::reaction_fx::spawn_death_rings,
-                        // Translucent layered fireball (core glow + lumpy puffs).
-                        render::fireball::spawn_fireball,
                         render::reaction_fx::tick_shockwaves,
                     )
                         .chain(),
@@ -346,8 +344,6 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::tick_line_debris,
                     // Lingering ember afterglow at the shatter point.
                     render::asteroid_debris::fade_embers,
-                    // Bloom + dissipate the translucent fireball layers.
-                    render::fireball::tick_fireballs,
                     // Idle orbs spin + pulse so they read as live collectibles.
                     systems::drops::animate_orbs,
                     // Prismshard crystals shimmer + turn as they home in.
