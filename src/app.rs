@@ -385,6 +385,14 @@ impl Plugin for GamePlugin {
                     .after(systems::input::update_aim)
                     .run_if(in_state(GameState::Playing)),
             )
+            // Left-click an enemy (when not placing a tower) → fire the equipped
+            // weapon at it from the Core.
+            .add_systems(
+                Update,
+                systems::weapons::manual_fire
+                    .after(systems::input::update_aim)
+                    .run_if(in_state(GameState::Playing)),
+            )
             // Ghost self-hides outside Playing / when nothing is armed.
             .add_systems(Update, systems::tower::update_tower_ghost)
             // ENTER skips the pre-wave-1 build window and launches the assault.

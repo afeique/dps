@@ -169,3 +169,122 @@ fn ready_tower_fires_player_bullet_at_target() {
     assert!(vel.0.x > 0.0, "bullet flies toward the enemy on the +X side (vel {:?})", vel.0);
     assert!(vel.0.y.abs() < 1.0, "and roughly straight along X");
 }
+
+// ── integration: click-to-fire the equipped weapon ───────────────────────────
+
+/// A collector so the test can inspect emitted `Fire` messages.
+#[derive(Resource, Default)]
+struct FiredShots(Vec<crate::messages::Fire>);
+
+fn collect_fire(
+    mut r: MessageReader<crate::messages::Fire>,
+    mut out: ResMut<FiredShots>,
+) {
+    for f in r.read() {
+        out.0.push(*f);
+    }
+}
+
+/// Clicking on an enemy (cursor over it, left-button just pressed, no tower armed)
+/// emits one player `Fire` from the Core toward the enemy. Clicking while a tower
+/// is armed (placement mode) emits nothing.
+#[test]
+fn clicking_an_enemy_fires_the_equipped_weapon() {
+    use crate::messages::Fire;
+    use crate::resources::Aim;
+    use crate::systems::shop::Upgrades;
+    use crate::systems::tower::SelectedTower;
+    use crate::systems::weapons::{manual_fire, CurrentWeapon};
+
+    fn run(armed: Option<TowerKind>) -> Vec<Fire> {
+        let mut app = App::new();
+        app.add_message::<Fire>()
+            .init_resource::<CurrentWeapon>()
+            .init_resource::<Upgrades>()
+            .init_resource::<FiredShots>();
+
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Left);
+
+        let world = app.world_mut();
+        world.insert_resource(mouse);
+        world.insert_resource(Time::<()>::default());
+        // Cursor sits on the enemy at (100, 0).
+        world.insert_resource(Aim { world: Vec2::new(100.0, 0.0), active: true });
+        world.insert_resource(SelectedTower { kind: armed });
+        world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+        world.spawn((
+            Enemy { kind: EnemyKind::Drifter },
+            Collider { radius: 16.0 },
+            Transform::from_xyz(100.0, 0.0, 0.0),
+        ));
+
+        let mut step = Schedule::default();
+        step.add_systems((manual_fire, collect_fire).chain());
+        step.run(world);
+        world.resource::<FiredShots>().0.clone()
+    }
+
+    // Not placing → one shot from the Core (origin ~0,0) aimed at the enemy (+X).
+    let shots = run(None);
+    assert_eq!(shots.len(), 1, "a click on an enemy fires once");
+    let f = shots[0];
+    assert!(matches!(f.faction, Faction::Player), "the shot is player-faction");
+    assert!(f.origin.length() < 0.01, "it originates at the Core");
+    assert!(f.dir.x > 0.9 && f.dir.y.abs() < 0.1, "aimed at the enemy on the +X side (dir {:?})", f.dir);
+
+    // Placement mode (a tower armed) → the click builds, not shoots.
+    assert!(run(Some(TowerKind::Gun)).is_empty(), "no manual fire while placing a tower");
+}
+
+/// End-to-end: a click on an enemy runs `manual_fire` → `spawn_bullets`, yielding
+/// a real player bullet flying toward the enemy with the equipped weapon's build.
+#[test]
+fn manual_fire_chains_to_a_player_bullet() {
+    use crate::messages::Fire;
+    use crate::resources::Aim;
+    use crate::systems::shop::Upgrades;
+    use crate::systems::tower::SelectedTower;
+    use crate::systems::weapons::{
+        manual_fire, spawn_bullets, Attunements, CurrentWeapon, ElementInfusion,
+    };
+    use crate::systems::wave::Wave;
+
+    let mut app = App::new();
+    app.add_message::<Fire>()
+        .init_resource::<CurrentWeapon>()
+        .init_resource::<Attunements>()
+        .init_resource::<ElementInfusion>()
+        .init_resource::<Upgrades>()
+        .init_resource::<SelectedTower>()
+        .init_resource::<Wave>()
+        .insert_resource(dummy_bullet_assets());
+
+    let mut mouse = ButtonInput::<MouseButton>::default();
+    mouse.press(MouseButton::Left);
+
+    let world = app.world_mut();
+    world.insert_resource(mouse);
+    world.insert_resource(Time::<()>::default());
+    world.insert_resource(Aim { world: Vec2::new(120.0, 0.0), active: true });
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.spawn((
+        Enemy { kind: EnemyKind::Drifter },
+        Collider { radius: 16.0 },
+        Transform::from_xyz(120.0, 0.0, 0.0),
+    ));
+
+    // Same-schedule chain so spawn_bullets reads the Fire manual_fire just wrote.
+    let mut step = Schedule::default();
+    step.add_systems((manual_fire, spawn_bullets).chain());
+    step.run(world);
+
+    let mut q = world.query::<(&Bullet, &Velocity, &Faction)>();
+    let (bullet, vel, faction) = q
+        .iter(world)
+        .next()
+        .expect("clicking an enemy spawns a player bullet");
+    assert!(matches!(bullet.kind, BulletKind::Player));
+    assert!(matches!(faction, Faction::Player));
+    assert!(vel.0.x > 0.0, "the bullet flies toward the clicked enemy (+X) (vel {:?})", vel.0);
+}

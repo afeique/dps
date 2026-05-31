@@ -26,6 +26,7 @@ use crate::combat::element::{Element, ElementSet};
 use crate::components::*;
 use crate::messages::{Fire, Shard};
 use crate::render::bullets::BulletAssets;
+use crate::resources::Aim;
 use crate::systems::power_weapon::Homing;
 use crate::systems::shop::{
     gunslinger_fire_mult, homing_turn_rate, overcharge_interval, UpgradeId, Upgrades,
@@ -799,6 +800,93 @@ pub fn player_fire(
                 let j = jitter_rand(t * 53.3 + i as f32 * 12.9) * st.jitter;
                 shoot(rotate(fwd, base + j), &mut fire);
             }
+        }
+    }
+}
+
+/// Click-forgiveness: an enemy counts as "clicked" if the cursor is within its
+/// collider radius plus this slack (world units).
+const MANUAL_PICK_SLACK: f32 = 12.0;
+
+/// Tower-defense manual fire: a **left-click on an enemy** (while no tower is
+/// armed for placement) looses the **equipped weapon's** shot from the Core
+/// toward that enemy. Reuses the same multishot fan + `Fire` → `spawn_bullets`
+/// pipeline as the retired ship fire, so the projectile, element, archetype
+/// (flak/gravity/mitosis/…), and piercing all follow `CurrentWeapon`.
+///
+/// Runs in `Update` so it never drops a click (`just_pressed` can be missed in
+/// `FixedUpdate`); the `Fire` it writes is consumed by `spawn_bullets` next tick.
+pub fn manual_fire(
+    time: Res<Time>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    cur: Res<CurrentWeapon>,
+    upgrades: Res<Upgrades>,
+    aim: Res<Aim>,
+    sel: Res<crate::systems::tower::SelectedTower>,
+    mut fire: MessageWriter<Fire>,
+    core: Query<&Transform, With<Core>>,
+    enemies: Query<(&Transform, &Collider), With<Enemy>>,
+) {
+    // Left-click only, and not while placing a tower (those clicks build).
+    if sel.kind.is_some() || !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let Some(cursor) = aim.active.then_some(aim.world) else {
+        return;
+    };
+    // The nearest enemy under (within slack of) the cursor — clicking empty
+    // space fires nothing.
+    let target = enemies
+        .iter()
+        .filter(|(t, c)| t.translation.truncate().distance(cursor) <= c.radius + MANUAL_PICK_SLACK)
+        .min_by(|(a, _), (b, _)| {
+            a.translation
+                .truncate()
+                .distance_squared(cursor)
+                .partial_cmp(&b.translation.truncate().distance_squared(cursor))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(t, _)| t.translation.truncate());
+    let Some(tgt) = target else {
+        return;
+    };
+    let origin = core
+        .single()
+        .map(|t| t.translation.truncate())
+        .unwrap_or(Vec2::ZERO);
+    let fwd = (tgt - origin).normalize_or_zero();
+    if fwd == Vec2::ZERO {
+        return;
+    }
+
+    let st = stats(cur.0);
+    let t = time.elapsed_secs();
+    // Multishot (kept upgrade) widens the equipped weapon's own fan.
+    let count = st.count + upgrades.owned(UpgradeId::Multishot);
+    let fan = st.spread.max(multishot_fan(count));
+
+    let shoot = |dir: Vec2, fire: &mut MessageWriter<Fire>| {
+        fire.write(Fire {
+            origin,
+            dir: dir.normalize_or_zero(),
+            damage: st.damage,
+            speed: st.speed,
+            faction: Faction::Player,
+            element: Element::Kinetic, // spawn_bullets resolves the real element set
+            homing: false,
+        });
+    };
+
+    if count <= 1 {
+        let j = jitter_rand(t * 91.7) * st.jitter;
+        shoot(rotate(fwd, j), &mut fire);
+    } else {
+        let half = fan * 0.5;
+        for i in 0..count {
+            let f = i as f32 / (count - 1) as f32;
+            let base = -half + f * fan;
+            let j = jitter_rand(t * 53.3 + i as f32 * 12.9) * st.jitter;
+            shoot(rotate(fwd, base + j), &mut fire);
         }
     }
 }
