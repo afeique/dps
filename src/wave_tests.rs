@@ -422,13 +422,13 @@ fn enemy_death_spawns_wavefront_rings() {
 
     assert_eq!(
         rings_for(Some(EnemyKind::Hunter), 0),
-        2,
-        "a normal enemy death should spawn a bright inner + dim outer wavefront ring"
+        4,
+        "a normal enemy death spawns 4 staggered wavefront rings (flash+bright+mid+outer)"
     );
     assert_eq!(
         rings_for(Some(EnemyKind::Hunter), 3),
-        3,
-        "a boss death should add a third white-hot shock ring"
+        5,
+        "a boss death adds a fifth white-hot shock ring"
     );
     assert_eq!(
         rings_for(None, 0),
@@ -472,13 +472,13 @@ fn enemy_death_spawns_element_shrapnel() {
 
     assert_eq!(
         shards_for(Some(EnemyKind::Hunter), 0),
-        6,
-        "a normal enemy death should spray 6 element-tinted shards"
+        18,
+        "a normal enemy death sprays 18 cross-screen element-tinted shards"
     );
     assert_eq!(
         shards_for(Some(EnemyKind::Hunter), 3),
-        18,
-        "a tier-3 boss death should spray 6 + tier*4 = 18 shards"
+        45,
+        "a tier-3 boss death sprays 18 × (1 + 0.5×tier) = 45 shards"
     );
     assert_eq!(
         shards_for(None, 0),

@@ -90,6 +90,8 @@ fn tower_kinds_carry_their_elements() {
 #[test]
 fn enemy_reaching_core_leaks_and_despawns() {
     let mut app = App::new();
+    // `enemy_contact_core` now emits a `Hit` (impact-spark signal) on the leak.
+    app.add_message::<crate::messages::Hit>();
     let world = app.world_mut();
 
     let core = world

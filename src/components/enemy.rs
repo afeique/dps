@@ -319,6 +319,15 @@ pub struct AiState {
     pub phase: f32,
 }
 
+/// Marks a Hunter mid **dive-bomb**: it has committed to thrusting straight
+/// through the Core (a fast lunge) and is locked into the dive until `timer`
+/// elapses, after which `hunter::ai` drops the marker and reseats the orbit slot
+/// on the far side — the dramatic "wind up at range, then dive" beat.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Diving {
+    pub timer: f32,
+}
+
 /// Firing cadence for enemies that shoot (Phase 3).
 #[derive(Component, Debug)]
 pub struct FireCooldown {
