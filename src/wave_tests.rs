@@ -45,7 +45,6 @@ fn test_app() -> App {
         .add_message::<crate::messages::AsteroidShatter>()
         .init_resource::<crate::meta::Meta>()
         .init_resource::<Score>()
-        .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()
@@ -891,38 +890,6 @@ fn firing_enemy_emits_fire() {
     );
 }
 
-// ── 5. kill_streak_multiplier_tiers ──────────────────────────────────────────
-
-/// The streak multiplier (spec III.6) is 1.0 below 10 kills, steps to 1.25 at
-/// 10, 2.00 at 60, caps at 3.00 by 200 — and only applies while the buff window
-/// is open; breaking the streak drops it to 1.0.
-#[test]
-fn kill_streak_multiplier_tiers() {
-    use crate::resources::{streak_mult, KillStreak, STREAK_BUFF_SECS};
-
-    assert_eq!(streak_mult(0), 1.0);
-    assert_eq!(streak_mult(9), 1.0);
-    assert_eq!(streak_mult(10), 1.25);
-    assert_eq!(streak_mult(59), 1.85);
-    assert_eq!(streak_mult(60), 2.00);
-    assert_eq!(streak_mult(250), 3.00, "caps at the 200-kill tier");
-
-    let mut s = KillStreak::default();
-    assert_eq!(s.multiplier(), 1.0, "no kills → no buff");
-    for _ in 0..10 {
-        s.on_kill();
-    }
-    assert_eq!(s.timer, STREAK_BUFF_SECS, "each kill refreshes the window");
-    assert_eq!(s.multiplier(), 1.25, "10 kills inside the window → 1.25×");
-
-    s.timer = 0.0; // window lapsed
-    assert_eq!(s.multiplier(), 1.0, "lapsed window → multiplier off (count kept)");
-    assert_eq!(s.kills, 10, "…but the count persists until damage");
-
-    s.break_streak();
-    assert_eq!(s.kills, 0);
-    assert_eq!(s.multiplier(), 1.0);
-}
 
 // ── 6. crit_roll_bounds ──────────────────────────────────────────────────────
 
@@ -1947,52 +1914,6 @@ fn berserker_scales_damage_with_missing_hp() {
     let full = dmg_at(40.0); // frac 1.0 → +0%
     let quarter = dmg_at(10.0); // frac 0.25 → +75%
     assert!(quarter > full * 1.7, "wounded (25% HP) hits ~1.75× a full-HP shot ({quarter} vs {full})");
-}
-
-/// Frenzy makes a live kill-streak hit harder: the helper is 0 without a streak
-/// or the passive and caps at 10 kills; in combat a streaking player deals more.
-#[test]
-fn frenzy_amplifies_with_kill_streak() {
-    use crate::resources::KillStreak;
-    use crate::systems::collision::bullet_hits_enemy;
-    use crate::systems::shop::{frenzy_bonus, UpgradeId, Upgrades};
-
-    assert_eq!(frenzy_bonus(0, 10), 0.0, "not owned → no bonus");
-    assert_eq!(frenzy_bonus(3, 0), 0.0, "no streak → no bonus");
-    assert!((frenzy_bonus(3, 10) - 0.9).abs() < 1e-6, "x3, 10 kills → +90%");
-    assert!((frenzy_bonus(3, 20) - 0.9).abs() < 1e-6, "kills cap at 10");
-
-    // Same seed + one bullet across runs, so any crit roll is identical; an active
-    // 10-kill streak is set in both, so the base streak mult cancels in the ratio.
-    fn dmg(owns_frenzy: bool) -> f32 {
-        let mut app = test_app();
-        if owns_frenzy {
-            app.world_mut().resource_mut::<Upgrades>().set(UpgradeId::Frenzy, 3);
-        }
-        app.world_mut().insert_resource(KillStreak { kills: 10, timer: 5.0 });
-        let world = app.world_mut();
-        let enemy = world
-            .spawn((
-                Enemy { kind: EnemyKind::Hunter },
-                Health::new(1.0e6),
-                Collider { radius: 16.0 },
-                Faction::Enemy,
-                Transform::from_xyz(0.0, 0.0, 0.0),
-            ))
-            .id();
-        world.spawn((
-            Bullet { kind: BulletKind::Player, damage: 10.0, pierce: 0 },
-            Collider { radius: 3.0 },
-            Faction::Player,
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
-        let mut step = Schedule::default();
-        step.add_systems((bullet_hits_enemy, apply_damage).chain());
-        step.run(world);
-        1.0e6 - world.get::<Health>(enemy).unwrap().current
-    }
-
-    assert!(dmg(true) > dmg(false) * 1.7, "Frenzy + 10-kill streak ≈ 1.9× the un-frenzied hit");
 }
 
 /// Magnetism widens the orb pickup-attraction radius: an orb just past the base
@@ -5876,7 +5797,6 @@ fn mission_assignment() {
                 MissionKind::NoDamage
                     | MissionKind::FastKill
                     | MissionKind::Asteroid
-                    | MissionKind::Streak
                     | MissionKind::Precision
             ));
         }
@@ -5885,39 +5805,7 @@ fn mission_assignment() {
     assert!(mission_reward(30) > mission_reward(1));
 }
 
-// ── 65. mission_streak_completion ─────────────────────────────────────────────
-
-/// A Streak mission completes (and pays a gold bonus) once the kill-streak hits
-/// the target (spec V.6).
-#[test]
-fn mission_streak_completion() {
-    use crate::resources::{KillStreak, Score};
-    use crate::systems::missions::{update_missions, Mission, MissionKind};
-    use crate::systems::wave::Wave;
-
-    let mut app = test_app();
-    let world = app.world_mut();
-    world.insert_resource(Time::<()>::default());
-    world.init_resource::<Mission>();
-    world.insert_resource(Wave::default()); // wave 1 (non-boss)
-
-    let mut step = Schedule::default();
-    step.add_systems(update_missions);
-    // First run assigns this wave's mission (last_wave None → Some(1)).
-    step.run(world);
-
-    // Force a Streak objective, then drive the kill-streak to the target.
-    world.resource_mut::<Mission>().kind = MissionKind::Streak;
-    world.resource_mut::<Mission>().done = false;
-    world.resource_mut::<KillStreak>().kills = 12;
-    let gold_before = world.resource::<Score>().gold;
-
-    step.run(world);
-    assert!(world.resource::<Mission>().done, "streak ≥ 12 completes the mission");
-    assert!(world.resource::<Score>().gold > gold_before, "completion pays a gold bonus");
-}
-
-// ── 66. mission_precision_counts_crits ────────────────────────────────────────
+// ── 65. mission_precision_counts_crits ────────────────────────────────────────
 
 /// The Precision mission completes after 25 `Crit` messages accumulate in a wave
 /// (spec V.6); fewer leaves it incomplete.

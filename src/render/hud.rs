@@ -13,7 +13,7 @@
 
 use crate::components::loadout::{AbilityCooldowns, EquippedAbilities};
 use crate::components::{Boss, Core, CoreShielded, Enemy, Health, Lives, Shield, Ship};
-use crate::resources::{EnergyMeter, KillStreak, Score};
+use crate::resources::{EnergyMeter, Score};
 use crate::systems::missions::Mission;
 use crate::systems::power_weapon::PowerWeapon;
 use crate::systems::tower::SelectedTower;
@@ -27,7 +27,6 @@ pub enum HudText {
     Hp,
     Status,
     Econ,
-    Streak,
     Mission,
     /// Tower-defense build readout: the armed turret (or the build menu).
     Build,
@@ -231,26 +230,6 @@ pub fn setup_hud(mut commands: Commands) {
             ..default()
         },
     ));
-
-    // Kill-streak banner, bottom-center (full-width container, centered child).
-    commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(36.0),
-            left: Val::Px(0.0),
-            width: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                HudText::Streak,
-                Text::new(""),
-                font.clone(),
-                TextColor(Color::srgb(1.0, 0.7, 0.2)),
-            ));
-        });
-
 }
 
 /// Refresh every HUD element from the current game state each frame.
@@ -261,7 +240,6 @@ pub fn update_hud(
     pw: Res<PowerWeapon>,
     cur: Res<CurrentWeapon>,
     score: Res<Score>,
-    streak: Res<KillStreak>,
     wave: Res<Wave>,
     mission: Res<Mission>,
     sel: Res<SelectedTower>,
@@ -359,19 +337,6 @@ pub fn update_hud(
             HudText::Mission => {
                 let mark = if mission.done { "  ✓" } else { "" };
                 format!("MISSION  {}{mark}", mission.kind.label())
-            }
-            HudText::Streak => {
-                if streak.timer > 0.0 && streak.kills >= 10 {
-                    let gold_pct = ((streak.gold_multiplier() - 1.0) * 100.0).round() as i32;
-                    format!(
-                        "{} KILLS   {:.2}x   +{}% GOLD",
-                        streak.kills,
-                        streak.multiplier(),
-                        gold_pct
-                    )
-                } else {
-                    String::new()
-                }
             }
         };
         if text.0 != s {

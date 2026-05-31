@@ -10,7 +10,7 @@
 
 use crate::components::{Bullet, Core, Enemy, Ship};
 use crate::systems::tower::Tower;
-use crate::resources::{KillStreak, Score};
+use crate::resources::Score;
 use crate::states::GameState;
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
@@ -113,7 +113,6 @@ pub fn title_input(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<G
 /// them). The `Wave` and `EnergyMeter` are reset alongside this.
 pub fn reset_run(
     mut score: ResMut<Score>,
-    mut streak: ResMut<KillStreak>,
     mut upgrades: ResMut<crate::systems::shop::Upgrades>,
     mut equipment: ResMut<crate::systems::items::Equipment>,
     mut health_cd: ResMut<crate::systems::drops::HealthDropTimer>,
@@ -124,7 +123,6 @@ pub fn reset_run(
     // Tower-defense: seed enough gold to set up an opening defense (kills fund
     // the rest). Without this the player can't build before the first wave.
     score.gold = STARTING_GOLD;
-    streak.break_streak();
     upgrades.reset();
     equipment.reset();
     health_cd.timer = 0.0;

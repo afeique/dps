@@ -33,7 +33,6 @@ fn test_app() -> App {
         .add_message::<crate::messages::Reaction>()
         .init_resource::<crate::meta::Meta>()
         .init_resource::<Score>()
-        .init_resource::<crate::resources::KillStreak>()
         .init_resource::<crate::resources::GameRng>()
         .init_resource::<crate::resources::EnergyMeter>()
         .init_resource::<crate::systems::shop::Upgrades>()

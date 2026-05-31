@@ -13,7 +13,7 @@ use crate::combat::element::{Element, Resistances};
 use crate::combat::reaction::{flare_damage, shatter_triggers, PendingReactions, ReactionSeed};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
-use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, KillStreak, ENERGY_PER_HIT};
+use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, ENERGY_PER_HIT};
 use crate::systems::asteroids::Asteroid;
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{
@@ -82,7 +82,6 @@ pub fn bullet_hits_enemy(
     mut knock: MessageWriter<Knockback>,
     mut crits: MessageWriter<crate::messages::Crit>,
     mut shards: MessageWriter<crate::messages::Shard>,
-    streak: Res<KillStreak>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
     meta: Res<crate::meta::Meta>,
@@ -137,8 +136,6 @@ pub fn bullet_hits_enemy(
         .next()
         .map(|h| if h.max > 0.0 { h.current / h.max } else { 1.0 })
         .unwrap_or(1.0);
-    // Kill-streak multiplier scales all player bullet damage (spec III.6).
-    let streak_mult = streak.multiplier();
     // VAMPIRISM passive: heal a fraction of damage dealt (spec III.5) — shop
     // stacks + equipped item affixes.
     // Each adds the account SP-stat bonus (sp_value is a % → /100) on top of the
@@ -156,9 +153,10 @@ pub fn bullet_hits_enemy(
     let crit_dmg_stacks = upgrades.owned(UpgradeId::CritDamage);
     let crit_dmg_bonus =
         equipment.affix_total(AffixKind::CritDamage) / 100.0 + meta.sp_value("CRIT_DAMAGE") / 100.0;
-    // FRENZY reads the *live* kill-streak count (0 when the buff window lapsed),
-    // so its bonus rides on the same streak the multiplier above uses.
-    let frenzy_kills = if streak.timer > 0.0 { streak.kills } else { 0 };
+    // FRENZY scaled with the (now-removed) kill-streak; with no streak it has no
+    // kills to ride on, so its bonus stays inert (0). Kept so the upgrade survives
+    // a future kill-streak reimplementation.
+    let frenzy_kills = 0;
     // OVERFLOW: a full energy meter buffs primary damage (rewards holding charge).
     let energy_full = energy.current >= energy.max * 0.999;
     let overflow = if energy_full {
@@ -271,7 +269,6 @@ pub fn bullet_hits_enemy(
                 let amount = enemy_defense_damage(
                     bullet.damage
                         * amp
-                        * streak_mult
                         * crit_mult
                         * exec
                         * predator
@@ -382,11 +379,11 @@ pub fn bullet_hits_enemy(
                         });
                     }
                 }
-                // `_EXPLODE` trait: splash the streak-scaled (no-crit) bullet
-                // damage to every other enemy within the blast radius.
+                // `_EXPLODE` trait: splash the (no-crit) bullet damage to every
+                // other enemy within the blast radius.
                 if explode_r > 0.0 {
                     let hit_pos = etf.translation.truncate();
-                    let splash = bullet.damage * amp * streak_mult;
+                    let splash = bullet.damage * amp;
                     for (e2, etf2, ec2, _ehp2, eres2, _, _, _, _, _, _, _, _, _) in &enemies {
                         if e2 == enemy_e {
                             continue;

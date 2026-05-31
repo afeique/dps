@@ -17,7 +17,7 @@ use crate::components::{
     Splitter, BULWARK_RESIST, MAX_TANKS, SHIELD_REDUCTION_CAP, TANK_OVERFLOW_HP,
 };
 use crate::messages::{Damage, Death, PlayerHurt};
-use crate::resources::{DamageClock, GameRng, KillStreak, LastStandUsed, Score};
+use crate::resources::{DamageClock, GameRng, LastStandUsed, Score};
 use crate::systems::items::{AffixKind, Equipment};
 use crate::systems::shop::{dodge_chance, regen_rate, thorns_frac, UpgradeId, Upgrades, REGEN_DELAY};
 use bevy::prelude::*;
@@ -29,7 +29,6 @@ pub fn apply_damage(
     mut hurt: MessageWriter<PlayerHurt>,
     mut dodged: MessageWriter<crate::messages::Dodged>,
     mut score: ResMut<Score>,
-    mut streak: ResMut<KillStreak>,
     mut rng: ResMut<GameRng>,
     upgrades: Res<Upgrades>,
     equipment: Res<Equipment>,
@@ -84,8 +83,6 @@ pub fn apply_damage(
                 dodged.write(crate::messages::Dodged { pos: tf.translation.truncate() });
                 continue;
             }
-            // Any landed hit on the player breaks the kill streak (spec III.6).
-            streak.break_streak();
         }
 
         // Shield = flat % damage reduction (player only); the JS pipeline rounds
@@ -178,7 +175,6 @@ pub fn apply_damage(
                     mini_boss,
                 });
                 score.kills += 1;
-                streak.on_kill();
                 commands.entity(ev.target).despawn();
             }
         }
@@ -198,15 +194,6 @@ pub fn tick_invulnerability(
         if inv.seconds <= 0.0 {
             commands.entity(e).remove::<Invulnerable>();
         }
-    }
-}
-
-/// Wind down the kill-streak buff window. The streak *count* persists (it only
-/// resets when the player takes damage); once this timer lapses the multiplier
-/// reverts to 1.0 until the next kill (spec III.6).
-pub fn tick_streak(time: Res<Time>, mut streak: ResMut<KillStreak>) {
-    if streak.timer > 0.0 {
-        streak.timer = (streak.timer - time.delta_secs()).max(0.0);
     }
 }
 

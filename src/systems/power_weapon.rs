@@ -27,7 +27,7 @@
 use crate::combat::element::{Element, ElementSet, Resistances};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
-use crate::resources::{EnergyMeter, KillStreak};
+use crate::resources::EnergyMeter;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -970,7 +970,6 @@ pub fn homing_steer(
 /// FixedUpdate collision group so its `Damage` reaches `apply_damage` this tick.
 pub fn update_beams(
     time: Res<Time>,
-    streak: Res<KillStreak>,
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
     player: Query<(&Transform, &Intent), With<Ship>>,
@@ -978,7 +977,7 @@ pub fn update_beams(
     mut beams: Query<(Entity, &mut Beam, &mut Transform, &mut Shape), (Without<Ship>, Without<Enemy>)>,
 ) {
     let dt = time.delta_secs();
-    let mult = streak.multiplier();
+    let mult = 1.0;
     // Re-rolled each frame so the bolt crackles (spec III.7).
     let seed = time.elapsed_secs() * 60.0;
 

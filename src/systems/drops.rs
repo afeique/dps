@@ -7,7 +7,7 @@
 use crate::components::*;
 use crate::messages::Death;
 use crate::render::reaction_fx::{Shockwave, unit_ring};
-use crate::resources::{GameRng, KillStreak, Score};
+use crate::resources::{GameRng, Score};
 use crate::systems::enemy;
 use crate::systems::shop::{magnetism_radius, scavenger_mult, UpgradeId, Upgrades};
 use crate::systems::wave::Wave;
@@ -211,13 +211,11 @@ pub fn spawn_drops(
     mut deaths: MessageReader<Death>,
     time: Res<Time>,
     wave: Res<Wave>,
-    streak: Res<KillStreak>,
     mut hdt: ResMut<HealthDropTimer>,
     mut rng: ResMut<GameRng>,
     player_hp: Query<&Health, With<Ship>>,
 ) {
     let wave_n = wave.number() as u64;
-    let streak_gold = streak.gold_multiplier();
     let hp_pct = player_hp
         .single()
         .ok()
@@ -247,7 +245,7 @@ pub fn spawn_drops(
         } else {
             enemy::drop_budget_mul(kind, false)
         };
-        let value = gold_value(wave_n, profile, streak_gold);
+        let value = gold_value(wave_n, profile, 1.0);
         let tier = gold_tier(value);
         commands.spawn((
             Orb { gold: value, points: 0, heal: 0.0 },

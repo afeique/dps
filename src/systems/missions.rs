@@ -8,7 +8,7 @@
 //! event we don't emit yet; the roll covers the other four.
 
 use crate::messages::{Crit, Death, PlayerHurt};
-use crate::resources::{GameRng, KillStreak, Score};
+use crate::resources::{GameRng, Score};
 use crate::systems::asteroids::Asteroid;
 use crate::systems::wave::Wave;
 use bevy::prelude::*;
@@ -19,7 +19,6 @@ pub enum MissionKind {
     NoDamage,
     FastKill,
     Asteroid,
-    Streak,
     Precision,
 }
 
@@ -30,7 +29,6 @@ impl MissionKind {
             Self::NoDamage => "Take no damage",
             Self::FastKill => "5 kills in 8s",
             Self::Asteroid => "Clear all asteroids",
-            Self::Streak => "Reach a 12 kill-streak",
             Self::Precision => "Land 25 crits",
         }
     }
@@ -39,8 +37,6 @@ impl MissionKind {
 /// `FastKill` window (spec V.6: 5 kills / 8 s).
 const FAST_KILL_WINDOW: f32 = 8.0;
 const FAST_KILL_COUNT: usize = 5;
-/// `Streak` target (spec V.6: 12-streak).
-const STREAK_TARGET: u32 = 12;
 /// `Precision` target (spec V.6: 25 crits).
 const PRECISION_TARGET: u32 = 25;
 
@@ -50,16 +46,15 @@ pub fn mission_reward(wave: usize) -> u64 {
 }
 
 /// Boss waves (`[3,6,…,30]`, every 3rd) always assign `NoDamage`; others roll one
-/// of the five objectives.
+/// of the four objectives.
 pub fn mission_for_wave(wave: usize, rng: &mut GameRng) -> MissionKind {
     if wave % 3 == 0 {
         return MissionKind::NoDamage;
     }
-    match (rng.next_f32() * 5.0) as u32 {
+    match (rng.next_f32() * 4.0) as u32 {
         0 => MissionKind::NoDamage,
         1 => MissionKind::FastKill,
         2 => MissionKind::Asteroid,
-        3 => MissionKind::Streak,
         _ => MissionKind::Precision,
     }
 }
@@ -70,7 +65,6 @@ pub struct Mission {
     pub kind: MissionKind,
     pub done: bool,
     took_damage: bool,
-    peak_streak: u32,
     /// Kill timestamps (s) within the fast-kill window.
     kill_times: Vec<f32>,
     saw_asteroid: bool,
@@ -83,7 +77,6 @@ impl Default for Mission {
             kind: MissionKind::NoDamage,
             done: false,
             took_damage: false,
-            peak_streak: 0,
             kill_times: Vec::new(),
             saw_asteroid: false,
             crit_count: 0,
@@ -96,7 +89,6 @@ impl Mission {
         self.kind = kind;
         self.done = false;
         self.took_damage = false;
-        self.peak_streak = 0;
         self.kill_times.clear();
         self.saw_asteroid = false;
         self.crit_count = 0;
@@ -113,7 +105,6 @@ pub fn update_missions(
     mut mission: ResMut<Mission>,
     mut rng: ResMut<GameRng>,
     wave: Res<Wave>,
-    streak: Res<KillStreak>,
     mut score: ResMut<Score>,
     mut hurt: MessageReader<PlayerHurt>,
     mut deaths: MessageReader<Death>,
@@ -148,7 +139,6 @@ pub fn update_missions(
         }
     }
     mission.kill_times.retain(|t| now - *t <= FAST_KILL_WINDOW);
-    mission.peak_streak = mission.peak_streak.max(streak.kills);
     mission.crit_count += crits.read().count() as u32;
     let asteroid_count = asteroids.iter().count();
     if asteroid_count > 0 {
@@ -158,7 +148,6 @@ pub fn update_missions(
     // Mid-wave completion for the three immediate objectives.
     if !mission.done {
         let complete = match mission.kind {
-            MissionKind::Streak => mission.peak_streak >= STREAK_TARGET,
             MissionKind::FastKill => mission.kill_times.len() >= FAST_KILL_COUNT,
             MissionKind::Asteroid => mission.saw_asteroid && asteroid_count == 0,
             MissionKind::Precision => mission.crit_count >= PRECISION_TARGET,

@@ -33,7 +33,6 @@ impl Plugin for GamePlugin {
             .init_state::<GameState>()
             .init_resource::<PlayBounds>()
             .init_resource::<Score>()
-            .init_resource::<crate::resources::KillStreak>()
             .init_resource::<crate::resources::GameRng>()
             .init_resource::<crate::resources::EnergyMeter>()
             .init_resource::<crate::resources::DamageClock>()
@@ -363,15 +362,13 @@ impl Plugin for GamePlugin {
                 (systems::shop::shop_ui_update, systems::shop::shop_input)
                     .run_if(in_state(GameState::Shop)),
             )
-            // ── input: read devices every frame → Intent ────────────────
+            // ── input: mouse aim (cursor) + the kept ability/shop/pause keys ──
+            // Pure tower defense: no ship to pilot, so the WASD-move/fire and
+            // weapon-cycling inputs are gone. `update_aim` feeds the build cursor.
             .add_systems(
                 Update,
                 (
-                    (systems::input::gather_input, systems::input::update_aim).chain(),
-                    systems::weapons::cycle_weapon,
-                    systems::weapons::cycle_attunement,
-                    systems::power_weapon::cycle_power_weapon,
-                    systems::power_weapon::fire_power_weapon,
+                    systems::input::update_aim,
                     systems::skills::use_skills,
                     systems::skills::emp_pulse,
                     systems::skills::cast_deflectors,
@@ -470,7 +467,6 @@ impl Plugin for GamePlugin {
             .add_systems(
                 FixedUpdate,
                 (
-                    systems::movement::ship_control,
                     // Per-kind enemy AI, nested as one chained sub-group so the
                     // outer tuple stays under Bevy's 20-element limit. Runs
                     // before `integrate` so steering applies the same tick.
@@ -511,10 +507,9 @@ impl Plugin for GamePlugin {
                         .chain(),
                     // Fire intent → bullets.
                     (
-                        // Sentry Drones (AB) emit player Fire before spawn_bullets.
+                        // Sentry Drones (AB, kept) emit Fire before spawn_bullets.
                         systems::abilities::tick_sentry_drones,
                         systems::enemy::firing::enemy_firing,
-                        systems::weapons::player_fire,
                         systems::weapons::spawn_bullets,
                         // Turrets auto-target the nearest enemy and spawn their
                         // own projectiles (directly, not via the Fire message).
@@ -533,7 +528,6 @@ impl Plugin for GamePlugin {
                     )
                         .chain(),
                     systems::movement::integrate,
-                    systems::movement::confine_player,
                     // Generic formations (spec IV.6): override bound members'
                     // movement toward their slot targets, after integrate.
                     systems::formations::update_formations,
@@ -557,15 +551,8 @@ impl Plugin for GamePlugin {
                         // the player.
                         systems::skills::deflector_blocks,
                         systems::skills::tractor_absorb,
-                        systems::collision::enemy_bullet_hits_player,
-                        // Hull contacts: enemy ram + asteroid carom + Core leak —
-                        // nested into one slot to stay under Bevy's 20-element ceiling.
-                        (
-                            systems::collision::enemy_contact_player,
-                            systems::collision::player_hits_asteroid,
-                            // Enemies that reach the Core detonate against it.
-                            systems::collision::enemy_contact_core,
-                        ),
+                        // Enemies that reach the Core detonate against it.
+                        systems::collision::enemy_contact_core,
                         systems::asteroids::asteroid_hits,
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,
@@ -629,7 +616,6 @@ impl Plugin for GamePlugin {
                     // sub-group so the outer tuple stays under Bevy's 20 limit.
                     (
                         systems::damage::tick_invulnerability,
-                        systems::damage::tick_streak,
                         systems::status::tick_stun,
                         // Count down the timer-based elemental statuses (E3).
                         systems::status::tick_status_timers,
