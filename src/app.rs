@@ -401,9 +401,13 @@ impl Plugin for GamePlugin {
             )
             // Right-click / Space fires the equipped power weapon (from the Core,
             // aimed at the cursor). Weapon *selection* is the F/E radials below.
+            // Energy regenerates passively so power weapons recharge over time.
             .add_systems(
                 Update,
-                systems::power_weapon::fire_power_weapon
+                (
+                    systems::power_weapon::fire_power_weapon,
+                    systems::power_weapon::regen_energy,
+                )
                     .after(systems::input::update_aim)
                     .run_if(in_state(GameState::Playing)),
             )

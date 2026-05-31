@@ -691,6 +691,15 @@ pub fn cycle_power_weapon(keys: Res<ButtonInput<KeyCode>>, mut pw: ResMut<PowerW
     }
 }
 
+/// Passive power-weapon energy regen (rainboids: ~full in 12 s). Tops the meter
+/// up over time so power weapons recharge even without landing hits — landed
+/// hits (`bullet_hits_enemy`) still add their bonus on top.
+const ENERGY_REGEN_PER_SEC: f32 = 9.0;
+
+pub fn regen_energy(time: Res<Time>, mut energy: ResMut<EnergyMeter>) {
+    energy.gain(ENERGY_REGEN_PER_SEC * time.delta_secs());
+}
+
 /// Count down the Overdrive buff and remove it on expiry (W).
 pub fn tick_overdrive(
     time: Res<Time>,

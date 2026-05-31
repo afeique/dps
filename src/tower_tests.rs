@@ -323,3 +323,39 @@ fn power_weapon_fires_from_core() {
     assert_eq!(missiles, 3, "Missile Salvo looses 3 player missiles");
     assert!(world.resource::<EnergyMeter>().current < 100.0, "firing spent energy");
 }
+
+/// The mouse-fire fix: a left-click on **empty space** (no enemy near the cursor)
+/// still fires the primary from the Core toward the cursor point.
+#[test]
+fn clicking_empty_space_still_fires_at_cursor() {
+    use crate::messages::Fire;
+    use crate::resources::Aim;
+    use crate::systems::shop::Upgrades;
+    use crate::systems::tower::SelectedTower;
+    use crate::systems::weapons::{manual_fire, CurrentWeapon};
+
+    let mut app = App::new();
+    app.add_message::<Fire>()
+        .init_resource::<CurrentWeapon>()
+        .init_resource::<Upgrades>()
+        .init_resource::<FiredShots>();
+
+    let mut mouse = ButtonInput::<MouseButton>::default();
+    mouse.press(MouseButton::Left);
+
+    let world = app.world_mut();
+    world.insert_resource(mouse);
+    world.insert_resource(Time::<()>::default());
+    world.insert_resource(Aim { world: Vec2::new(200.0, 0.0), active: true }); // empty space, +X
+    world.insert_resource(SelectedTower { kind: None });
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    // No enemies spawned.
+
+    let mut step = Schedule::default();
+    step.add_systems((manual_fire, collect_fire).chain());
+    step.run(world);
+
+    let shots = world.resource::<FiredShots>().0.clone();
+    assert_eq!(shots.len(), 1, "clicking empty space still fires once");
+    assert!(shots[0].dir.x > 0.9, "the shot flies toward the cursor (+X) (dir {:?})", shots[0].dir);
+}

@@ -804,14 +804,15 @@ pub fn player_fire(
     }
 }
 
-/// Click-forgiveness: an enemy counts as "clicked" if the cursor is within its
-/// collider radius plus this slack (world units).
-const MANUAL_PICK_SLACK: f32 = 12.0;
+/// Aim-assist radius: a left-click snaps onto the nearest enemy within this many
+/// world units of the cursor; otherwise the shot just flies at the cursor point.
+const MANUAL_ASSIST_RADIUS: f32 = 55.0;
 
-/// Tower-defense manual fire: a **left-click on an enemy** (while no tower is
-/// armed for placement) looses the **equipped weapon's** shot from the Core
-/// toward that enemy. Reuses the same multishot fan + `Fire` → `spawn_bullets`
-/// pipeline as the retired ship fire, so the projectile, element, archetype
+/// Tower-defense manual fire: **every left-click** (while no tower is armed for
+/// placement) looses the **equipped weapon's** shot from the Core toward the
+/// cursor — snapping onto a nearby enemy if one is close to the cursor, else
+/// firing straight at the clicked point. Reuses the same multishot fan + `Fire`
+/// → `spawn_bullets` pipeline, so the projectile, element, archetype
 /// (flak/gravity/mitosis/…), and piercing all follow `CurrentWeapon`.
 ///
 /// Runs in `Update` so it never drops a click (`just_pressed` can be missed in
@@ -825,7 +826,7 @@ pub fn manual_fire(
     sel: Res<crate::systems::tower::SelectedTower>,
     mut fire: MessageWriter<Fire>,
     core: Query<&Transform, With<Core>>,
-    enemies: Query<(&Transform, &Collider), With<Enemy>>,
+    enemies: Query<&Transform, With<Enemy>>,
 ) {
     // Left-click only, and not while placing a tower (those clicks build).
     if sel.kind.is_some() || !mouse.just_pressed(MouseButton::Left) {
@@ -834,22 +835,18 @@ pub fn manual_fire(
     let Some(cursor) = aim.active.then_some(aim.world) else {
         return;
     };
-    // The nearest enemy under (within slack of) the cursor — clicking empty
-    // space fires nothing.
-    let target = enemies
+    // Aim at the enemy nearest the cursor (within the assist radius); otherwise
+    // fire straight at the cursor point. Either way, every click fires.
+    let tgt = enemies
         .iter()
-        .filter(|(t, c)| t.translation.truncate().distance(cursor) <= c.radius + MANUAL_PICK_SLACK)
-        .min_by(|(a, _), (b, _)| {
-            a.translation
-                .truncate()
-                .distance_squared(cursor)
-                .partial_cmp(&b.translation.truncate().distance_squared(cursor))
+        .map(|t| t.translation.truncate())
+        .filter(|p| p.distance(cursor) <= MANUAL_ASSIST_RADIUS)
+        .min_by(|a, b| {
+            a.distance_squared(cursor)
+                .partial_cmp(&b.distance_squared(cursor))
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|(t, _)| t.translation.truncate());
-    let Some(tgt) = target else {
-        return;
-    };
+        .unwrap_or(cursor);
     let origin = core
         .single()
         .map(|t| t.translation.truncate())
