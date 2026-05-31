@@ -35,6 +35,9 @@ impl Plugin for ScreenshotPlugin {
                         demo_drive,
                         keep_player_alive,
                         force_fire.after(crate::systems::input::gather_input),
+                        // DPS_RADIAL=1: hold F so the screenshot shows the radial.
+                        (|mut keys: ResMut<ButtonInput<KeyCode>>| keys.press(KeyCode::KeyF))
+                            .run_if(|| std::env::var("DPS_RADIAL").is_ok()),
                     ),
                 );
             }

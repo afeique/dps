@@ -55,6 +55,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
             .init_resource::<systems::tower::SelectedTower>()
+            .init_resource::<systems::weapon_radial::WeaponRadial>()
             .init_resource::<crate::resources::Aim>()
             .init_resource::<crate::combat::reaction::PendingReactions>()
             // Meta-progression (ME): load the persistent account profile at boot.
@@ -287,6 +288,11 @@ impl Plugin for GamePlugin {
                 bevy_egui::EguiPrimaryContextPass,
                 systems::build_screen::build_screen_ui.run_if(in_state(GameState::Build)),
             )
+            // Weapon-select radials: hold F (primary) / E (power) to pick a weapon.
+            .add_systems(
+                bevy_egui::EguiPrimaryContextPass,
+                systems::weapon_radial::weapon_radial_ui.run_if(in_state(GameState::Playing)),
+            )
             // ── player engine thrust trail (graphical parity) ──────────────────
             .add_systems(
                 Update,
@@ -394,13 +400,10 @@ impl Plugin for GamePlugin {
                     .run_if(in_state(GameState::Playing)),
             )
             // Right-click / Space fires the equipped power weapon (from the Core,
-            // aimed at the cursor); KeyF cycles which power weapon is active.
+            // aimed at the cursor). Weapon *selection* is the F/E radials below.
             .add_systems(
                 Update,
-                (
-                    systems::power_weapon::fire_power_weapon,
-                    systems::power_weapon::cycle_power_weapon,
-                )
+                systems::power_weapon::fire_power_weapon
                     .after(systems::input::update_aim)
                     .run_if(in_state(GameState::Playing)),
             )

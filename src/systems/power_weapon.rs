@@ -58,6 +58,21 @@ pub enum PowerWeaponKind {
 }
 
 impl PowerWeaponKind {
+    /// Every kind, in radial/cycle order.
+    pub const ALL: [PowerWeaponKind; 11] = [
+        Self::MissileSalvo,
+        Self::ChargeShot,
+        Self::NovaBlast,
+        Self::MineLayer,
+        Self::LanceBeam,
+        Self::ArcLightning,
+        Self::CryoBurst,
+        Self::Overdrive,
+        Self::Singularity,
+        Self::PrismBeam,
+        Self::OrbitalStrike,
+    ];
+
     fn next(self) -> Self {
         match self {
             Self::MissileSalvo => Self::ChargeShot,

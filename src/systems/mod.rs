@@ -39,4 +39,5 @@ pub mod steering;
 pub mod survivor;
 pub mod tower;
 pub mod wave;
+pub mod weapon_radial;
 pub mod weapons;
