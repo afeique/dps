@@ -24,17 +24,27 @@ pub struct Shockwave {
     pub peak: f32,
 }
 
-/// A unit-radius (1 px) 32-gon ring; the entity's Transform scale grows it to the
-/// live radius each tick. HDR-emissive so Bloom makes it pop. Shared with the
-/// level-up aura (`render::level_up_aura`), which reuses `Shockwave`/`tick_shockwaves`.
+/// A unit-radius 64-gon ring; the entity's Transform scale grows it to the live
+/// radius each tick. HDR-emissive so Bloom makes it pop. Shared with the level-up
+/// aura (`render::level_up_aura`) and most pop-rings, which reuse
+/// `Shockwave`/`tick_shockwaves`.
+///
+/// IMPORTANT: the stroke width is baked into the lyon mesh, and `tick_shockwaves`
+/// then scales the whole mesh by the live radius — so the stroke is *proportional*
+/// to the ring's radius. The old width (2.5 on a radius-1 ring) became ~275 px on
+/// a 110 px ring → a near-solid flat disc (this was the "flat circle" the rings
+/// read as). `RING_STROKE` is a small *fraction* of the radius so it stays a thin
+/// ring at every size (≈ `RING_STROKE × radius` px wide). 64 segments keep it
+/// smooth when blown up large.
+const RING_STROKE: f32 = 0.07;
 pub fn unit_ring(color: Color) -> Shape {
     let mut path = ShapePath::new();
-    for i in 0..32 {
-        let a = i as f32 / 32.0 * std::f32::consts::TAU;
+    for i in 0..64 {
+        let a = i as f32 / 64.0 * std::f32::consts::TAU;
         let p = Vec2::new(a.cos(), a.sin());
         path = if i == 0 { path.move_to(p) } else { path.line_to(p) };
     }
-    ShapeBuilder::with(&path.close()).stroke((color, 2.5)).build()
+    ShapeBuilder::with(&path.close()).stroke((color, RING_STROKE)).build()
 }
 
 /// Spawn a shockwave at each resolved reaction.
@@ -95,7 +105,33 @@ pub fn spawn_death_rings(mut commands: Commands, mut deaths: MessageReader<Death
     }
 }
 
+/// Tiny dependency-free hash (per-entity, for a stable random tilt).
+#[inline]
+fn wang(mut x: u32) -> u32 {
+    x = (x ^ 61) ^ (x >> 16);
+    x = x.wrapping_add(x << 3);
+    x ^= x >> 4;
+    x = x.wrapping_mul(0x27d4_eb2d);
+    x ^= x >> 15;
+    x
+}
+
+#[inline]
+fn frand(seed: u32, lo: f32, hi: f32) -> f32 {
+    lo + (wang(seed) as f32 / u32::MAX as f32) * (hi - lo)
+}
+
 /// Expand + fade each shockwave; despawn when its lifetime elapses.
+///
+/// The ring is also **tilted into 3D**: rather than always lying flat in the
+/// overhead plane (a head-on circle), each shockwave gets a stable per-entity
+/// tilt about a random in-plane axis, so under the orthographic 2D camera it
+/// foreshortens into an **ellipse seen at an angle** — i.e. the wavefront reads
+/// as expanding through 3D space from a varied perspective, not just outward on a
+/// flat disc. The tilt axis also drifts slightly over the ring's short life so it
+/// feels dynamic. (The death-blast rings in `render::blast` do true perspective;
+/// this gives every *other* pop-ring — reactions, warp-in, pickups, auras — a
+/// consistent 3D read for free, since they all share this primitive.)
 pub fn tick_shockwaves(
     time: Res<Time>,
     mut commands: Commands,
@@ -111,6 +147,16 @@ pub fn tick_shockwaves(
         // Ease-out radius (fast start, settles toward peak).
         let t = (wave.age / WAVE_SECS).clamp(0.0, 1.0);
         let radius = wave.peak * (1.0 - (1.0 - t) * (1.0 - t));
+
+        // Per-entity 3D tilt → an ellipse-in-perspective, not a flat circle.
+        let h = wang(e.to_bits() as u32);
+        let axis_ang = frand(h ^ 0x11, 0.0, std::f32::consts::TAU)
+            + wave.age * frand(h ^ 0x33, -0.9, 0.9);
+        let axis = Vec3::new(axis_ang.cos(), axis_ang.sin(), 0.0);
+        // Strong-but-not-edge-on tilt (≈34°–66°) so it clearly reads as 3D.
+        // `from_scaled_axis(axis*tilt)` == axis-angle, but takes a Vec3 directly.
+        let tilt = frand(h ^ 0x22, 0.6, 1.15);
+        tf.rotation = Quat::from_scaled_axis(axis * tilt);
         tf.scale = Vec3::splat(radius.max(1.0));
     }
 }

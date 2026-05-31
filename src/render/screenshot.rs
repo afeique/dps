@@ -106,9 +106,11 @@ fn demo_drive(
 /// once. Staggered across frames 138/142/146 so cores + expanding rings overlap.
 fn blast_probe(
     mut deaths: MessageWriter<crate::messages::Death>,
+    mut reactions: MessageWriter<crate::messages::Reaction>,
     mut frame: Local<u32>,
 ) {
     use crate::components::EnemyKind;
+    use crate::messages::ReactionFx;
     *frame += 1;
     let kinds = [
         (EnemyKind::Tangerine, Vec2::new(-180.0, 90.0)),  // pyro (orange)
@@ -128,6 +130,10 @@ fn blast_probe(
                 mini_boss: false,
             });
         }
+        // Also fire the shared shockwave pop-rings (shatter/flare) so the capture
+        // shows they're now thin + 3D-tilted too, not flat discs.
+        reactions.write(crate::messages::Reaction { center: Vec2::new(-60.0, 20.0), kind: ReactionFx::Shatter });
+        reactions.write(crate::messages::Reaction { center: Vec2::new(70.0, -30.0), kind: ReactionFx::Flare });
     }
 }
 

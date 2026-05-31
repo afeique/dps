@@ -275,12 +275,13 @@ pub fn spawn_blast(
             puff(&mut commands, &mut meshes, &mut materials, s, off, peak, 0.45, center, rim, a, life, 1.58, drift, Fade::Smoke);
         }
 
-        // ── 3D rings: tilted shock wavefronts at varied angles (near-flat, medium,
-        // steep) so they expand "from other perspectives", not just overhead.
+        // ── 3D rings: tilted shock wavefronts at varied angles so they expand
+        // "from other perspectives", not just overhead. All clearly tilted (none
+        // near-flat) — moderate, steep, and near-edge-on for strong perspective.
         let tilts = [
-            frand(s0 ^ 0x00C1, 0.15, 0.45),
-            frand(s0 ^ 0x00C2, 0.7, 1.1),
-            frand(s0 ^ 0x00C3, 1.0, 1.35),
+            frand(s0 ^ 0x00C1, 0.55, 0.85),
+            frand(s0 ^ 0x00C2, 0.9, 1.2),
+            frand(s0 ^ 0x00C3, 1.15, 1.4),
         ];
         for (n, &tilt) in tilts.iter().enumerate() {
             *seed = seed.wrapping_add(1);
