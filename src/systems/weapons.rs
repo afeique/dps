@@ -24,7 +24,7 @@
 
 use crate::combat::element::{Element, ElementSet};
 use crate::components::*;
-use crate::messages::{Fire, Shard};
+use crate::messages::{Damage, Fire, Shard};
 use crate::render::bullets::BulletAssets;
 use crate::resources::Aim;
 use crate::systems::power_weapon::Homing;
@@ -225,7 +225,7 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             radius: BASE_BULLET_RADIUS * 1.2, count: 1, spread: 0.0, jitter: 0.0, pierce: 5,
         },
         WeaponKind::ClusterLauncher => WeaponStats {
-            cooldown: 0.80, damage: 50.0, speed: BASE_BULLET_SPEED * 1.0,
+            cooldown: 0.80, damage: 14.0, speed: BASE_BULLET_SPEED * 0.6,
             radius: BASE_BULLET_RADIUS * 1.4, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
         // Slow VOID orb that pierces + pulls (weapon-data.js: bulletSpeed 0.6,
@@ -282,6 +282,63 @@ pub const MITOSIS_SPEED_FACTOR: f32 = 0.85;
 pub const MITOSIS_SPREAD: f32 = 0.4;
 /// Shard bullet radius (px).
 pub const SHARD_RADIUS: f32 = 4.0;
+
+/// Cluster Launcher detonation (weapon-data.js): the bomb flies a short fuse,
+/// then — or on proximity to an enemy — bursts into an AoE blast + a scatter of
+/// sub-bomblet shards (each a small Player bullet). (The JS hold-to-charge range
+/// is simplified to a fixed fuse.)
+pub const CLUSTER_FUSE: f32 = 0.65;
+pub const CLUSTER_PROXIMITY: f32 = 18.0;
+pub const CLUSTER_BLAST_RADIUS: f32 = 70.0;
+pub const CLUSTER_BLAST_DMG: f32 = 16.0;
+pub const CLUSTER_BOMBLETS: u32 = 5;
+pub const CLUSTER_BOMBLET_DMG: f32 = 9.0;
+pub const CLUSTER_BOMBLET_SPEED: f32 = 320.0;
+
+/// Tick cluster bombs; on fuse-expiry or proximity to an enemy, detonate: deal an
+/// AoE blast to enemies within `CLUSTER_BLAST_RADIUS` and scatter
+/// `CLUSTER_BOMBLETS` sub-bomblet `Shard`s (built by `spawn_shards`). The bomb's
+/// own direct hit is still resolved by `bullet_hits_enemy` (direct + blast).
+pub fn cluster_detonate(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut dmg: MessageWriter<Damage>,
+    mut shards: MessageWriter<Shard>,
+    mut bombs: Query<(Entity, &Transform, &mut ClusterBomb, Option<&BulletElements>)>,
+    enemies: Query<(Entity, &Transform, &Collider), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+    for (e, tf, mut bomb, belems) in &mut bombs {
+        bomb.fuse -= dt;
+        let pos = tf.translation.truncate();
+        let near = enemies
+            .iter()
+            .any(|(_, etf, ec)| pos.distance(etf.translation.truncate()) <= ec.radius + CLUSTER_PROXIMITY);
+        if bomb.fuse > 0.0 && !near {
+            continue;
+        }
+        let elem = belems.map_or(ElementSet::kinetic(), |b| b.0);
+        // AoE blast.
+        for (ee, etf, ec) in &enemies {
+            if pos.distance(etf.translation.truncate()) <= CLUSTER_BLAST_RADIUS + ec.radius {
+                dmg.write(Damage { target: ee, amount: CLUSTER_BLAST_DMG });
+            }
+        }
+        // Scatter sub-bomblets radially.
+        for i in 0..CLUSTER_BOMBLETS {
+            let a = i as f32 / CLUSTER_BOMBLETS as f32 * std::f32::consts::TAU;
+            shards.write(Shard {
+                origin: pos,
+                dir: Vec2::new(a.cos(), a.sin()),
+                speed: CLUSTER_BOMBLET_SPEED,
+                damage: CLUSTER_BOMBLET_DMG,
+                element: elem,
+                generation: 0,
+            });
+        }
+        commands.entity(e).try_despawn();
+    }
+}
 
 /// Caroms bounce count + the radius it seeks the next enemy within (weapon-data.js).
 pub const CAROMS_BOUNCES: u32 = 3;
@@ -804,19 +861,27 @@ pub fn player_fire(
     }
 }
 
-/// Aim-assist radius: a left-click snaps onto the nearest enemy within this many
-/// world units of the cursor; otherwise the shot just flies at the cursor point.
+/// Aim-assist radius: a shot snaps onto the nearest enemy within this many world
+/// units of the cursor; otherwise it just flies at the cursor point.
 const MANUAL_ASSIST_RADIUS: f32 = 55.0;
 
-/// Tower-defense manual fire: **every left-click** (while no tower is armed for
-/// placement) looses the **equipped weapon's** shot from the Core toward the
-/// cursor — snapping onto a nearby enemy if one is close to the cursor, else
-/// firing straight at the clicked point. Reuses the same multishot fan + `Fire`
-/// → `spawn_bullets` pipeline, so the projectile, element, archetype
-/// (flak/gravity/mitosis/…), and piercing all follow `CurrentWeapon`.
+/// Manual-fire state: the shared fire-cooldown timer + the Spin Cannon spool
+/// level (0 = idle, 1 = full spin). `init_resource` in app.rs.
+#[derive(Resource, Default)]
+pub struct ManualFire {
+    timer: f32,
+    spool: f32,
+}
+
+/// Tower-defense manual fire: **hold left-click** (while no tower is armed for
+/// placement) to loose the **equipped weapon's** shots from the Core toward the
+/// cursor — snapping onto a nearby enemy if one is close, else firing at the
+/// clicked point. A tap fires once; holding fires at the weapon's cadence (the
+/// Spin Cannon spools up faster + widens its cone the longer it's held). Reuses
+/// the multishot fan + `Fire` → `spawn_bullets` pipeline, so the projectile,
+/// element, archetype (flak/gravity/mitosis/cluster/…) all follow `CurrentWeapon`.
 ///
-/// Runs in `Update` so it never drops a click (`just_pressed` can be missed in
-/// `FixedUpdate`); the `Fire` it writes is consumed by `spawn_bullets` next tick.
+/// Runs in `Update` so it never drops input; the `Fire`s feed `spawn_bullets`.
 pub fn manual_fire(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -824,19 +889,32 @@ pub fn manual_fire(
     upgrades: Res<Upgrades>,
     aim: Res<Aim>,
     sel: Res<crate::systems::tower::SelectedTower>,
+    mut state: ResMut<ManualFire>,
     mut fire: MessageWriter<Fire>,
     core: Query<&Transform, With<Core>>,
     enemies: Query<&Transform, With<Enemy>>,
 ) {
-    // Left-click only, and not while placing a tower (those clicks build).
-    if sel.kind.is_some() || !mouse.just_pressed(MouseButton::Left) {
+    let dt = time.delta_secs();
+    state.timer = (state.timer - dt).max(0.0);
+    let st = stats(cur.0);
+
+    // Hold to fire — but not while placing a tower, and only with a live cursor.
+    let firing = sel.kind.is_none() && mouse.pressed(MouseButton::Left) && aim.active;
+
+    // Spin Cannon spools up while held, decays otherwise.
+    if cur.0 == WeaponKind::SpinCannon && firing {
+        state.spool = (state.spool + dt / SPIN_UP_TIME).min(1.0);
+    } else {
+        state.spool = (state.spool - dt / SPIN_UP_TIME).max(0.0);
+    }
+
+    if !firing || state.timer > 0.0 {
         return;
     }
-    let Some(cursor) = aim.active.then_some(aim.world) else {
-        return;
-    };
+
+    let cursor = aim.world;
     // Aim at the enemy nearest the cursor (within the assist radius); otherwise
-    // fire straight at the cursor point. Either way, every click fires.
+    // fire straight at the cursor point.
     let tgt = enemies
         .iter()
         .map(|t| t.translation.truncate())
@@ -856,11 +934,22 @@ pub fn manual_fire(
         return;
     }
 
-    let st = stats(cur.0);
+    // Cooldown: the Spin Cannon's rate spools up; others use their fixed cadence.
+    state.timer = if cur.0 == WeaponKind::SpinCannon {
+        spin_cooldown(state.spool)
+    } else {
+        st.cooldown
+    };
+
     let t = time.elapsed_secs();
-    // Multishot (kept upgrade) widens the equipped weapon's own fan.
     let count = st.count + upgrades.owned(UpgradeId::Multishot);
     let fan = st.spread.max(multishot_fan(count));
+    // The Spin Cannon's cone widens with the spool (0.14 base + up to 0.12).
+    let jitter = if cur.0 == WeaponKind::SpinCannon {
+        0.14 + 0.12 * state.spool
+    } else {
+        st.jitter
+    };
 
     let shoot = |dir: Vec2, fire: &mut MessageWriter<Fire>| {
         fire.write(Fire {
@@ -875,14 +964,14 @@ pub fn manual_fire(
     };
 
     if count <= 1 {
-        let j = jitter_rand(t * 91.7) * st.jitter;
+        let j = jitter_rand(t * 91.7) * jitter;
         shoot(rotate(fwd, j), &mut fire);
     } else {
         let half = fan * 0.5;
         for i in 0..count {
             let f = i as f32 / (count - 1) as f32;
             let base = -half + f * fan;
-            let j = jitter_rand(t * 53.3 + i as f32 * 12.9) * st.jitter;
+            let j = jitter_rand(t * 53.3 + i as f32 * 12.9) * jitter;
             shoot(rotate(fwd, base + j), &mut fire);
         }
     }
@@ -978,6 +1067,10 @@ pub fn spawn_bullets(
             // Flak bullets airburst into shrapnel after travelling ~300px (W).
             if cur.0 == WeaponKind::FlakCannon {
                 bullet.insert(Airburst { timer: FLAK_BURST_DIST / shot.speed.max(1.0) });
+            }
+            // Cluster bombs detonate (blast + bomblets) on a fuse or proximity (W).
+            if cur.0 == WeaponKind::ClusterLauncher {
+                bullet.insert(ClusterBomb { fuse: CLUSTER_FUSE });
             }
             // `_HOMING` trait: tag the bullet so homing_steer curves it.
             if player_homing > 0.0 {

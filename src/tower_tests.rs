@@ -201,6 +201,7 @@ fn clicking_an_enemy_fires_the_equipped_weapon() {
         app.add_message::<Fire>()
             .init_resource::<CurrentWeapon>()
             .init_resource::<Upgrades>()
+            .init_resource::<crate::systems::weapons::ManualFire>()
             .init_resource::<FiredShots>();
 
         let mut mouse = ButtonInput::<MouseButton>::default();
@@ -257,6 +258,7 @@ fn manual_fire_chains_to_a_player_bullet() {
         .init_resource::<ElementInfusion>()
         .init_resource::<Upgrades>()
         .init_resource::<SelectedTower>()
+        .init_resource::<crate::systems::weapons::ManualFire>()
         .init_resource::<Wave>()
         .insert_resource(dummy_bullet_assets());
 
@@ -338,6 +340,7 @@ fn clicking_empty_space_still_fires_at_cursor() {
     app.add_message::<Fire>()
         .init_resource::<CurrentWeapon>()
         .init_resource::<Upgrades>()
+        .init_resource::<crate::systems::weapons::ManualFire>()
         .init_resource::<FiredShots>();
 
     let mut mouse = ButtonInput::<MouseButton>::default();
@@ -358,4 +361,56 @@ fn clicking_empty_space_still_fires_at_cursor() {
     let shots = world.resource::<FiredShots>().0.clone();
     assert_eq!(shots.len(), 1, "clicking empty space still fires once");
     assert!(shots[0].dir.x > 0.9, "the shot flies toward the cursor (+X) (dir {:?})", shots[0].dir);
+}
+
+/// ClusterLauncher: a bomb whose fuse has lapsed (or that's near an enemy)
+/// detonates into an AoE blast (damages nearby enemies) + scatters 5 bomblets.
+#[test]
+fn cluster_bomb_detonates_into_blast_and_bomblets() {
+    use crate::components::ClusterBomb;
+    use crate::messages::{Damage, Shard};
+    use crate::systems::weapons::cluster_detonate;
+
+    #[derive(Resource, Default)]
+    struct Tally {
+        dmg: u32,
+        shards: u32,
+    }
+    fn collect(
+        mut d: MessageReader<Damage>,
+        mut s: MessageReader<Shard>,
+        mut t: ResMut<Tally>,
+    ) {
+        t.dmg += d.read().count() as u32;
+        t.shards += s.read().count() as u32;
+    }
+
+    let mut app = App::new();
+    app.add_message::<Damage>()
+        .add_message::<Shard>()
+        .init_resource::<Tally>();
+    let world = app.world_mut();
+    world.insert_resource(Time::<()>::default());
+    // A bomb with an already-lapsed fuse at the origin.
+    world.spawn((
+        Bullet { kind: BulletKind::Player, damage: 14.0, pierce: 0 },
+        ClusterBomb { fuse: 0.0 },
+        Collider { radius: 6.0 },
+        Faction::Player,
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+    // An enemy within the blast radius.
+    world.spawn((
+        Enemy { kind: EnemyKind::Drifter },
+        Collider { radius: 12.0 },
+        Transform::from_xyz(30.0, 0.0, 0.0),
+    ));
+
+    let mut step = Schedule::default();
+    step.add_systems((cluster_detonate, collect).chain());
+    step.run(world);
+
+    let t = world.resource::<Tally>();
+    assert!(t.dmg >= 1, "the blast damages the nearby enemy");
+    assert_eq!(t.shards, 5, "and scatters 5 bomblets");
 }

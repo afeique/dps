@@ -50,6 +50,14 @@ pub struct Airburst {
     pub timer: f32,
 }
 
+/// A **Cluster Launcher** bomb: detonates when its `fuse` lapses *or* on
+/// proximity to an enemy, dealing an AoE blast + scattering sub-bomblet `Shard`s
+/// (`systems::weapons::cluster_detonate`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ClusterBomb {
+    pub fuse: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BulletKind {
     Player,

@@ -39,6 +39,7 @@ impl Plugin for GamePlugin {
             .init_resource::<crate::resources::LastStandUsed>()
             .init_resource::<systems::wave::Wave>()
             .init_resource::<systems::weapons::CurrentWeapon>()
+            .init_resource::<systems::weapons::ManualFire>()
             .init_resource::<systems::weapons::Attunements>()
             .init_resource::<systems::weapons::ElementInfusion>()
             .init_resource::<systems::weapons::BloodlustTimer>()
@@ -551,6 +552,8 @@ impl Plugin for GamePlugin {
                         systems::weapons::boomerang_return,
                         // Flak bullets airburst into a shrapnel ring at range.
                         systems::weapons::flak_airburst,
+                        // Cluster bombs detonate into a blast + scatter bomblets.
+                        systems::weapons::cluster_detonate,
                     )
                         .chain(),
                     systems::movement::integrate,
