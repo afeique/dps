@@ -5,6 +5,7 @@
 //! pipelines.
 
 pub mod asteroid_debris;
+pub mod blast;
 pub mod bullets;
 pub mod charge_glow;
 pub mod cursor;

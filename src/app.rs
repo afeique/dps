@@ -148,8 +148,10 @@ impl Plugin for GamePlugin {
                         render::status_fx::conduct_arcs,
                         render::telegraph_fx::pulse_telegraph_rings,
                         render::reaction_fx::spawn_reaction_fx,
-                        // Element-tinted wavefront rings on every enemy death.
-                        render::reaction_fx::spawn_death_rings,
+                        // Procedural death blast: a gradient sphere-impostor puff
+                        // cloud + 3D perspective shock rings (replaces the old
+                        // flat overhead `spawn_death_rings`).
+                        render::blast::spawn_blast,
                         render::reaction_fx::tick_shockwaves,
                     )
                         .chain(),
@@ -344,6 +346,10 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::tick_line_debris,
                     // Lingering ember afterglow at the shatter point.
                     render::asteroid_debris::fade_embers,
+                    // Grow/fade the sphere-impostor puffs + rebuild the 3D
+                    // perspective-projected shock rings each frame.
+                    render::blast::tick_blast_puffs,
+                    render::blast::tick_blast_rings,
                     // Idle orbs spin + pulse so they read as live collectibles.
                     systems::drops::animate_orbs,
                     // Prismshard crystals shimmer + turn as they home in.
