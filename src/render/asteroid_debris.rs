@@ -291,9 +291,65 @@ pub fn spawn_enemy_shrapnel(
             (c.blue * 1.4 + 0.2).min(1.0),
         ];
         let dim = [c.red * 0.55, c.green * 0.55, c.blue * 0.55];
-        // Modest fan (enemies die far more often than rocks) + a boss bonus.
-        let count = 6 + d.boss_tier as u32 * 4 + if d.mini_boss { 3 } else { 0 };
-        burst_shards(&mut commands, &mut seed, d.position, 0.16, count, 0.7, base, bright, dim);
+        let boss_scale = 1.0 + 0.5 * d.boss_tier as f32 + if d.mini_boss { 0.4 } else { 0.0 };
+
+        // ── Cross-screen wireframe shrapnel (the rainboids `createDebris` §7b
+        // recipe, scaled up): a big fan of fast, long-tumbling triangles that
+        // actually fly across the field before fading. Count + speed scale with
+        // boss tier; the `1.6` speed scale (vs the asteroid `0.6`) is what sends
+        // them sailing across the screen.
+        let count = (18.0 * boss_scale) as u32;
+        burst_shards(&mut commands, &mut seed, d.position, 0.16, count, 1.6, base, bright, dim);
+
+        // ── Tight starburst sparkles: a ring of bright motes just off the
+        // detonation point, drifting slowly out — the §7 "starSparkle" pop.
+        let spark_n = (12.0 * boss_scale) as u32;
+        for i in 0..spark_n {
+            *seed = seed.wrapping_add(1);
+            let s = *seed;
+            let ang = (i as f32 / spark_n.max(1) as f32) * TAU + frand(s ^ 0x71, -0.2, 0.2);
+            let dir = Vec2::new(ang.cos(), ang.sin());
+            let life = frand(s ^ 0x72, 0.4, 0.8);
+            let r = frand(s ^ 0x73, 1.6, 2.8);
+            // White-hot every 3rd, else the kill's element brightened.
+            let color = if i % 3 == 0 {
+                Color::linear_rgb(EMBER_GAIN * 1.4, EMBER_GAIN * 1.4, EMBER_GAIN * 1.3)
+            } else {
+                Color::linear_rgb(bright[0] * EMBER_GAIN, bright[1] * EMBER_GAIN, bright[2] * EMBER_GAIN)
+            };
+            commands.spawn((
+                Ember { max_life: life },
+                ember_disc(color, r),
+                Transform::from_translation((d.position + dir * 8.0).extend(0.15)),
+                Velocity(dir * frand(s ^ 0x74, 25.0, 70.0)),
+                Lifetime { seconds: life },
+            ));
+        }
+
+        // ── Lingering embers: soft glowing motes that bloom outward and hang in
+        // the air as the kill's cooling afterglow (enemies had none; only the
+        // fire core flashed and vanished). First is a white-hot core.
+        let ember_n = (10.0 * boss_scale) as u32;
+        for i in 0..ember_n {
+            *seed = seed.wrapping_add(1);
+            let s = *seed;
+            let ang = frand(s ^ 0x81, 0.0, TAU);
+            let dir = Vec2::new(ang.cos(), ang.sin());
+            let life = frand(s ^ 0x82, 0.7, 1.2);
+            let r = frand(s ^ 0x83, 2.0, 4.2);
+            let color = if i == 0 {
+                Color::linear_rgb(EMBER_GAIN, EMBER_GAIN, EMBER_GAIN)
+            } else {
+                Color::linear_rgb(base[0] * EMBER_GAIN, base[1] * EMBER_GAIN, base[2] * EMBER_GAIN)
+            };
+            commands.spawn((
+                Ember { max_life: life },
+                ember_disc(color, r),
+                Transform::from_translation((d.position + dir * 4.0).extend(0.13)),
+                Velocity(dir * frand(s ^ 0x84, 30.0, 110.0)),
+                Lifetime { seconds: life },
+            ));
+        }
     }
 }
 

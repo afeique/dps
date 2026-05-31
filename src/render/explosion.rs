@@ -25,43 +25,45 @@ pub fn setup_explosion_effect(mut commands: Commands, mut effects: ResMut<Assets
 fn build_explosion_effect() -> EffectAsset {
     let writer = ExprWriter::new();
 
-    // Init: age 0, lifetime jittered 0.35–0.7 s.
+    // Init: age 0, lifetime jittered 0.45–1.1 s (longer than before so the
+    // fireball lingers as a real bloom instead of a quick puff).
     let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0_f32).expr());
-    let lifetime = writer.lit(0.35_f32).uniform(writer.lit(0.7_f32)).expr();
+    let lifetime = writer.lit(0.45_f32).uniform(writer.lit(1.1_f32)).expr();
     let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
 
-    // Init: start at a tiny scatter sphere, fly outward at 40–140 u/s.
+    // Init: start at a tiny scatter sphere, fly outward at 60–280 u/s (faster so
+    // the cloud blooms wider).
     let init_pos = SetPositionSphereModifier {
         center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(2.0_f32).expr(),
+        radius: writer.lit(3.0_f32).expr(),
         dimension: ShapeDimension::Volume,
     };
     let init_vel = SetVelocitySphereModifier {
         center: writer.lit(Vec3::ZERO).expr(),
-        speed: writer.lit(40.0_f32).uniform(writer.lit(140.0_f32)).expr(),
+        speed: writer.lit(60.0_f32).uniform(writer.lit(280.0_f32)).expr(),
     };
 
     // Update: drag so the burst decelerates and settles.
-    let update_drag = LinearDragModifier::new(writer.lit(6.0_f32).expr());
+    let update_drag = LinearDragModifier::new(writer.lit(5.0_f32).expr());
 
     // Render: hot white-yellow → orange → dim red → transparent (HDR → bloom).
     // `bevy::prelude::Gradient` (UI) shadows hanabi's — qualify it.
     let mut color = bevy_hanabi::Gradient::new();
-    color.add_key(0.0, Vec4::new(9.0, 7.0, 3.0, 1.0));
-    color.add_key(0.2, Vec4::new(7.0, 2.5, 0.4, 1.0));
-    color.add_key(0.6, Vec4::new(2.5, 0.5, 0.1, 0.7));
-    color.add_key(1.0, Vec4::new(0.3, 0.0, 0.0, 0.0));
+    color.add_key(0.0, Vec4::new(12.0, 9.0, 4.0, 1.0)); // white-hot flash
+    color.add_key(0.15, Vec4::new(9.0, 4.0, 0.6, 1.0));
+    color.add_key(0.45, Vec4::new(4.0, 1.0, 0.2, 0.85));
+    color.add_key(1.0, Vec4::new(0.4, 0.05, 0.0, 0.0));
 
-    // Render: shrink over life.
+    // Render: bloom out then shrink over life.
     let mut size = bevy_hanabi::Gradient::new();
-    size.add_key(0.0, Vec3::splat(6.0));
-    size.add_key(0.7, Vec3::splat(3.0));
+    size.add_key(0.0, Vec3::splat(8.0));
+    size.add_key(0.6, Vec3::splat(4.0));
     size.add_key(1.0, Vec3::ZERO);
 
-    // One-shot burst of 120 particles (capacity has headroom).
-    let spawner = SpawnerSettings::once(120.0_f32.into());
+    // One-shot burst of 220 particles (capacity bumped to match).
+    let spawner = SpawnerSettings::once(220.0_f32.into());
 
-    EffectAsset::new(256, spawner, writer.finish())
+    EffectAsset::new(384, spawner, writer.finish())
         .with_name("explosion")
         .init(init_pos)
         .init(init_vel)

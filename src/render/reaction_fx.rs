@@ -81,10 +81,15 @@ pub fn spawn_death_rings(mut commands: Commands, mut deaths: MessageReader<Death
                 Transform::from_translation(d.position.extend(z)).with_scale(Vec3::splat(1.0)),
             ));
         };
-        ring(60.0 * scale, hdr(base, 6.0)); // bright inner wavefront
-        ring(95.0 * scale, hdr(base, 3.5)); // dimmer, larger outer wavefront
+        // Four staggered wavefront rings (rainboids' `explosionRingColored` x4):
+        // a white-hot flash, the bright element ring, a mid ring, and a dim
+        // outer wavefront — so every kill blooms a layered chromatic shock.
+        ring(40.0 * scale, Color::linear_rgb(9.0, 9.0, 9.0)); // white-hot flash
+        ring(70.0 * scale, hdr(base, 6.0)); // bright element wavefront
+        ring(105.0 * scale, hdr(base, 4.0)); // mid wavefront
+        ring(150.0 * scale, hdr(base, 2.5)); // dim outer wavefront
         if d.boss_tier > 0 {
-            ring(140.0 * scale, Color::linear_rgb(7.0, 7.0, 8.0)); // white-hot boss shock
+            ring(210.0 * scale, Color::linear_rgb(7.0, 7.0, 8.0)); // white-hot boss shock
         }
     }
 }
