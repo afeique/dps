@@ -29,6 +29,7 @@ pub mod passives;
 pub mod player_status;
 pub mod power_weapon;
 pub mod powerups;
+pub mod prismshard;
 pub mod reactions;
 pub mod shop;
 pub mod skills;

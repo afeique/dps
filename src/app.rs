@@ -50,6 +50,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::shop::Upgrades>()
             .init_resource::<systems::shop::ShopSel>()
             .init_resource::<systems::drops::HealthDropTimer>()
+            .init_resource::<systems::prismshard::PrismShards>()
             .init_resource::<systems::survivor::SurvivorChoice>()
             .init_resource::<systems::missions::Mission>()
             .init_resource::<systems::items::LootFeed>()
@@ -211,6 +212,8 @@ impl Plugin for GamePlugin {
                     systems::wave::reset,
                     systems::power_weapon::reset_energy,
                     systems::formations::clear_formations,
+                    // Zero the prismshard (P$) balance for the fresh run.
+                    systems::prismshard::reset_prismshards,
                 ),
             )
             // ── armory (spend account-gold on unlocks; opened with A on title) ─
@@ -339,6 +342,8 @@ impl Plugin for GamePlugin {
                     render::asteroid_debris::fade_embers,
                     // Idle orbs spin + pulse so they read as live collectibles.
                     systems::drops::animate_orbs,
+                    // Prismshard crystals shimmer + turn as they home in.
+                    systems::prismshard::animate_prismshards,
                     // Enemy spawn-in warp: a cyan ring + a grow-to-full materialize.
                     render::warp_in::flash_warp_in,
                     render::warp_in::tick_warp_in,
@@ -641,6 +646,11 @@ impl Plugin for GamePlugin {
                         // straight to Score (no-op when a ship exists).
                         systems::drops::bank_orbs,
                         systems::powerups::collect_powerups,
+                        // Prismshards (P$): scatter on kill, magnetize toward the
+                        // Core, bank on arrival.
+                        systems::prismshard::spawn_prismshards,
+                        systems::prismshard::attract_prismshards,
+                        systems::prismshard::collect_prismshards,
                     )
                         .chain(),
                     // Per-tick status/health upkeep, nested as one chained

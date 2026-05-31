@@ -240,6 +240,7 @@ pub fn update_hud(
     pw: Res<PowerWeapon>,
     cur: Res<CurrentWeapon>,
     score: Res<Score>,
+    prism: Res<crate::systems::prismshard::PrismShards>,
     wave: Res<Wave>,
     mission: Res<Mission>,
     sel: Res<SelectedTower>,
@@ -306,10 +307,11 @@ pub fn update_hud(
                 )
             }
             HudText::Econ => format!(
-                "WAVE {}\nENEMIES {}\nGOLD {}\nPOINTS {}",
+                "WAVE {}\nENEMIES {}\nGOLD {}\nP$ {}\nPOINTS {}",
                 wave.number(),
                 enemies.iter().count(),
                 score.gold,
+                prism.0,
                 score.points
             ),
             HudText::Build => {
