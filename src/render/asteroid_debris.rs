@@ -311,11 +311,12 @@ pub fn spawn_enemy_shrapnel(
             let dir = Vec2::new(ang.cos(), ang.sin());
             let life = frand(s ^ 0x72, 0.4, 0.8);
             let r = frand(s ^ 0x73, 1.6, 2.8);
-            // White-hot every 3rd, else the kill's element brightened.
+            // White-hot every 3rd, else the kill's element brightened. Translucent
+            // so the sparkles read as glints of light, not solid dots.
             let color = if i % 3 == 0 {
-                Color::linear_rgb(EMBER_GAIN * 1.4, EMBER_GAIN * 1.4, EMBER_GAIN * 1.3)
+                Color::linear_rgba(EMBER_GAIN * 1.4, EMBER_GAIN * 1.4, EMBER_GAIN * 1.3, 0.7)
             } else {
-                Color::linear_rgb(bright[0] * EMBER_GAIN, bright[1] * EMBER_GAIN, bright[2] * EMBER_GAIN)
+                Color::linear_rgba(bright[0] * EMBER_GAIN, bright[1] * EMBER_GAIN, bright[2] * EMBER_GAIN, 0.6)
             };
             commands.spawn((
                 Ember { max_life: life },
@@ -337,10 +338,11 @@ pub fn spawn_enemy_shrapnel(
             let dir = Vec2::new(ang.cos(), ang.sin());
             let life = frand(s ^ 0x82, 0.7, 1.2);
             let r = frand(s ^ 0x83, 2.0, 4.2);
+            // Translucent so the afterglow billows like cooling gas, not blobs.
             let color = if i == 0 {
-                Color::linear_rgb(EMBER_GAIN, EMBER_GAIN, EMBER_GAIN)
+                Color::linear_rgba(EMBER_GAIN, EMBER_GAIN, EMBER_GAIN, 0.5)
             } else {
-                Color::linear_rgb(base[0] * EMBER_GAIN, base[1] * EMBER_GAIN, base[2] * EMBER_GAIN)
+                Color::linear_rgba(base[0] * EMBER_GAIN, base[1] * EMBER_GAIN, base[2] * EMBER_GAIN, 0.45)
             };
             commands.spawn((
                 Ember { max_life: life },

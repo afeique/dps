@@ -65,3 +65,4 @@ pub fn spawn_camera(mut commands: Commands) {
         },
     ));
 }
+pub mod fireball;
