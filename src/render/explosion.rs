@@ -46,24 +46,26 @@ fn build_explosion_effect() -> EffectAsset {
     // Update: drag so the burst decelerates and settles.
     let update_drag = LinearDragModifier::new(writer.lit(5.0_f32).expr());
 
-    // Render: hot white-yellow → orange → dim red → transparent (HDR → bloom).
+    // Render: hot orange → red → transparent. Translucent (alpha < 1) + SMALL so
+    // the burst reads as a shower of discrete sparks/embers, not a solid bright
+    // ball — the translucent layered fireball (`render::fireball`) is the "body".
     // `bevy::prelude::Gradient` (UI) shadows hanabi's — qualify it.
     let mut color = bevy_hanabi::Gradient::new();
-    color.add_key(0.0, Vec4::new(12.0, 9.0, 4.0, 1.0)); // white-hot flash
-    color.add_key(0.15, Vec4::new(9.0, 4.0, 0.6, 1.0));
-    color.add_key(0.45, Vec4::new(4.0, 1.0, 0.2, 0.85));
+    color.add_key(0.0, Vec4::new(9.0, 6.0, 2.5, 0.85)); // hot spark
+    color.add_key(0.15, Vec4::new(7.0, 3.0, 0.6, 0.7));
+    color.add_key(0.45, Vec4::new(3.0, 0.8, 0.2, 0.5));
     color.add_key(1.0, Vec4::new(0.4, 0.05, 0.0, 0.0));
 
-    // Render: bloom out then shrink over life.
+    // Render: small sparks that taper to nothing (discrete, not a filled disc).
     let mut size = bevy_hanabi::Gradient::new();
-    size.add_key(0.0, Vec3::splat(8.0));
-    size.add_key(0.6, Vec3::splat(4.0));
+    size.add_key(0.0, Vec3::splat(4.5));
+    size.add_key(0.6, Vec3::splat(2.0));
     size.add_key(1.0, Vec3::ZERO);
 
-    // One-shot burst of 220 particles (capacity bumped to match).
-    let spawner = SpawnerSettings::once(220.0_f32.into());
+    // One-shot shower of 90 sparks (fewer + smaller = discrete embers).
+    let spawner = SpawnerSettings::once(90.0_f32.into());
 
-    EffectAsset::new(384, spawner, writer.finish())
+    EffectAsset::new(256, spawner, writer.finish())
         .with_name("explosion")
         .init(init_pos)
         .init(init_vel)
