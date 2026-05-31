@@ -213,16 +213,16 @@ fn stats(kind: WeaponKind) -> WeaponStats {
             radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
         WeaponKind::StormNeedles => WeaponStats {
-            cooldown: 0.13, damage: 0.4, speed: BASE_BULLET_SPEED * 1.1,
-            radius: BASE_BULLET_RADIUS * 0.5, count: 1, spread: 0.0, jitter: 0.10, pierce: 0,
+            cooldown: 0.13, damage: 0.4, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 0.5, count: 1, spread: 0.0, jitter: 0.20, pierce: 0,
         },
         WeaponKind::ScatterShot => WeaponStats {
             cooldown: 0.70, damage: 0.42, speed: BASE_BULLET_SPEED * 0.9,
-            radius: BASE_BULLET_RADIUS * 0.6, count: 5, spread: 0.4, jitter: 0.025, pierce: 0,
+            radius: BASE_BULLET_RADIUS * 0.6, count: 5, spread: 0.4, jitter: 0.0, pierce: 0,
         },
         WeaponKind::RailDriver => WeaponStats {
-            cooldown: 1.20, damage: 3.0, speed: BASE_BULLET_SPEED * 1.4,
-            radius: BASE_BULLET_RADIUS * 1.2, count: 1, spread: 0.0, jitter: 0.0, pierce: 99,
+            cooldown: 1.20, damage: 3.6, speed: BASE_BULLET_SPEED * 1.4,
+            radius: BASE_BULLET_RADIUS * 1.2, count: 1, spread: 0.0, jitter: 0.0, pierce: 5,
         },
         WeaponKind::ClusterLauncher => WeaponStats {
             cooldown: 0.80, damage: 50.0, speed: BASE_BULLET_SPEED * 1.0,
@@ -231,38 +231,38 @@ fn stats(kind: WeaponKind) -> WeaponStats {
         // Slow VOID orb that pierces + pulls (weapon-data.js: bulletSpeed 0.6,
         // pierce 6, pull r150 / strength 0.35). The pull rides on `GravityBullet`.
         WeaponKind::GravityLance => WeaponStats {
-            cooldown: 0.72, damage: 0.6, speed: BASE_BULLET_SPEED * 0.55,
+            cooldown: 0.72, damage: 0.75, speed: BASE_BULLET_SPEED * 0.6,
             radius: BASE_BULLET_RADIUS * 1.15, count: 1, spread: 0.0, jitter: 0.0, pierce: 6,
         },
         // Minigun (weapon-data.js: spinUpTime 1400, fireRate 220→60, spread 0.12).
         // `cooldown` is the spooled-up floor; `player_fire` lerps via `spin_cooldown`.
         WeaponKind::SpinCannon => WeaponStats {
-            cooldown: SPIN_SLOW_CD, damage: 0.5, speed: BASE_BULLET_SPEED * 1.0,
+            cooldown: SPIN_SLOW_CD, damage: 0.5, speed: BASE_BULLET_SPEED * 1.2,
             radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.12, pierce: 0,
         },
         // Out-and-back disc (weapon-data.js: outFrames 28, returnAccel 0.55,
         // pierce 3). The return arc rides on the `Boomerang` component.
         WeaponKind::Boomerang => WeaponStats {
-            cooldown: 0.60, damage: 1.4, speed: BASE_BULLET_SPEED * 0.85,
+            cooldown: 0.60, damage: 1.68, speed: BASE_BULLET_SPEED * 1.0,
             radius: BASE_BULLET_RADIUS * 1.1, count: 1, spread: 0.0, jitter: 0.0, pierce: 3,
         },
         // Ricochet bullet (weapon-data.js: bounces 3, bounceSeekRadius 260). The
         // carom redirect rides on the `Bounce` component (no pierce).
         WeaponKind::Caroms => WeaponStats {
-            cooldown: 0.34, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
-            radius: BASE_BULLET_RADIUS * 0.8, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+            cooldown: 0.34, damage: 1.0, speed: BASE_BULLET_SPEED * 1.1,
+            radius: BASE_BULLET_RADIUS * 0.9, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
         // Splitter (weapon-data.js: splitCount 2, splitDamageFactor 0.5,
         // splitSpeed 0.85, splitGenerations 2). Splits ride on `MitosisGen`.
         WeaponKind::MitosisRounds => WeaponStats {
-            cooldown: 0.38, damage: 1.0, speed: BASE_BULLET_SPEED * 1.0,
-            radius: BASE_BULLET_RADIUS * 1.0, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+            cooldown: 0.38, damage: 1.14, speed: BASE_BULLET_SPEED * 1.0,
+            radius: BASE_BULLET_RADIUS * 0.95, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
         // Airburst (weapon-data.js: burstDistance 300 → 9 shrapnel). The timed
         // burst rides on `Airburst`; the shrapnel ring goes out as `Shard`s.
         WeaponKind::FlakCannon => WeaponStats {
-            cooldown: 0.65, damage: 0.8, speed: BASE_BULLET_SPEED * 1.0,
-            radius: BASE_BULLET_RADIUS * 0.9, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
+            cooldown: 0.70, damage: 0.7, speed: BASE_BULLET_SPEED * 0.95,
+            radius: BASE_BULLET_RADIUS * 0.95, count: 1, spread: 0.0, jitter: 0.0, pierce: 0,
         },
     }
 }
@@ -270,7 +270,7 @@ fn stats(kind: WeaponKind) -> WeaponStats {
 /// Flak airburst (weapon-data.js): bursts at 300px into 9 shrapnel (0.55 dmg).
 pub const FLAK_BURST_DIST: f32 = 300.0;
 pub const FLAK_SHRAPNEL: u32 = 9;
-pub const FLAK_SHRAPNEL_DMG: f32 = 0.55;
+pub const FLAK_SHRAPNEL_DMG: f32 = 0.32;
 pub const FLAK_SHRAPNEL_SPEED: f32 = 300.0;
 
 /// Mitosis split params (weapon-data.js): 2 shards at ±this angle, ×0.5 damage,
@@ -310,8 +310,8 @@ pub const BOOMERANG_OUT_SECS: f32 = 28.0 / 60.0;
 pub const BOOMERANG_RETURN_ACCEL: f32 = 2600.0;
 
 /// Spin Cannon spool: slow → fast fire-rate over `SPIN_UP_TIME` s of held fire.
-pub const SPIN_SLOW_CD: f32 = 0.22;
-pub const SPIN_FAST_CD: f32 = 0.06;
+pub const SPIN_SLOW_CD: f32 = 0.26;
+pub const SPIN_FAST_CD: f32 = 0.10;
 pub const SPIN_UP_TIME: f32 = 1.4;
 
 /// The Spin Cannon's cooldown at spool level `t` (0 = just started, 1 = full
