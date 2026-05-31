@@ -1,180 +1,120 @@
-//! Hunter enemy — ported from `js/modules/enemy/enemy-data.js` (HUNTER entry),
-//! `js/modules/enemy/movement.js` (`hunterArcMovement`), and
-//! `js/modules/enemy/firing.js` (`hunter_single` / `shootBurst3`).
+//! Hunter AI — the **dive-bomber**: orbits the Core at a stand-off radius,
+//! strafes (turning to face the Core to shoot), then every few cycles winds up
+//! and **dives straight through the Core** in a fast lunge before looping back
+//! out to a fresh orbit slot. A port of rainboids' hunter arc/orbit + lunge
+//! movement, retargeted onto the Core.
 //!
-//! The Hunter orbits the player in a sticky one-way arc (CW or CCW chosen at
-//! spawn), enriched with a vortex angular speed, periodic slingshot
-//! contractions, and frequent lunges straight at the player.
-//! JS speed 2.6 px/frame @60 fps ≈ 156 u/s → capped at 160 here.
-//! JS size 32 → radius 16 (half-width).
+//! State machine (`AiState.phase` = per-state timer; `AiState.wander` = the orbit
+//! slot target; the [`Diving`] marker = the lunge):
+//!   • ORBIT      — arrive at a point on the orbit ring around the Core
+//!   • STRAFE     — hold near the slot, face the Core, let firing.rs shoot
+//!   • DIVE       — thrust hard through the Core (a lunge), then loop back out
+//!   • REPOSITION — after a dwell, pick a new slot (or commit to a dive) and go
 //!
-//! Simplifications vs. JS 5.80.x:
-//!   • No perpendicular weave (needs a separate `_arcWeavePhase` field;
-//!     omitted to stay within the two `AiState` scratch fields).
-//!   • Lunge / slingshot dice use `AiState.phase` (accumulated time) in
-//!     place of `frameClock.now`; the pseudo-period is identical.
-//!   • Firing dispatch lives in the parent `enemy_fire` system; this file
-//!     provides only movement + stats + shape.
+//! Movement is thrust-based (Reynolds steering → Velocity), so turns ease in.
 
-use crate::components::{AiState, Core, Enemy, EnemyKind, FaceTarget, SpeedMul, Velocity};
-use crate::resources::PlayBounds;
-use crate::systems::enemy::EnemyStats;
-use crate::systems::steering::{approach, arrive};
+use crate::components::*;
+use crate::systems::steering::{approach, arrive, seek};
 use bevy::prelude::*;
-use bevy_prototype_lyon::prelude::*;
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
+const ORBIT_RADIUS: f32 = 230.0;
+const STRAFE_DWELL: f32 = 1.5;
+const ARRIVE_SLOWING: f32 = 60.0;
+const MAX_SPEED: f32 = 150.0;
+const DIVE_SPEED: f32 = 320.0; // the lunge is much faster than the orbit
+const ACCEL: f32 = 8.0;
+const DIVE_ACCEL: f32 = 22.0; // commits to the dive quickly
+const DIVE_TIME: f32 = 0.75; // how long the lunge lasts (overshoots through)
 
-/// JS HUNTER: health 5, size 32 (radius 16), speed 2.6 px/frame @60 fps.
-/// fire_cooldown mirrors the JS `shootRate: 1.5` (seconds between bursts).
-pub fn stats() -> EnemyStats {
-    EnemyStats {
-        health: 5.0,
-        radius: 16.0,
-        // JS 2.6 px/frame × 60 fps = 156 u/s; rounded up slightly so the
-        // Hunter feels as threatening as documented.
-        speed: 160.0,
-        fire_cooldown: Some(1.5),
-    }
+fn is_hunter(kind: EnemyKind) -> bool {
+    matches!(
+        kind,
+        EnemyKind::Hunter | EnemyKind::AshenDetonator | EnemyKind::TeslaWraith
+    )
 }
 
-// ── Shape ─────────────────────────────────────────────────────────────────────
-
-/// Aggressive red-orange triangle, nose pointing +Y (Bevy forward), radius ≈ 16.
-///
-/// Canvas2D is +Y-down; in `render/shapes.rs` every Y is negated so the shape
-/// lands correctly in Bevy's +Y-up space.  The Hunter's triangle is authored in
-/// Canvas space (nose at top = negative Y), then flipped here.
-pub fn shape() -> Shape {
-    let r = stats().radius;
-
-    // Canvas-space vertices (nose up = negative Y in Canvas):
-    //   nose:       (  0,  -r * 1.0 )
-    //   right wing: ( +r * 0.85,  +r * 0.72 )
-    //   left wing:  ( -r * 0.85,  +r * 0.72 )
-    // Notch at rear centre gives an aggressive swept look.
-    //   rear notch: (  0,  +r * 0.32 )
-    //
-    // In Bevy (+Y up) every Y is negated:
-    let nose  = Vec2::new(0.0,          r * 1.0);
-    let right = Vec2::new( r * 0.85,   -r * 0.72);
-    let notch = Vec2::new(0.0,          -r * 0.32);
-    let left  = Vec2::new(-r * 0.85,   -r * 0.72);
-
-    let path = ShapePath::new()
-        .move_to(nose)
-        .line_to(right)
-        .line_to(notch)
-        .line_to(left)
-        .close();
-
-    ShapeBuilder::with(&path)
-        // Near-black interior; the emissive stroke provides the red glow via bloom.
-        .fill(Color::linear_rgb(0.04, 0.0, 0.0))
-        // Red-orange emissive edge — JS glowColor '#ff6666', boosted for HDR bloom.
-        .stroke((Color::linear_rgb(8.0, 1.5, 0.5), 2.0))
-        .build()
-}
-
-// ── AI ────────────────────────────────────────────────────────────────────────
-
-/// Per-entity AiState scratch for the strafe cycle:
-/// `wander.x` = current slot angle (rad) around the Core; `wander.y` = init flag
-/// (0 = uninitialised); `phase` = strafe-dwell countdown (seconds).
-const ORBIT_RADIUS: f32 = 230.0; // ring radius the hunters hold around the Core
-const ARRIVE_RADIUS: f32 = 28.0; // within this of the slot → strafe
-const SLOW_RADIUS: f32 = 130.0; // arrive deceleration zone
-const STRAFE_DWELL: f32 = 1.5; // seconds held on a slot before repositioning
-
-/// Hunter strafe AI (Reynolds steering): the triangle attackers **orbit the
-/// Core** — `arrive` at a slot on a ring around it, then hold there *facing the
-/// Core* (via [`FaceTarget`]) while their `FireCooldown` looses shots at it, then
-/// after a short dwell **reposition** to a fresh slot and repeat. The elemental
-/// reskins that reuse the hunter shape (Ashen Detonator, Tesla Wraith) share it.
 pub fn ai(
-    time: Res<Time>,
-    bounds: Res<PlayBounds>,
     mut commands: Commands,
-    core: Query<&Transform, With<Core>>,
-    mut q: Query<(
-        Entity,
-        &Enemy,
-        &mut AiState,
-        &mut Velocity,
-        &Transform,
-        Option<&SpeedMul>,
-        Has<FaceTarget>,
-    )>,
+    time: Res<Time>,
+    core: Query<&Transform, (With<Core>, Without<Enemy>)>,
+    mut enemies: Query<
+        (Entity, &Transform, &mut Velocity, &mut AiState, &Enemy, Option<&mut Diving>),
+        With<Enemy>,
+    >,
 ) {
+    let Ok(core_tf) = core.single() else {
+        return;
+    };
+    let core_pos = core_tf.translation.truncate();
     let dt = time.delta_secs();
-    let base_spd = stats().speed;
-    let core_pos = core.single().ok().map(|t| t.translation.truncate());
 
-    for (e, enemy, mut ai, mut vel, tf, sm, facing) in &mut q {
-        if !matches!(
-            enemy.kind,
-            EnemyKind::Hunter | EnemyKind::AshenDetonator | EnemyKind::TeslaWraith
-        ) {
+    for (e, tf, mut vel, mut state, enemy, diving) in &mut enemies {
+        if !is_hunter(enemy.kind) {
             continue;
         }
-        let spd = base_spd * sm.map_or(1.0, |s| s.0);
         let pos = tf.translation.truncate();
+        let to_core = core_pos - pos;
+        let dist = to_core.length();
 
-        // No Core (shouldn't happen mid-run) — drift gently toward origin.
-        let Some(core_pos) = core_pos else {
-            vel.0 = approach(vel.0, -pos.normalize_or_zero() * spd, spd * 0.2);
+        // ── DIVE: locked into the lunge — thrust through the Core until it ends.
+        if let Some(mut dv) = diving {
+            dv.timer -= dt;
+            let desired = seek(pos, core_pos, DIVE_SPEED);
+            vel.0 = approach(vel.0, desired, DIVE_ACCEL);
+            commands.entity(e).insert(FaceTarget(core_pos));
+            if dv.timer <= 0.0 {
+                // Pull out: reseat the orbit slot on the *far* side and resume.
+                commands.entity(e).remove::<Diving>();
+                let bearing = (pos - core_pos).normalize_or_zero();
+                state.wander = core_pos + bearing * ORBIT_RADIUS;
+                state.phase = 0.0;
+            }
             continue;
-        };
-
-        // Init: seed the slot bearing from the spawn angle so hunters fan out.
-        if ai.wander.y == 0.0 {
-            ai.wander.x = (pos - core_pos).to_angle();
-            ai.wander.y = 1.0;
-            ai.phase = STRAFE_DWELL;
         }
 
-        let slot = core_pos + Vec2::from_angle(ai.wander.x) * ORBIT_RADIUS;
+        state.phase -= dt;
 
-        if pos.distance(slot) > ARRIVE_RADIUS {
-            // APPROACH: fly to the slot nose-first (face heading, not the Core).
-            let desired = arrive(pos, slot, spd, SLOW_RADIUS);
-            vel.0 = approach(vel.0, desired, spd * 0.18);
-            if facing {
+        // The orbit slot is stored in `wander`; (re)initialize it lazily.
+        if state.wander == Vec2::ZERO {
+            let bearing = if dist > 1.0 { -to_core / dist } else { Vec2::X };
+            state.wander = core_pos + bearing * ORBIT_RADIUS;
+        }
+
+        let slot = state.wander;
+        let slot_dist = (slot - pos).length();
+
+        if slot_dist < 28.0 && state.phase <= 0.0 {
+            // Arrived fresh → begin the strafe dwell + face the Core to shoot.
+            state.phase = STRAFE_DWELL;
+        }
+
+        if state.phase > 0.0 {
+            // STRAFE: ease to a near-stop and let the firing system shoot.
+            let desired = arrive(pos, slot, MAX_SPEED * 0.35, ARRIVE_SLOWING);
+            vel.0 = approach(vel.0, desired, ACCEL);
+            commands.entity(e).insert(FaceTarget(core_pos));
+        } else {
+            // ORBIT/REPOSITION: arrive at the slot at cruising speed.
+            let desired = arrive(pos, slot, MAX_SPEED, ARRIVE_SLOWING);
+            vel.0 = approach(vel.0, desired, ACCEL);
+            if slot_dist < 28.0 {
+                // Reached it after the dwell → either DIVE (1-in-3, deterministic
+                // from a position hash) or reposition further around the ring.
+                let h = ((pos.x * 0.09 + pos.y * 0.13).sin() * 43758.5).fract();
+                if h < 0.34 {
+                    commands.entity(e).insert(Diving { timer: DIVE_TIME });
+                } else {
+                    let bearing = (pos - core_pos).normalize_or_zero();
+                    let rot = Vec2::new(
+                        bearing.x * (-0.5) - bearing.y * 0.866,
+                        bearing.x * 0.866 + bearing.y * (-0.5),
+                    );
+                    state.wander = core_pos + rot * ORBIT_RADIUS;
+                }
+            } else {
+                // In transit, fly nose-first (heading) — drop any face lock.
                 commands.entity(e).remove::<FaceTarget>();
             }
-            ai.phase = STRAFE_DWELL; // dwell resets fresh once we arrive
-        } else {
-            // STRAFE: settle on the slot, turn to face the Core, and hold while
-            // the firing system shoots at it; then reposition.
-            let desired = arrive(pos, slot, spd * 0.4, SLOW_RADIUS);
-            vel.0 = approach(vel.0, desired, spd * 0.18);
-            if !facing {
-                commands.entity(e).insert(FaceTarget(core_pos));
-            }
-            ai.phase -= dt;
-            if ai.phase <= 0.0 {
-                // Reposition: jump to a new slot (varied step + per-enemy side).
-                let wobble = (pos.x * 0.017 + pos.y * 0.011).sin() * 0.8;
-                let dir = if (pos.x as i32).rem_euclid(2) == 0 { 1.0 } else { -1.0 };
-                ai.wander.x =
-                    (ai.wander.x + dir * (2.1 + wobble)).rem_euclid(std::f32::consts::TAU);
-                ai.phase = STRAFE_DWELL;
-            }
-        }
-
-        // Speed cap.
-        let cap = spd * 1.6;
-        let v = vel.0.length();
-        if v > cap {
-            vel.0 = vel.0 / v * cap;
-        }
-
-        // Soft-bounce at the play edges (keep them on-screen).
-        if pos.x.abs() > bounds.half.x {
-            vel.0.x = -vel.0.x.abs() * pos.x.signum();
-        }
-        if pos.y.abs() > bounds.half.y {
-            vel.0.y = -vel.0.y.abs() * pos.y.signum();
         }
     }
 }
