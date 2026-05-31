@@ -47,7 +47,19 @@ locks facing toward the Core, so attacks read.
 | **Weaver** | `sine` | **Sine-weave**: thrust toward the Core with a sinusoidal lateral oscillation; bank (rotate) into the weave. |
 | **Drifter** | `straight` | Gentle accel toward the Core (already has a light pull); add slight wander so it isn't a straight line. |
 
-## Approach (implementation order, one kind per step)
+## Implementation status (2026-05-31)
+
+**DONE** — thrust+rotate maneuvers shipped for the main archetypes (each covers its
+elemental reskins): Stalker **zigzag-thrust** (+ sniper standoff/flee + face-Core),
+Wasp **boid flock** (separation+cohesion+alignment snapshot + wander), Sentinel
+**kite** (standoff sway + flee-when-close + aim), Prowler **orbit-strafe** (radius
+spring + tangential thrust), Hunter **dive-bomber** with a real DIVE lunge phase
+(`Diving` marker). Steering gained `flee`/`cohesion`/`alignment`/`wander` (+ tests).
+**TODO** (lower priority): Tangerine blink-strike, Titan heavy-advance weight,
+Weaver sine-weave, Guardian shield-facing, Drifter wander polish, explicit
+firing-telegraph wind-ups, and the named bosses.
+
+## Approach (original implementation order, one kind per step)
 
 1. **Steering primitives** — add `flee`, `wander`, `boid` to `systems::steering` (+ tests).
 2. **Stalker zigzag-thrust** — the clearest "thrust + rotate + maneuver" win.
