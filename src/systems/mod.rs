@@ -35,6 +35,7 @@ pub mod skills;
 pub mod sp_alloc;
 pub mod spawn;
 pub mod status;
+pub mod steering;
 pub mod survivor;
 pub mod tower;
 pub mod wave;

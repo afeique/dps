@@ -840,9 +840,9 @@ fn firing_enemy_emits_fire() {
     let mut app = test_app();
     let world = app.world_mut();
 
-    // Player ship — `enemy_firing` returns early if no player exists.
+    // Core — `enemy_firing` aims at it and returns early if none exists.
     world.spawn((
-        Ship::default(),
+        Core,
         Transform::from_xyz(0.0, -100.0, 0.0), // separated so aim_dir != ZERO
     ));
 
@@ -3604,9 +3604,11 @@ fn player_caroms_off_asteroids_without_damage() {
     assert_eq!(hp, 40.0, "an asteroid bounce deals no damage");
 }
 
-/// Enemies bank toward their heading instead of always facing one way: an enemy
-/// flying +Y turns its facing toward +Y (≈ +π/2), rate-limited so it eases rather
-/// than snapping.
+/// Enemies bank to point their *authored nose* along their heading, with a
+/// per-kind forward offset. The Hunter's triangle is authored nose-at-+Y, so
+/// flying +X it must rotate toward −π/2 (nose → +X), rate-limited so it eases
+/// rather than snapping — the "rotate all weird" fix (it used to ignore the
+/// offset and sit 90° off).
 #[test]
 fn enemies_turn_to_face_their_heading() {
     use crate::systems::enemy::face_heading;
@@ -3616,7 +3618,7 @@ fn enemies_turn_to_face_their_heading() {
     let e = world
         .spawn((
             Enemy { kind: EnemyKind::Hunter },
-            Velocity(Vec2::new(0.0, 200.0)), // heading +Y
+            Velocity(Vec2::new(200.0, 0.0)), // heading +X
             Transform::from_rotation(Quat::from_rotation_z(0.0)),
         ))
         .id();
@@ -3636,8 +3638,8 @@ fn enemies_turn_to_face_their_heading() {
         .to_euler(EulerRot::ZYX)
         .0;
     assert!(
-        ang > 0.0 && ang <= std::f32::consts::FRAC_PI_2 + 1e-3,
-        "turns toward the +Y heading without snapping past it (ang {ang})"
+        ang < 0.0 && ang >= -std::f32::consts::FRAC_PI_2 - 1e-3,
+        "the +Y-nosed Hunter turns toward −π/2 so its nose points along +X (ang {ang})"
     );
 }
 
@@ -5230,8 +5232,8 @@ fn raged_enemy_fire_is_flagged_homing() {
     let mut app = test_app();
     let world = app.world_mut();
 
-    // Player below the enemies so aim_dir != ZERO.
-    world.spawn((Ship::default(), Transform::from_xyz(0.0, -100.0, 0.0)));
+    // Core below the enemies so aim_dir != ZERO.
+    world.spawn((Core, Transform::from_xyz(0.0, -100.0, 0.0)));
 
     // Two Hunters with ready cooldowns: one raged, one not.
     world.spawn((

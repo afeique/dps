@@ -59,6 +59,13 @@ pub enum Faction {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Core;
 
+/// Overrides heading-facing: while present, `enemy::face_heading` turns the entity
+/// to point at this world position instead of along its velocity. Enemy AI inserts
+/// it (e.g. to face the Core while strafing/shooting) and removes it when it wants
+/// to fly nose-first again.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct FaceTarget(pub Vec2);
+
 /// Auto-despawn after `seconds` elapse (bullets, transient FX).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Lifetime {

@@ -668,6 +668,30 @@ pub fn enemy_contact_core(
     }
 }
 
+/// Enemy bullets that reach the Core chip its integrity — the *ranged* half of
+/// the assault (ramming via `enemy_contact_core` is the melee half). Player/tower
+/// bullets are ignored here (they're handled by `bullet_hits_enemy`).
+pub fn enemy_bullet_hits_core(
+    mut commands: Commands,
+    mut core: Query<(&Transform, &Collider, &mut Health), With<Core>>,
+    bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
+) {
+    let Ok((ctf, cc, mut chp)) = core.single_mut() else {
+        return;
+    };
+    let cpos = ctf.translation.truncate();
+    for (e, btf, bc, bullet) in &bullets {
+        if bullet.kind != BulletKind::Enemy {
+            continue;
+        }
+        let reach = cc.radius + bc.radius;
+        if cpos.distance_squared(btf.translation.truncate()) <= reach * reach {
+            chp.current -= bullet.damage;
+            commands.entity(e).try_despawn();
+        }
+    }
+}
+
 /// Player ↔ asteroid contact: a **pure physics bounce** (no damage — rocks are
 /// inert). The ship used to fly straight through asteroids; now it caroms off,
 /// with the same momentum impulse as enemy contact (mass ∝ area, so a big rock

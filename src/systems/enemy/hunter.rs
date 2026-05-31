@@ -16,9 +16,10 @@
 //!   • Firing dispatch lives in the parent `enemy_fire` system; this file
 //!     provides only movement + stats + shape.
 
-use crate::components::{AiState, Core, Enemy, EnemyKind, SpeedMul, Velocity};
+use crate::components::{AiState, Core, Enemy, EnemyKind, FaceTarget, SpeedMul, Velocity};
 use crate::resources::PlayBounds;
 use crate::systems::enemy::EnemyStats;
+use crate::systems::steering::{approach, arrive};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -77,147 +78,103 @@ pub fn shape() -> Shape {
 
 // ── AI ────────────────────────────────────────────────────────────────────────
 
-/// Hunter arc-strafe AI — faithful to JS `hunterArcMovement` within the two
-/// available `AiState` scratch fields:
-///
-/// | Rust field        | JS equivalent                     |
-/// |-------------------|-----------------------------------|
-/// | `phase`           | accumulated time (replaces `frameClock.now`);
-///                        also encodes the current arc angle via `sin/cos`. |
-/// | `wander.x`        | `_arcAngle`  — current radial angle (rad)        |
-/// | `wander.y`        | `_arcDirection` sign (1.0 CW, −1.0 CCW), then    |
-///                        repurposed as a packed slingshot/lunge timer       |
-///
-/// Because we only have two Vec2 components, the per-entity sticky CW/CCW
-/// direction is encoded as the sign of `wander.y` and the lunge / slingshot
-/// state is derived from `phase` thresholds rather than wall-clock timestamps.
+/// Per-entity AiState scratch for the strafe cycle:
+/// `wander.x` = current slot angle (rad) around the Core; `wander.y` = init flag
+/// (0 = uninitialised); `phase` = strafe-dwell countdown (seconds).
+const ORBIT_RADIUS: f32 = 230.0; // ring radius the hunters hold around the Core
+const ARRIVE_RADIUS: f32 = 28.0; // within this of the slot → strafe
+const SLOW_RADIUS: f32 = 130.0; // arrive deceleration zone
+const STRAFE_DWELL: f32 = 1.5; // seconds held on a slot before repositioning
+
+/// Hunter strafe AI (Reynolds steering): the triangle attackers **orbit the
+/// Core** — `arrive` at a slot on a ring around it, then hold there *facing the
+/// Core* (via [`FaceTarget`]) while their `FireCooldown` looses shots at it, then
+/// after a short dwell **reposition** to a fresh slot and repeat. The elemental
+/// reskins that reuse the hunter shape (Ashen Detonator, Tesla Wraith) share it.
 pub fn ai(
     time: Res<Time>,
     bounds: Res<PlayBounds>,
-    player: Query<&Transform, With<Core>>,
-    mut q: Query<(&Enemy, &mut AiState, &mut Velocity, &Transform, Option<&SpeedMul>)>,
+    mut commands: Commands,
+    core: Query<&Transform, With<Core>>,
+    mut q: Query<(
+        Entity,
+        &Enemy,
+        &mut AiState,
+        &mut Velocity,
+        &Transform,
+        Option<&SpeedMul>,
+        Has<FaceTarget>,
+    )>,
 ) {
     let dt = time.delta_secs();
-    let spd = stats().speed;
+    let base_spd = stats().speed;
+    let core_pos = core.single().ok().map(|t| t.translation.truncate());
 
-    // Preferred orbit radius (JS `_arcRadius` 230–310; we use a fixed 270).
-    const ORBIT_RADIUS: f32 = 270.0;
-    // Close-range target during a lunge.
-    const LUNGE_RADIUS: f32 = 90.0;
-    // Contracted radius during a slingshot.
-    const SLING_RADIUS: f32 = 130.0;
-
-    // Vortex: angular speed oscillates ±50% around the baseline omega.
-    // JS baseline `_arcOmega` ≈ 0.026 rad/tick @60 fps → 1.56 rad/s.
-    const OMEGA_BASE: f32 = 1.56;
-
-    // Lunge: every ~4 s, 35% chance → we approximate by using a sawtooth on
-    // `phase` with period 4 s, triggering when (phase % 4) < 0.7 (≈35% duty).
-    const LUNGE_PERIOD: f32 = 4.0;
-    const LUNGE_DUTY: f32 = 0.7;   // seconds of lunge per period
-
-    // Slingshot: every ~5.5 s, 60% chance → sawtooth period 5.5 s,
-    // trigger when (phase % 5.5) < 3.3 (≈60% duty).
-    const SLING_PERIOD: f32 = 5.5;
-    const SLING_DUTY: f32 = 3.3;
-
-    for (enemy, mut ai, mut vel, tf, sm) in &mut q {
-        let spd = spd * sm.map_or(1.0, |s| s.0);
-        // Ashen Detonator + Tesla Wraith (EN) reuse the hunter orbital arc.
+    for (e, enemy, mut ai, mut vel, tf, sm, facing) in &mut q {
         if !matches!(
             enemy.kind,
             EnemyKind::Hunter | EnemyKind::AshenDetonator | EnemyKind::TeslaWraith
         ) {
             continue;
         }
-
-        // ── Init: choose sticky orbit direction the first time we see this
-        //    entity (phase == 0.0 and wander == Vec2::ZERO).
-        if ai.phase == 0.0 && ai.wander == Vec2::ZERO {
-            // Seed direction from the entity's world X so different spawns
-            // diverge without needing rand (no dependency here).
-            let dir = if tf.translation.x >= 0.0 { 1.0_f32 } else { -1.0_f32 };
-            // Derive initial arc angle from entity position relative to world
-            // origin (a reasonable stand-in for targeting the player at spawn).
-            let angle = tf.translation.y.atan2(tf.translation.x);
-            ai.wander = Vec2::new(angle, dir);
-            // Stagger phase so all hunters don't pulse simultaneously.
-            ai.phase = tf.translation.x.abs() % LUNGE_PERIOD;
-        }
-
-        // Advance accumulated time.
-        ai.phase += dt;
-
-        // Unpack scratch.
-        let arc_angle  = ai.wander.x;
-        let arc_dir    = ai.wander.y.signum(); // +1 or −1
-
-        // ── Derived booleans from phase sawtooth ─────────────────────────────
-        let lunge    = (ai.phase % LUNGE_PERIOD)  < LUNGE_DUTY;
-        let slingshot = (ai.phase % SLING_PERIOD) < SLING_DUTY;
-
-        // ── Vortex angular speed (JS: `1 + 0.5 * sin(now * 0.0012 + arcAngle * 0.9)`)
-        //    Equivalent at 1 s grain: use phase as the time proxy.
-        let vortex = 1.0 + 0.5 * (ai.phase * 0.0012 * 1000.0 + arc_angle * 0.9).sin();
-        let omega  = OMEGA_BASE * vortex * (if slingshot { 1.4 } else { 1.0 });
-
-        // ── Advance arc angle (freeze during lunge so bullet vector stays true)
-        let new_arc_angle = if lunge {
-            arc_angle
-        } else {
-            arc_angle + arc_dir * omega * dt
-        };
-        ai.wander.x = new_arc_angle;
-
-        // ── Target radius
-        let radius_breathe = (ai.phase * 0.6 + new_arc_angle * 1.7).sin() * 30.0;
-        let target_radius = if lunge {
-            LUNGE_RADIUS
-        } else if slingshot {
-            SLING_RADIUS + (ai.phase * 4.0).sin() * 20.0
-        } else {
-            ORBIT_RADIUS + radius_breathe
-        };
-
-        // ── Compute target world position
-        let target_pos = match player.single() {
-            Ok(pt) => {
-                let px = pt.translation.x + new_arc_angle.cos() * target_radius;
-                let py = pt.translation.y + new_arc_angle.sin() * target_radius;
-                Vec2::new(px, py)
-            }
-            Err(_) => {
-                // No player — drift gently inward toward origin.
-                Vec2::new(
-                    -tf.translation.x * 0.5,
-                    -tf.translation.y * 0.5,
-                )
-            }
-        };
-
-        // ── Steer toward target (JS: velocity += (dir/dist)*speed*steer; vel *= 0.92)
+        let spd = base_spd * sm.map_or(1.0, |s| s.0);
         let pos = tf.translation.truncate();
-        let delta = target_pos - pos;
-        let dist  = delta.length().max(1.0);
-        let steer = if lunge { 0.20 } else if slingshot { 0.13 } else { 0.10 };
 
-        vel.0 += (delta / dist) * spd * steer;
-        vel.0 *= 0.92; // JS friction coefficient
+        // No Core (shouldn't happen mid-run) — drift gently toward origin.
+        let Some(core_pos) = core_pos else {
+            vel.0 = approach(vel.0, -pos.normalize_or_zero() * spd, spd * 0.2);
+            continue;
+        };
 
-        // ── Speed cap (JS lunge/slingshot get higher ceilings)
-        let cap_mul = if lunge { 2.6 } else if slingshot { 2.0 } else { 1.7 };
-        let max_v   = spd * cap_mul;
+        // Init: seed the slot bearing from the spawn angle so hunters fan out.
+        if ai.wander.y == 0.0 {
+            ai.wander.x = (pos - core_pos).to_angle();
+            ai.wander.y = 1.0;
+            ai.phase = STRAFE_DWELL;
+        }
+
+        let slot = core_pos + Vec2::from_angle(ai.wander.x) * ORBIT_RADIUS;
+
+        if pos.distance(slot) > ARRIVE_RADIUS {
+            // APPROACH: fly to the slot nose-first (face heading, not the Core).
+            let desired = arrive(pos, slot, spd, SLOW_RADIUS);
+            vel.0 = approach(vel.0, desired, spd * 0.18);
+            if facing {
+                commands.entity(e).remove::<FaceTarget>();
+            }
+            ai.phase = STRAFE_DWELL; // dwell resets fresh once we arrive
+        } else {
+            // STRAFE: settle on the slot, turn to face the Core, and hold while
+            // the firing system shoots at it; then reposition.
+            let desired = arrive(pos, slot, spd * 0.4, SLOW_RADIUS);
+            vel.0 = approach(vel.0, desired, spd * 0.18);
+            if !facing {
+                commands.entity(e).insert(FaceTarget(core_pos));
+            }
+            ai.phase -= dt;
+            if ai.phase <= 0.0 {
+                // Reposition: jump to a new slot (varied step + per-enemy side).
+                let wobble = (pos.x * 0.017 + pos.y * 0.011).sin() * 0.8;
+                let dir = if (pos.x as i32).rem_euclid(2) == 0 { 1.0 } else { -1.0 };
+                ai.wander.x =
+                    (ai.wander.x + dir * (2.1 + wobble)).rem_euclid(std::f32::consts::TAU);
+                ai.phase = STRAFE_DWELL;
+            }
+        }
+
+        // Speed cap.
+        let cap = spd * 1.6;
         let v = vel.0.length();
-        if v > max_v {
-            vel.0 = vel.0 / v * max_v;
+        if v > cap {
+            vel.0 = vel.0 / v * cap;
         }
 
-        // ── Soft-bounce at play bounds (mirrors drifter_ai convention)
-        if tf.translation.x.abs() > bounds.half.x {
-            vel.0.x = -vel.0.x.abs() * tf.translation.x.signum();
+        // Soft-bounce at the play edges (keep them on-screen).
+        if pos.x.abs() > bounds.half.x {
+            vel.0.x = -vel.0.x.abs() * pos.x.signum();
         }
-        if tf.translation.y.abs() > bounds.half.y {
-            vel.0.y = -vel.0.y.abs() * tf.translation.y.signum();
+        if pos.y.abs() > bounds.half.y {
+            vel.0.y = -vel.0.y.abs() * pos.y.signum();
         }
     }
 }

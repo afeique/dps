@@ -559,8 +559,10 @@ impl Plugin for GamePlugin {
                         // the player.
                         systems::skills::deflector_blocks,
                         systems::skills::tractor_absorb,
-                        // Enemies that reach the Core detonate against it.
+                        // Enemies that reach the Core detonate against it; their
+                        // bullets chip it (the ranged half of the assault).
                         systems::collision::enemy_contact_core,
+                        systems::collision::enemy_bullet_hits_core,
                         systems::asteroids::asteroid_hits,
                         systems::power_weapon::update_nova,
                         systems::power_weapon::update_mines,

@@ -30,7 +30,7 @@
 //! Sentinel 2; Stalker/Prowler/Titan 3; Tangerine 4. These are small by design —
 //! the player has only 40 HP (spec II.2), so a few hits matter.
 
-use crate::components::{Enemy, EnemyKind, Faction, FireCooldown, Frozen, Raged, Ship, Stunned};
+use crate::components::{Core, Enemy, EnemyKind, Faction, FireCooldown, Frozen, Raged, Stunned};
 use crate::messages::Fire;
 use bevy::prelude::*;
 
@@ -52,7 +52,7 @@ fn rotate(v: Vec2, angle: f32) -> Vec2 {
 pub fn enemy_firing(
     time: Res<Time>,
     mut fire: MessageWriter<Fire>,
-    player: Query<&Transform, With<Ship>>,
+    core: Query<&Transform, With<Core>>,
     // Stunned OR frozen enemies can't fire (spec III.6 / E3) — their cooldown
     // simply freezes. `Has<Raged>` makes a raged boss's bullets home (spec IV.7).
     mut q: Query<
@@ -60,8 +60,9 @@ pub fn enemy_firing(
         (Without<Stunned>, Without<Frozen>),
     >,
 ) {
-    let Ok(player_tf) = player.single() else { return };
-    let player_pos = player_tf.translation.truncate();
+    // Tower defense: enemies fire at the Core (the objective they're attacking).
+    let Ok(core_tf) = core.single() else { return };
+    let target_pos = core_tf.translation.truncate();
     let dt = time.delta_secs();
     let t = time.elapsed_secs();
 
@@ -73,9 +74,9 @@ pub fn enemy_firing(
         }
 
         let enemy_pos = tf.translation.truncate();
-        let aim = player_pos - enemy_pos;
+        let aim = target_pos - enemy_pos;
         if aim == Vec2::ZERO {
-            // On top of the player — skip until there is separation.
+            // On top of the Core — skip until there is separation.
             continue;
         }
         let aim_dir = aim.normalize();

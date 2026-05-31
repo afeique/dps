@@ -359,24 +359,44 @@ pub fn boss_part_hp(tier: u8) -> f32 {
 /// Per-enemy turn rate (rad/sec) when banking toward its heading.
 const FACE_TURN_RATE: f32 = 6.0;
 
+/// Angle to add to a heading so each kind's **authored nose** points along its
+/// velocity. The silhouettes are authored inconsistently: `hunter`/`stalker`/
+/// `titan` (and the elemental reskins reusing those shapes) are nose-at-**+Y**,
+/// so they need a −90° offset; every other shape is nose-at-+X or radially
+/// symmetric, where the heading angle maps straight to Z. Getting this wrong is
+/// what made the +Y triangles fly sideways / spin (the "rotate all weird" bug).
+pub fn forward_offset(kind: EnemyKind) -> f32 {
+    use EnemyKind::*;
+    match kind {
+        Hunter | Stalker | Titan | AshenDetonator | TeslaWraith | LumenDrone | FrostLance => {
+            -std::f32::consts::FRAC_PI_2
+        }
+        _ => 0.0,
+    }
+}
+
 /// Turn each enemy to face its **heading** (velocity), so it flies nose-first and
 /// banks through its manoeuvres instead of sliding around always pointing one
-/// way. The turn is rate-limited (shortest-arc) for a realistic-flight read.
-/// Enemy shapes are authored **+X-forward** (the JS "nose right" convention, with
-/// "rotation applied by the ECS"), so the heading angle maps straight to the
-/// Transform's Z rotation. Firing is aim-based (independent of facing), so this is
-/// purely visual; parked `BossPart` turrets are excluded. Runs in `Update`.
+/// way. The turn is rate-limited (shortest-arc) for a realistic-flight read, and
+/// the per-kind [`forward_offset`] aligns each shape's authored nose. Firing is
+/// aim-based (independent of facing); parked `BossPart` turrets are excluded.
 pub fn face_heading(
     time: Res<Time>,
-    mut q: Query<(&Velocity, &mut Transform), (With<Enemy>, Without<BossPart>)>,
+    mut q: Query<(&Velocity, &Enemy, &mut Transform, Option<&FaceTarget>), Without<BossPart>>,
 ) {
     let dt = time.delta_secs();
     let max = FACE_TURN_RATE * dt;
-    for (vel, mut tf) in &mut q {
-        if vel.0.length_squared() < 4.0 {
-            continue; // barely moving — hold the current facing
+    for (vel, enemy, mut tf, face) in &mut q {
+        // Direction the nose should point: a `FaceTarget` (e.g. the Core while
+        // strafing) overrides the velocity heading.
+        let aim = match face {
+            Some(ft) => ft.0 - tf.translation.truncate(),
+            None => vel.0,
+        };
+        if aim.length_squared() < 4.0 {
+            continue; // barely moving / on top of the target — hold the facing
         }
-        let target = vel.0.to_angle(); // +X-forward → heading angle is the Z rotation
+        let target = aim.to_angle() + forward_offset(enemy.kind);
         let cur = tf.rotation.to_euler(EulerRot::ZYX).0;
         // Shortest signed arc from `cur` to `target`, then clamp to the turn rate.
         let diff = (target - cur + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
