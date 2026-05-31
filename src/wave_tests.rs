@@ -7418,3 +7418,93 @@ fn bloodlust_refreshes_on_kill() {
         assert_eq!(world.resource::<BloodlustTimer>().0, 0.0, "player death → no surge");
     }
 }
+
+/// LanceBeam is a cone: it hits EVERY enemy within ±0.7 rad of the aim (pierces),
+/// not just the first along a ray.
+#[test]
+fn lance_beam_cone_hits_all_in_arc() {
+    use crate::systems::power_weapon::{spawn_beam, update_beams, BeamKind};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.insert_resource(crate::resources::Aim { world: Vec2::new(0.0, 400.0), active: true });
+    // Two enemies, both inside the +Y cone + range (one on-axis, one off-axis).
+    let on = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 14.0 }, Transform::from_xyz(0.0, 150.0, 0.0)))
+        .id();
+    let off = world
+        .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 14.0 }, Transform::from_xyz(60.0, 150.0, 0.0)))
+        .id();
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_beam(&mut c, BeamKind::Lance, Vec2::ZERO));
+    setup.run(world);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.3));
+    world.insert_resource(time);
+    let mut step = Schedule::default();
+    step.add_systems((update_beams, apply_damage).chain());
+    step.run(world);
+
+    assert!(world.get::<Health>(on).unwrap().current < 50.0, "on-axis enemy hit");
+    assert!(world.get::<Health>(off).unwrap().current < 50.0, "off-axis-but-in-cone enemy also hit");
+}
+
+/// ArcLightning chains: it damages + stuns several enemies in sequence, not one.
+#[test]
+fn arc_lightning_chains_through_enemies() {
+    use crate::systems::power_weapon::{spawn_beam, update_beams, BeamKind};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.insert_resource(crate::resources::Aim { world: Vec2::new(0.0, 100.0), active: true });
+    let es: Vec<Entity> = [80.0_f32, 160.0, 240.0]
+        .iter()
+        .map(|&y| {
+            world
+                .spawn((Enemy { kind: EnemyKind::Hunter }, Health::new(50.0), Collider { radius: 14.0 }, Transform::from_xyz(0.0, y, 0.0)))
+                .id()
+        })
+        .collect();
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| spawn_beam(&mut c, BeamKind::Arc, Vec2::ZERO));
+    setup.run(world);
+
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.1));
+    world.insert_resource(time);
+    let mut step = Schedule::default();
+    step.add_systems((update_beams, apply_damage).chain());
+    step.run(world);
+
+    for e in es {
+        assert!(world.get::<Stunned>(e).is_some(), "each chained enemy is stunned");
+    }
+}
+
+/// An armed Seeker Mine steers toward the nearest enemy.
+#[test]
+fn armed_mine_seeks_nearest_enemy() {
+    use crate::systems::power_weapon::{lay_mine, update_mines, Mine};
+
+    let mut app = test_app();
+    let world = app.world_mut();
+    let mut setup = Schedule::default();
+    setup.add_systems(|mut c: Commands| lay_mine(&mut c, Vec2::ZERO));
+    setup.run(world);
+    world.spawn((Enemy { kind: EnemyKind::Drifter }, Collider { radius: 12.0 }, Transform::from_xyz(100.0, 0.0, 0.0)));
+
+    // dt > the 0.6s arm time, so the mine arms then seeks this tick.
+    let mut time = Time::<()>::default();
+    time.advance_by(Duration::from_secs_f32(0.7));
+    world.insert_resource(time);
+    let mut step = Schedule::default();
+    step.add_systems(update_mines);
+    step.run(world);
+
+    let mut q = world.query_filtered::<&Velocity, With<Mine>>();
+    let v = q.iter(world).next().expect("the mine still exists").0;
+    assert!(v.x > 0.0, "armed mine seeks the +X enemy (vel {v:?})");
+}

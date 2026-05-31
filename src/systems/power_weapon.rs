@@ -244,8 +244,12 @@ const BEAM_DPS: f32 = 3.0;
 const BEAM_RANGE: f32 = 360.0;
 /// Lance Beam full width (`width 6`, spec III.3); half is the ray hit-radius.
 const LANCE_WIDTH: f32 = 6.0;
+/// Lance sweep half-angle (rad): it hits every enemy within this cone of the aim.
+const LANCE_CONE: f32 = 0.7;
 /// Arc Lightning render width (no spec width — the tether is thin).
 const ARC_WIDTH: f32 = 4.0;
+/// Arc Lightning chain length — hops through this many enemies (weapon-data.js).
+const ARC_CHAIN: u32 = 5;
 // Prism Beam (RADIANT fan): 5 rays across 0.85 rad, 1.1 s, 0.06/tick×60 dps each.
 const PRISM_DURATION: f32 = 1.1;
 const PRISM_DPS: f32 = 3.6;
@@ -360,10 +364,16 @@ pub fn lay_mine(commands: &mut Commands, pos: Vec2) {
             life: 12.0,
             element: Element::Kinetic,
         },
+        Velocity::default(), // armed mines steer toward enemies (update_mines)
         mine_shape(),
         Transform::from_translation(pos.extend(0.4)),
     ));
 }
+
+/// Max live mines (weapon-data.js): laying a new one over the cap retires the oldest.
+pub const MAX_MINES: usize = 3;
+/// Speed an armed mine seeks the nearest enemy at (u/s).
+pub const MINE_SEEK_SPEED: f32 = 170.0;
 
 /// Spawn a **Cryo Burst** ring at `center` (W): a CRYO shockwave (r300) that
 /// freezes every enemy its front sweeps over for 2.5 s — giving the player a way
@@ -374,7 +384,7 @@ pub fn spawn_cryo_burst(commands: &mut Commands, center: Vec2) {
             center,
             radius: 0.0,
             max_radius: 300.0,
-            speed: 500.0,
+            speed: 600.0, // 300px over the ~500ms ring (weapon-data.js)
             damage: 1.5,
             band: 30.0,
             hit: Vec::new(),
@@ -886,16 +896,38 @@ pub fn update_mines(
     mut dmg: MessageWriter<Damage>,
     mut knock: MessageWriter<Knockback>,
     enemies: Query<(Entity, &Transform, &Collider, Option<&Resistances>), With<Enemy>>,
-    mut mines: Query<(Entity, &mut Mine, &Transform)>,
+    mut mines: Query<(Entity, &mut Mine, &Transform, &mut Velocity)>,
 ) {
     let dt = time.delta_secs();
-    for (mine_e, mut mine, mtf) in &mut mines {
+
+    // Cap: laying over MAX_MINES retires the oldest (lowest remaining `life`).
+    let mut by_age: Vec<(Entity, f32)> = mines.iter().map(|(e, m, _, _)| (e, m.life)).collect();
+    if by_age.len() > MAX_MINES {
+        by_age.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        for (e, _) in by_age.iter().take(by_age.len() - MAX_MINES) {
+            commands.entity(*e).try_despawn();
+        }
+    }
+
+    for (mine_e, mut mine, mtf, mut mvel) in &mut mines {
         mine.arm_timer = (mine.arm_timer - dt).max(0.0);
         mine.life -= dt;
         let pos = mtf.translation.truncate();
         let armed = mine.arm_timer <= 0.0;
         if !armed {
             continue;
+        }
+
+        // Once armed, the mine drifts toward the nearest enemy (seeking).
+        if let Some((_, etf, _, _)) = enemies.iter().min_by(|(_, a, _, _), (_, b, _, _)| {
+            a.translation
+                .truncate()
+                .distance_squared(pos)
+                .partial_cmp(&b.translation.truncate().distance_squared(pos))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            let dir = (etf.translation.truncate() - pos).normalize_or_zero();
+            mvel.0 = dir * MINE_SEEK_SPEED;
         }
 
         let triggered = enemies
@@ -1050,10 +1082,27 @@ pub fn update_beams(
         let tick_dmg = beam.dps * mult * dt;
 
         match beam.kind {
-            BeamKind::Lance | BeamKind::Prism => {
-                // Lance fires straight ahead; each Prism ray is angled by its offset.
+            // Lance: a wide cone that hits EVERY enemy within ±LANCE_CONE of the
+            // aim direction (pierces all), burning each (weapon-data.js sweep).
+            BeamKind::Lance => {
+                for (e, etf, _ec, eres) in &enemies {
+                    let to = etf.translation.truncate() - origin;
+                    let dist = to.length();
+                    if dist < 1.0 || dist > beam.range {
+                        continue;
+                    }
+                    if fwd.angle_to(to / dist).abs() > LANCE_CONE {
+                        continue;
+                    }
+                    let rm = eres.map_or(1.0, |r| r.multiplier(beam.element));
+                    dmg.write(Damage { target: e, amount: tick_dmg * rm });
+                    commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
+                }
+                place_bolt(&mut shape, &mut tf, beam.kind, origin, fwd, beam.range, seed);
+            }
+            // Prism: one thin ray per fan offset, stopping at its first enemy.
+            BeamKind::Prism => {
                 let ray_dir = rotate(fwd, beam.offset);
-                // The first enemy along the ray (smallest distance).
                 let mut best: Option<(f32, Entity, f32)> = None;
                 for (e, etf, ec, eres) in &enemies {
                     if let Some(t) = beam_ray_hit_dist(
@@ -1065,46 +1114,59 @@ pub fn update_beams(
                         ec.radius,
                     ) {
                         if best.is_none_or(|(bt, _, _)| t < bt) {
-                            let rm = eres.map_or(1.0, |r| r.multiplier(beam.element));
-                            best = Some((t, e, rm));
+                            best = Some((t, e, eres.map_or(1.0, |r| r.multiplier(beam.element))));
                         }
                     }
                 }
                 let length = match best {
                     Some((t, e, rm)) => {
                         dmg.write(Damage { target: e, amount: tick_dmg * rm });
-                        // Lance burn (spec III.3) — Prism rays don't burn.
-                        if beam.kind == BeamKind::Lance {
-                            commands.entity(e).insert(Burning { dps: beam.dps, secs: 2.0 });
-                        }
                         t
                     }
                     None => beam.range,
                 };
                 place_bolt(&mut shape, &mut tf, beam.kind, origin, ray_dir, length, seed);
             }
+            // Arc: a tether that chains from the Core through up to ARC_CHAIN
+            // nearest enemies, damaging + stunning each link.
             BeamKind::Arc => {
-                // Aim point: the cursor (Core → cursor), already resolved above.
-                let aim = aim_pt;
-                // The enemy nearest the cursor, within the player's reach.
-                let mut best: Option<(f32, Vec2, Entity, f32)> = None;
-                for (e, etf, _, eres) in &enemies {
-                    let epos = etf.translation.truncate();
-                    if epos.distance(ppos) > beam.range {
-                        continue;
+                let mut visited: Vec<Entity> = Vec::new();
+                let mut from = origin;
+                let mut first_link: Option<Vec2> = None;
+                for _ in 0..ARC_CHAIN {
+                    let mut best: Option<(f32, Entity, Vec2, f32)> = None;
+                    for (e, etf, _ec, eres) in &enemies {
+                        if visited.contains(&e) {
+                            continue;
+                        }
+                        let epos = etf.translation.truncate();
+                        let d2 = epos.distance_squared(from);
+                        if d2 > beam.range * beam.range {
+                            continue;
+                        }
+                        if best.is_none_or(|(bd, _, _, _)| d2 < bd) {
+                            best =
+                                Some((d2, e, epos, eres.map_or(1.0, |r| r.multiplier(beam.element))));
+                        }
                     }
-                    let d2 = epos.distance_squared(aim);
-                    if best.is_none_or(|(bd, _, _, _)| d2 < bd) {
-                        let rm = eres.map_or(1.0, |r| r.multiplier(beam.element));
-                        best = Some((d2, epos, e, rm));
+                    match best {
+                        Some((_, e, epos, rm)) => {
+                            dmg.write(Damage { target: e, amount: tick_dmg * rm });
+                            commands.entity(e).insert(Stunned { secs: 0.5 });
+                            visited.push(e);
+                            if first_link.is_none() {
+                                first_link = Some(epos);
+                            }
+                            from = epos;
+                        }
+                        None => break,
                     }
                 }
-                match best {
-                    Some((_, epos, e, rm)) => {
-                        dmg.write(Damage { target: e, amount: tick_dmg * rm });
-                        // Arc stun (spec III.3): a refreshing fire-suppress lock.
-                        commands.entity(e).insert(Stunned { secs: 0.5 });
-                        let to = epos - origin;
+                // Bolt drawn to the first link (the rest of the chain still takes
+                // damage; a full multi-segment bolt is a later visual refinement).
+                match first_link {
+                    Some(p) => {
+                        let to = p - origin;
                         let len = to.length();
                         let dir = if len > 1e-6 { to / len } else { fwd };
                         place_bolt(&mut shape, &mut tf, beam.kind, origin, dir, len, seed);

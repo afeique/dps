@@ -891,7 +891,7 @@ pub fn manual_fire(
     sel: Res<crate::systems::tower::SelectedTower>,
     mut state: ResMut<ManualFire>,
     mut fire: MessageWriter<Fire>,
-    core: Query<&Transform, With<Core>>,
+    core: Query<(&Transform, Has<Overdrive>), With<Core>>,
     enemies: Query<&Transform, With<Enemy>>,
 ) {
     let dt = time.delta_secs();
@@ -925,21 +925,26 @@ pub fn manual_fire(
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .unwrap_or(cursor);
-    let origin = core
+    let (origin, overdrive) = core
         .single()
-        .map(|t| t.translation.truncate())
-        .unwrap_or(Vec2::ZERO);
+        .map(|(t, od)| (t.translation.truncate(), od))
+        .unwrap_or((Vec2::ZERO, false));
     let fwd = (tgt - origin).normalize_or_zero();
     if fwd == Vec2::ZERO {
         return;
     }
 
+    // Overdrive (power weapon): faster fire + harder hits while it's active on the Core.
+    let fire_mult = if overdrive { OVERDRIVE_FIRE_MULT } else { 1.0 };
+    let dmg_mult = if overdrive { OVERDRIVE_DMG_MULT } else { 1.0 };
+
     // Cooldown: the Spin Cannon's rate spools up; others use their fixed cadence.
-    state.timer = if cur.0 == WeaponKind::SpinCannon {
+    let base_cd = if cur.0 == WeaponKind::SpinCannon {
         spin_cooldown(state.spool)
     } else {
         st.cooldown
     };
+    state.timer = base_cd * fire_mult;
 
     let t = time.elapsed_secs();
     let count = st.count + upgrades.owned(UpgradeId::Multishot);
@@ -955,7 +960,7 @@ pub fn manual_fire(
         fire.write(Fire {
             origin,
             dir: dir.normalize_or_zero(),
-            damage: st.damage,
+            damage: st.damage * dmg_mult,
             speed: st.speed,
             faction: Faction::Player,
             element: Element::Kinetic, // spawn_bullets resolves the real element set

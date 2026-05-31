@@ -12,7 +12,7 @@
 use crate::combat::element::{Element, ElementSet};
 use crate::components::{
     Airburst, Bullet, BulletElements, BulletKind, Collider, Core, Enemy, Faction, GravityBullet,
-    Health, Lifetime, Velocity,
+    Health, Lifetime, Overdrive, Velocity, OVERDRIVE_FIRE_MULT,
 };
 use crate::render::bullets::BulletAssets;
 use crate::resources::{Aim, PlayBounds, Score};
@@ -267,8 +267,15 @@ pub fn tower_fire(
     assets: Res<BulletAssets>,
     mut towers: Query<(&Transform, &mut Tower)>,
     enemies: Query<&Transform, With<Enemy>>,
+    core: Query<Has<Overdrive>, With<Core>>,
 ) {
     let dt = time.delta_secs();
+    // Overdrive (power weapon) speeds up turret fire while active on the Core.
+    let fire_mult = if core.single().unwrap_or(false) {
+        OVERDRIVE_FIRE_MULT
+    } else {
+        1.0
+    };
     // Snapshot enemy positions once per tick (shared across all towers).
     let positions: Vec<Vec2> = enemies.iter().map(|t| t.translation.truncate()).collect();
     for (ttf, mut tower) in &mut towers {
@@ -285,7 +292,7 @@ pub fn tower_fire(
         if dir == Vec2::ZERO {
             continue;
         }
-        tower.timer = tower.cooldown;
+        tower.timer = tower.cooldown * fire_mult;
         spawn_tower_bullet(&mut commands, &assets, tower.kind, tower.level, tpos, dir);
     }
 }
