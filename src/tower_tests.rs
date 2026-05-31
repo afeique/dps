@@ -288,3 +288,38 @@ fn manual_fire_chains_to_a_player_bullet() {
     assert!(matches!(faction, Faction::Player));
     assert!(vel.0.x > 0.0, "the bullet flies toward the clicked enemy (+X) (vel {:?})", vel.0);
 }
+
+/// Right-click/Space fires the equipped power weapon from the Core toward the
+/// cursor: Missile Salvo looses 3 player missiles and spends energy.
+#[test]
+fn power_weapon_fires_from_core() {
+    use crate::resources::{Aim, EnergyMeter};
+    use crate::systems::power_weapon::{fire_power_weapon, PowerWeapon, PowerWeaponKind};
+
+    let mut app = App::new();
+    app.init_resource::<crate::meta::Meta>();
+
+    let mut keys = ButtonInput::<KeyCode>::default();
+    keys.press(KeyCode::Space);
+
+    let world = app.world_mut();
+    world.insert_resource(PowerWeapon { kind: PowerWeaponKind::MissileSalvo, cooldown: 0.0 });
+    world.insert_resource(EnergyMeter { current: 100.0, max: 100.0 });
+    world.insert_resource(Time::<()>::default());
+    world.insert_resource(Aim { world: Vec2::new(0.0, 300.0), active: true });
+    world.insert_resource(keys);
+    world.insert_resource(ButtonInput::<MouseButton>::default());
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+
+    let mut step = Schedule::default();
+    step.add_systems(fire_power_weapon);
+    step.run(world);
+
+    let missiles = world
+        .query::<(&Bullet, &Faction)>()
+        .iter(world)
+        .filter(|(b, f)| matches!(b.kind, BulletKind::Player) && matches!(f, Faction::Player))
+        .count();
+    assert_eq!(missiles, 3, "Missile Salvo looses 3 player missiles");
+    assert!(world.resource::<EnergyMeter>().current < 100.0, "firing spent energy");
+}

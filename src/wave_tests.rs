@@ -1158,12 +1158,12 @@ fn lance_beam_damages_target_and_expires() {
     let mut app = test_app();
     let world = app.world_mut();
 
-    // Player ship at origin, facing +Y (identity rotation → fwd = +Y).
-    world.spawn((
-        Ship::default(),
-        Intent::default(),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-    ));
+    // Core at origin; cursor aimed straight up so the beam fires +Y.
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.insert_resource(crate::resources::Aim {
+        world: Vec2::new(0.0, 400.0),
+        active: true,
+    });
 
     // Enemy 120 px straight ahead (on the +Y beam axis) with generous HP.
     let enemy = world
@@ -3222,12 +3222,15 @@ fn orbital_strike_telegraphs_then_hits() {
 /// an enemy in front.
 #[test]
 fn prism_beam_fans_rays_and_damages() {
-    use crate::components::Intent;
     use crate::systems::power_weapon::{spawn_prism, update_beams, Beam};
 
     let mut app = test_app();
     let world = app.world_mut();
-    world.spawn((Ship::default(), Intent::default(), Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.spawn((Core, Transform::from_xyz(0.0, 0.0, 0.0)));
+    world.insert_resource(crate::resources::Aim {
+        world: Vec2::new(0.0, 400.0),
+        active: true,
+    });
     let e = world
         .spawn((
             Enemy { kind: EnemyKind::Hunter },

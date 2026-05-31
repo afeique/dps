@@ -27,7 +27,7 @@
 use crate::combat::element::{Element, ElementSet, Resistances};
 use crate::components::*;
 use crate::messages::{Damage, Knockback};
-use crate::resources::EnergyMeter;
+use crate::resources::{Aim, EnergyMeter};
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -704,7 +704,8 @@ pub fn fire_power_weapon(
     // Optional so headless tests run without the audio assets.
     sfx: Option<Res<crate::audio::Sfx>>,
     mut commands: Commands,
-    player: Query<(Entity, &Transform), With<Ship>>,
+    aim: Res<Aim>,
+    core: Query<(Entity, &Transform), With<Core>>,
     beams: Query<(), With<Beam>>,
 ) {
     pw.cooldown = (pw.cooldown - time.delta_secs()).max(0.0);
@@ -719,7 +720,8 @@ pub fn fire_power_weapon(
         return;
     }
 
-    let Ok((player_e, tf)) = player.single() else {
+    // Tower defense: power weapons fire from the **Core**, aimed at the cursor.
+    let Ok((core_e, ctf)) = core.single() else {
         return;
     };
 
@@ -748,8 +750,19 @@ pub fn fire_power_weapon(
         ));
     }
 
-    let fwd = (tf.rotation * Vec3::Y).truncate().normalize_or_zero();
-    let nose = tf.translation.truncate() + fwd * 22.0;
+    let core_pos = ctf.translation.truncate();
+    // Aim direction (Core → cursor); the deploy point for placed/AoE weapons is
+    // the cursor itself (so the player drops them on a cluster).
+    let cursor = if aim.active {
+        aim.world
+    } else {
+        core_pos + Vec2::Y * 180.0
+    };
+    let fwd = {
+        let d = (cursor - core_pos).normalize_or_zero();
+        if d == Vec2::ZERO { Vec2::Y } else { d }
+    };
+    let nose = core_pos + fwd * (crate::systems::tower::CORE_RADIUS + 8.0);
 
     match pw.kind {
         PowerWeaponKind::MissileSalvo => {
@@ -770,7 +783,7 @@ pub fn fire_power_weapon(
             }
         }
         PowerWeaponKind::NovaBlast => {
-            let center = tf.translation.truncate();
+            let center = cursor;
             commands.spawn((
                 NovaRing {
                     center,
@@ -788,26 +801,28 @@ pub fn fire_power_weapon(
             ));
         }
         PowerWeaponKind::MineLayer => {
-            lay_mine(&mut commands, tf.translation.truncate());
+            lay_mine(&mut commands, cursor);
         }
         PowerWeaponKind::LanceBeam => spawn_beam(&mut commands, BeamKind::Lance, nose),
         PowerWeaponKind::ArcLightning => spawn_beam(&mut commands, BeamKind::Arc, nose),
-        PowerWeaponKind::CryoBurst => spawn_cryo_burst(&mut commands, tf.translation.truncate()),
-        // Overdrive: buff the primary for a few seconds (no projectile).
+        PowerWeaponKind::CryoBurst => spawn_cryo_burst(&mut commands, cursor),
+        // Overdrive: parked on the Core (ticks down). The old primary-fire buff
+        // had a ship to act on; manual/tower fire don't read it yet, so for now
+        // it's a no-op beyond its timer.
         PowerWeaponKind::Overdrive => {
-            commands.entity(player_e).insert(Overdrive {
+            commands.entity(core_e).insert(Overdrive {
                 secs: OVERDRIVE_DURATION,
             });
         }
-        // Singularity: drop a Void pull field ahead of the ship.
+        // Singularity: drop a Void pull field at the cursor.
         PowerWeaponKind::Singularity => {
-            spawn_singularity(&mut commands, tf.translation.truncate() + fwd * 180.0);
+            spawn_singularity(&mut commands, cursor);
         }
-        // Prism Beam: a RADIANT fan of rays from the nose.
+        // Prism Beam: a RADIANT fan of rays from the Core toward the cursor.
         PowerWeaponKind::PrismBeam => spawn_prism(&mut commands, nose),
-        // Orbital Strike: a telegraphed column ahead of the ship.
+        // Orbital Strike: a telegraphed column dropped at the cursor.
         PowerWeaponKind::OrbitalStrike => {
-            spawn_orbital_strike(&mut commands, tf.translation.truncate() + fwd * 200.0);
+            spawn_orbital_strike(&mut commands, cursor);
         }
         // Charge Shot fires one big fast piercing bolt (the JS hold-to-charge
         // ramp is simplified to an instant heavy shot).
@@ -972,24 +987,24 @@ pub fn update_beams(
     time: Res<Time>,
     mut commands: Commands,
     mut dmg: MessageWriter<Damage>,
-    player: Query<(&Transform, &Intent), With<Ship>>,
+    cursor: Res<Aim>,
+    core: Query<&Transform, With<Core>>,
     enemies: Query<(Entity, &Transform, &Collider, Option<&Resistances>), With<Enemy>>,
-    mut beams: Query<(Entity, &mut Beam, &mut Transform, &mut Shape), (Without<Ship>, Without<Enemy>)>,
+    mut beams: Query<(Entity, &mut Beam, &mut Transform, &mut Shape), (Without<Core>, Without<Enemy>)>,
 ) {
     let dt = time.delta_secs();
     let mult = 1.0;
     // Re-rolled each frame so the bolt crackles (spec III.7).
     let seed = time.elapsed_secs() * 60.0;
 
-    // Copy out the player's transform + intent (both `Copy`) so this immutable
-    // borrow doesn't conflict with the `&mut Transform` beam query below.
-    let player_data = player.single().ok().map(|(t, i)| (*t, *i));
+    // Beams anchor at the Core and aim at the cursor (tower defense: no ship).
+    let core_pos = core.single().ok().map(|t| t.translation.truncate());
 
     for (be, mut beam, mut tf, mut shape) in &mut beams {
         beam.life -= dt;
 
-        let Some((ptf, intent)) = player_data else {
-            commands.entity(be).despawn(); // player gone — beam can't anchor
+        let Some(core_pos) = core_pos else {
+            commands.entity(be).despawn(); // Core gone — beam can't anchor
             continue;
         };
         if beam.life <= 0.0 {
@@ -997,9 +1012,17 @@ pub fn update_beams(
             continue;
         }
 
-        let ppos = ptf.translation.truncate();
-        let fwd = (ptf.rotation * Vec3::Y).truncate().normalize_or_zero();
-        let origin = ppos + fwd * 22.0;
+        let ppos = core_pos;
+        let aim_pt = if cursor.active {
+            cursor.world
+        } else {
+            core_pos + Vec2::Y * 200.0
+        };
+        let fwd = {
+            let d = (aim_pt - core_pos).normalize_or_zero();
+            if d == Vec2::ZERO { Vec2::Y } else { d }
+        };
+        let origin = ppos + fwd * (crate::systems::tower::CORE_RADIUS + 8.0);
         let tick_dmg = beam.dps * mult * dt;
 
         match beam.kind {
@@ -1037,12 +1060,8 @@ pub fn update_beams(
                 place_bolt(&mut shape, &mut tf, beam.kind, origin, ray_dir, length, seed);
             }
             BeamKind::Arc => {
-                // Aim point: the cursor while mouse-aiming, else straight ahead.
-                let aim = if intent.aim_active {
-                    intent.aim
-                } else {
-                    origin + fwd * beam.range
-                };
+                // Aim point: the cursor (Core → cursor), already resolved above.
+                let aim = aim_pt;
                 // The enemy nearest the cursor, within the player's reach.
                 let mut best: Option<(f32, Vec2, Entity, f32)> = None;
                 for (e, etf, _, eres) in &enemies {

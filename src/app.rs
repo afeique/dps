@@ -393,6 +393,17 @@ impl Plugin for GamePlugin {
                     .after(systems::input::update_aim)
                     .run_if(in_state(GameState::Playing)),
             )
+            // Right-click / Space fires the equipped power weapon (from the Core,
+            // aimed at the cursor); KeyF cycles which power weapon is active.
+            .add_systems(
+                Update,
+                (
+                    systems::power_weapon::fire_power_weapon,
+                    systems::power_weapon::cycle_power_weapon,
+                )
+                    .after(systems::input::update_aim)
+                    .run_if(in_state(GameState::Playing)),
+            )
             // Ghost self-hides outside Playing / when nothing is armed.
             .add_systems(Update, systems::tower::update_tower_ghost)
             // ENTER skips the pre-wave-1 build window and launches the assault.
