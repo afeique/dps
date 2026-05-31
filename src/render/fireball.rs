@@ -192,26 +192,31 @@ pub fn spawn_fireball(
     for d in deaths.read() {
         let Some(kind) = d.kind else { continue };
         let el = lin(element_for(kind).color());
-        // Cohesive family: a white-hot center, a warm midtone, the element, and a
-        // dim smoke — all derived from the element so the blast reads as one hue.
-        let hot = [el[0] * 0.6 + 2.4, el[1] * 0.6 + 1.9, el[2] * 0.6 + 1.5];
-        let warm = [el[0] * 1.4 + 0.8, el[1] * 1.2 + 0.4, el[2] * 1.2 + 0.2];
-        let elem = [el[0] * 1.8, el[1] * 1.8, el[2] * 1.8];
-        let smoke = [el[0] * 0.9 + 0.08, el[1] * 0.9 + 0.10, el[2] * 0.9 + 0.14];
+        // Cohesive family, all derived from the element so the blast reads as ONE
+        // hue (Kinetic=pale blue, Pyro=orange, …). Kept DIM: effective brightness
+        // (rgb×alpha, see the per-layer alphas below) lands only a little over the
+        // 1.0 bloom threshold, so layers glow translucently instead of clamping to
+        // a solid white disc. The hot center is the element nudged toward white,
+        // NOT pure white, so the colour survives.
+        let hot = [el[0] * 1.1 + 0.5, el[1] * 1.1 + 0.45, el[2] * 1.1 + 0.4];
+        let warm = [el[0] * 1.3 + 0.25, el[1] * 1.2 + 0.18, el[2] * 1.2 + 0.12];
+        let elem = [el[0] * 1.5, el[1] * 1.5, el[2] * 1.5];
+        let smoke = [el[0] * 0.8 + 0.05, el[1] * 0.8 + 0.06, el[2] * 0.8 + 0.09];
 
         let scale = (1.0 + 0.35 * d.boss_tier as f32) * if d.mini_boss { 1.2 } else { 1.0 };
         let c = d.position;
 
-        // ── Core "spheres": 3 concentric filled blobs, bright, sustain-fade,
-        // grow a little (cubic), static. Outer element → warm → white-hot.
+        // ── Core "spheres": 3 concentric filled blobs, translucent, sustain-fade,
+        // grow a little (cubic), static. Outer element → warm → hot center. Low
+        // alphas so the cluster is see-through gas, never a solid white disc.
         *seed = seed.wrapping_add(1);
         let s0 = *seed;
         spawn_layer(&mut commands, &mut meshes, &mut materials, blob_mesh(s0 ^ 0x11, 0.6),
-            elem, 0.45, c, 1.62, 13.0 * scale, 0.55, true, 0.55, frand(s0 ^ 0xA, -1.0, 1.0), Vec2::ZERO, Fade::Sustain);
+            elem, 0.28, c, 1.62, 12.0 * scale, 0.55, true, 0.55, frand(s0 ^ 0xA, -1.0, 1.0), Vec2::ZERO, Fade::Sustain);
         spawn_layer(&mut commands, &mut meshes, &mut materials, blob_mesh(s0 ^ 0x22, 0.65),
-            warm, 0.6, c, 1.64, 9.0 * scale, 0.55, true, 0.5, frand(s0 ^ 0xB, -1.2, 1.2), Vec2::ZERO, Fade::Sustain);
+            warm, 0.34, c, 1.64, 8.0 * scale, 0.55, true, 0.5, frand(s0 ^ 0xB, -1.2, 1.2), Vec2::ZERO, Fade::Sustain);
         spawn_layer(&mut commands, &mut meshes, &mut materials, blob_mesh(s0 ^ 0x33, 0.72),
-            hot, 0.8, c, 1.66, 5.5 * scale, 0.5, true, 0.42, frand(s0 ^ 0xC, -1.4, 1.4), Vec2::ZERO, Fade::Sustain);
+            hot, 0.42, c, 1.66, 4.5 * scale, 0.5, true, 0.42, frand(s0 ^ 0xC, -1.4, 1.4), Vec2::ZERO, Fade::Sustain);
 
         // ── Smoke puffs: dim translucent lumpy blobs that drift out + fade slow,
         // so the cloud billows irregularly (the "cloud of smoke").
@@ -225,17 +230,18 @@ pub fn spawn_fireball(
             let peak = frand(s ^ 0x3, 5.0, 10.0) * scale;
             let life = frand(s ^ 0x4, 0.55, 0.95);
             let rgb = if i % 3 == 0 { elem } else { smoke };
-            let a = if i % 3 == 0 { 0.30 } else { 0.20 };
+            let a = if i % 3 == 0 { 0.18 } else { 0.13 };
             let drift = dir * frand(s ^ 0x5, 16.0, 46.0);
             spawn_layer(&mut commands, &mut meshes, &mut materials, blob_mesh(s, 0.4),
                 rgb, a, c + off, 1.58, peak, 0.4, true, life, frand(s ^ 0x6, -1.6, 1.6), drift, Fade::Smoke);
         }
 
         // ── Rings: 2 expanding annulus rings (real circular rings), fade linear.
-        spawn_layer(&mut commands, &mut meshes, &mut materials, ring_mesh(0.10),
-            warm, 0.55, c, 1.70, 30.0 * scale, 0.2, false, 0.55, 0.0, Vec2::ZERO, Fade::Linear);
-        spawn_layer(&mut commands, &mut meshes, &mut materials, ring_mesh(0.06),
-            elem, 0.4, c, 1.71, 46.0 * scale, 0.15, false, 0.7, 0.0, Vec2::ZERO, Fade::Linear);
+        // Brighter/thinner than the gas so the wavefront edge still reads.
+        spawn_layer(&mut commands, &mut meshes, &mut materials, ring_mesh(0.09),
+            warm, 0.5, c, 1.70, 30.0 * scale, 0.2, false, 0.5, 0.0, Vec2::ZERO, Fade::Linear);
+        spawn_layer(&mut commands, &mut meshes, &mut materials, ring_mesh(0.05),
+            elem, 0.38, c, 1.71, 46.0 * scale, 0.15, false, 0.66, 0.0, Vec2::ZERO, Fade::Linear);
     }
 }
 
