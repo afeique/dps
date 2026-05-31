@@ -90,25 +90,20 @@ pub fn stage_bonus(wave_n: u64) -> u64 {
     (50 + wave_n * 25) * 2
 }
 
-/// While `Playing`, react to a wave clear (`awaiting_reward`): on a **stage
-/// clear** open the survivor pick; on a **mid-stage** wave auto-advance with a
-/// smaller coin bonus and no pick (spec V.6).
-pub fn check_survivor(
-    mut wave: ResMut<Wave>,
-    mut score: ResMut<Score>,
-    mut next: ResMut<NextState<GameState>>,
-) {
+/// While `Playing`, react to a wave clear (`awaiting_reward`). Tower-defense: with
+/// no commander to buff, every wave auto-advances with a gold bonus — stage
+/// clears (boss waves) pay the larger bonus — and there is no survivor-card pause.
+pub fn check_survivor(mut wave: ResMut<Wave>, mut score: ResMut<Score>) {
     if !wave.awaiting_reward {
         return;
     }
-    if is_stage_clear(wave.number() as u64) {
-        next.set(GameState::Survivor); // the pick (+ bonus + advance) happens there
+    let bonus = if is_stage_clear(wave.number() as u64) {
+        stage_bonus(wave.number() as u64)
     } else {
-        score.gold = score
-            .gold
-            .saturating_add(midstage_bonus(wave.number() as u64));
-        wave.advance_after_reward();
-    }
+        midstage_bonus(wave.number() as u64)
+    };
+    score.gold = score.gold.saturating_add(bonus);
+    wave.advance_after_reward();
 }
 
 /// On entering `Survivor`: roll the three offered cards + spawn the overlay.

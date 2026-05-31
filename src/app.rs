@@ -56,6 +56,7 @@ impl Plugin for GamePlugin {
             .init_resource::<systems::items::Equipment>()
             .init_resource::<systems::formations::Formations>()
             .init_resource::<systems::tower::SelectedTower>()
+            .init_resource::<crate::resources::Aim>()
             .init_resource::<crate::combat::reaction::PendingReactions>()
             // Meta-progression (ME): load the persistent account profile at boot.
             .insert_resource(crate::meta::load_meta())
@@ -201,9 +202,8 @@ impl Plugin for GamePlugin {
                 },
                 (
                     systems::flow::reset_run,
-                    systems::spawn::spawn_player,
-                    // The defense objective — enemies seek it, and losing it ends
-                    // the run (the commander ship no longer does).
+                    // The defense objective — enemies seek it; losing it ends the
+                    // run. (Pure tower defense: there is no player ship.)
                     systems::tower::spawn_core,
                     // Clear any armed build selection from a prior run.
                     systems::tower::reset_selection,
@@ -619,6 +619,9 @@ impl Plugin for GamePlugin {
                         systems::powerups::spawn_powerups,
                         systems::drops::attract_orbs,
                         systems::drops::collect_orbs,
+                        // Pure TD: with no ship to collect them, orbs bank
+                        // straight to Score (no-op when a ship exists).
+                        systems::drops::bank_orbs,
                         systems::powerups::collect_powerups,
                     )
                         .chain(),

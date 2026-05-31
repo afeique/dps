@@ -119,31 +119,6 @@ pub fn setup_hud(mut commands: Commands) {
         ..default()
     };
 
-    // ── Health bar (top-left) — dark track + colored fill child ──────────────
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(12.0),
-                left: Val::Px(12.0),
-                width: Val::Px(BAR_W),
-                height: Val::Px(BAR_H),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.7)),
-        ))
-        .with_children(|track| {
-            track.spawn((
-                HealthBarFill,
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.2, 0.6, 1.0)),
-            ));
-        });
-
     // ── Boss core healthbar (top-center) — hidden until a boss is alive ──────
     commands
         .spawn((
@@ -215,73 +190,7 @@ pub fn setup_hud(mut commands: Commands) {
             ));
         });
 
-    // Triforce spare-tank glyphs — a row of 3 just right of the health bar.
-    commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(8.0),
-            left: Val::Px(BAR_W + 24.0),
-            column_gap: Val::Px(4.0),
-            ..default()
-        })
-        .with_children(|row| {
-            for i in 0..3u8 {
-                row.spawn((
-                    TankGlyph(i),
-                    Text::new("▲"),
-                    TextFont {
-                        font_size: 22.0,
-                        ..default()
-                    },
-                    TextColor(tank_glyph_color(i, 0)),
-                ));
-            }
-        });
-
-    // Power-weapon energy sphere — a circle (border-radius 50%) right of the triforce.
-    commands.spawn((
-        EnergyOrb,
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(6.0),
-            left: Val::Px(BAR_W + 96.0),
-            width: Val::Px(28.0),
-            height: Val::Px(28.0),
-            border_radius: BorderRadius::all(Val::Percent(50.0)),
-            ..default()
-        },
-        BackgroundColor(energy_orb_color(0.0, false, 0.0)),
-    ));
-
-    // HP text, overlaid on the bar.
-    commands.spawn((
-        HudText::Hp,
-        Text::new("40/40"),
-        font.clone(),
-        TextColor(Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(15.0),
-            left: Val::Px(20.0),
-            ..default()
-        },
-    ));
-
-    // Status block, just below the bar.
-    commands.spawn((
-        HudText::Status,
-        Text::new(""),
-        font.clone(),
-        TextColor(Color::srgb(0.8, 0.9, 1.0)),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(44.0),
-            left: Val::Px(12.0),
-            ..default()
-        },
-    ));
-
-    // Mission line, below the status block.
+    // Mission line, top-left.
     commands.spawn((
         HudText::Mission,
         Text::new(""),
@@ -289,7 +198,7 @@ pub fn setup_hud(mut commands: Commands) {
         TextColor(Color::srgb(0.7, 0.95, 0.8)),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(108.0),
+            top: Val::Px(44.0),
             left: Val::Px(12.0),
             ..default()
         },
@@ -309,7 +218,7 @@ pub fn setup_hud(mut commands: Commands) {
         },
     ));
 
-    // Tower-defense build readout, left column under the mission line.
+    // Tower-defense build readout, top-left.
     commands.spawn((
         HudText::Build,
         Text::new(""),
@@ -317,7 +226,7 @@ pub fn setup_hud(mut commands: Commands) {
         TextColor(Color::srgb(0.65, 0.95, 0.85)),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(140.0),
+            top: Val::Px(12.0),
             left: Val::Px(12.0),
             ..default()
         },
@@ -342,58 +251,6 @@ pub fn setup_hud(mut commands: Commands) {
             ));
         });
 
-    // Ability bar (AB) — a row of 4 slots bottom-left. Each slot is a dark
-    // square with a centered tag + a top-anchored cooldown overlay that shrinks
-    // as the ability comes off cooldown. Filled live by `update_ability_bar`.
-    commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(14.0),
-            left: Val::Px(14.0),
-            column_gap: Val::Px(6.0),
-            ..default()
-        })
-        .with_children(|row| {
-            for i in 0..4usize {
-                row.spawn((
-                    Node {
-                        width: Val::Px(34.0),
-                        height: Val::Px(34.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BorderColor::all(Color::srgba(0.4, 0.6, 0.9, 0.7)),
-                    BackgroundColor(Color::srgba(0.05, 0.06, 0.10, 0.7)),
-                ))
-                .with_children(|slot| {
-                    // Cooldown overlay (absolute, top-anchored, starts empty).
-                    slot.spawn((
-                        AbilitySlotCooldown(i),
-                        Node {
-                            position_type: PositionType::Absolute,
-                            top: Val::Px(0.0),
-                            left: Val::Px(0.0),
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(0.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
-                    ));
-                    // Slot tag.
-                    slot.spawn((
-                        AbilitySlotLabel(i),
-                        Text::new(""),
-                        TextFont {
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.8, 0.9, 1.0)),
-                    ));
-                });
-            }
-        });
 }
 
 /// Refresh every HUD element from the current game state each frame.

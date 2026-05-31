@@ -403,3 +403,43 @@ pub fn collect_orbs(
         }
     }
 }
+
+/// Tower-defense banking: with no commander to fly into orbs, credit each orb's
+/// payload straight to `Score` (popping a pickup sparkle where the enemy died)
+/// so kills fund the economy. Runs only when no `Ship` exists — when one is
+/// present (e.g. in tests) `collect_orbs` owns pickups instead.
+pub fn bank_orbs(
+    mut commands: Commands,
+    mut score: ResMut<Score>,
+    upgrades: Res<Upgrades>,
+    meta: Res<crate::meta::Meta>,
+    mut pickup: MessageWriter<crate::messages::Pickup>,
+    ship: Query<(), With<Ship>>,
+    orbs: Query<(Entity, &Transform, &Orb)>,
+) {
+    if !ship.is_empty() {
+        return;
+    }
+    let gold_mult = scavenger_mult(upgrades.owned(UpgradeId::Scavenger))
+        * crate::systems::difficulty::difficulty_reward_mult(meta.difficulty);
+    for (orb_e, otf, orb) in &orbs {
+        score.gold = score
+            .gold
+            .saturating_add((orb.gold as f32 * gold_mult).round() as u64);
+        score.points = score.points.saturating_add(orb.points);
+        if orb.gold > 0 || orb.points > 0 {
+            pickup.write(crate::messages::Pickup);
+            let ring = if orb.gold > 0 {
+                Color::linear_rgb(9.0, 7.0, 1.5) // gold
+            } else {
+                Color::linear_rgb(2.0, 8.0, 9.0) // cyan (points)
+            };
+            commands.spawn((
+                Shockwave { age: 0.0, peak: 22.0 },
+                unit_ring(ring),
+                Transform::from_translation(otf.translation.truncate().extend(0.3)),
+            ));
+        }
+        commands.entity(orb_e).despawn();
+    }
+}

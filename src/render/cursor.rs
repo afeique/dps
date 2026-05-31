@@ -1,8 +1,9 @@
 //! Mouse crosshair (spec VIII.1 `cursor.js`, simplified): a cyan reticle that
-//! tracks the world-space aim point while mouse-aim is active, hidden otherwise.
-//! Presentation-only — reads `Intent.aim`, writes a Transform/Visibility.
+//! tracks the world-space aim point while the cursor is in-window, hidden
+//! otherwise. Presentation-only — reads the [`Aim`] resource, writes a
+//! Transform/Visibility.
 
-use crate::components::{Intent, Ship};
+use crate::resources::Aim;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
@@ -41,21 +42,19 @@ pub fn spawn_crosshair(mut commands: Commands) {
     ));
 }
 
-/// Track the aim point while mouse-aim is active; hide otherwise (cursor left
-/// the window, no player, or a non-playing state where the ship is gone).
+/// Track the aim point while the cursor is in-window; hide it otherwise.
 pub fn update_crosshair(
-    player: Query<&Intent, With<Ship>>,
+    aim: Res<Aim>,
     mut q: Query<(&mut Transform, &mut Visibility), With<Crosshair>>,
 ) {
     let Ok((mut tf, mut vis)) = q.single_mut() else {
         return;
     };
-    match player.single() {
-        Ok(intent) if intent.aim_active => {
-            tf.translation.x = intent.aim.x;
-            tf.translation.y = intent.aim.y;
-            *vis = Visibility::Visible;
-        }
-        _ => *vis = Visibility::Hidden,
+    if aim.active {
+        tf.translation.x = aim.world.x;
+        tf.translation.y = aim.world.y;
+        *vis = Visibility::Visible;
+    } else {
+        *vis = Visibility::Hidden;
     }
 }

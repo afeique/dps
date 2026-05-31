@@ -478,11 +478,11 @@ pub fn spawn_waves(
             info!("CAMPAIGN COMPLETE — all 30 waves cleared");
             return;
         }
-        // Gate the advance on the survivor-card pick; `survivor::check_survivor`
-        // sees this flag and opens the pick, which calls `advance_after_reward`.
+        // Flag the clear; `survivor::check_survivor` reads it, awards the gold
+        // bonus, and auto-advances (no card pick in tower-defense).
         if !wave.awaiting_reward {
             wave.awaiting_reward = true;
-            info!("WAVE {} CLEAR — survivor card", wave.idx + 1);
+            info!("WAVE {} CLEAR", wave.idx + 1);
         }
     }
 }

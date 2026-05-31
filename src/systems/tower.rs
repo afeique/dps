@@ -12,10 +12,10 @@
 use crate::combat::element::{Element, ElementSet};
 use crate::components::{
     Airburst, Bullet, BulletElements, BulletKind, Collider, Core, Enemy, Faction, GravityBullet,
-    Health, Intent, Lifetime, Ship, Velocity,
+    Health, Lifetime, Velocity,
 };
 use crate::render::bullets::BulletAssets;
-use crate::resources::{PlayBounds, Score};
+use crate::resources::{Aim, PlayBounds, Score};
 use crate::states::GameState;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -447,7 +447,7 @@ pub fn tower_build_input(
     mut sel: ResMut<SelectedTower>,
     mut score: ResMut<Score>,
     bounds: Res<PlayBounds>,
-    mut ship: Query<&mut Intent, With<Ship>>,
+    aim: Res<Aim>,
     core: Query<&Transform, With<Core>>,
     mut towers: Query<(Entity, &Transform, &mut Tower)>,
 ) {
@@ -469,11 +469,8 @@ pub fn tower_build_input(
         sel.kind = None;
     }
 
-    // World-space cursor (the ship's aim Intent), if the cursor is in-window.
-    let cursor = ship
-        .single()
-        .ok()
-        .and_then(|i| i.aim_active.then_some(i.aim));
+    // World-space cursor (from the global Aim), if the cursor is in-window.
+    let cursor = aim.active.then_some(aim.world);
 
     // ── Upgrade / sell the tower under the cursor ──
     if let Some(cur) = cursor {
@@ -504,10 +501,6 @@ pub fn tower_build_input(
 
     // ── Place (left-click while armed) ──
     if let (Some(kind), Some(cur)) = (sel.kind, cursor) {
-        // Suppress commander fire while armed so the click builds, not shoots.
-        if let Ok(mut intent) = ship.single_mut() {
-            intent.firing = false;
-        }
         if mouse.just_pressed(MouseButton::Left) {
             let core_pos = core
                 .single()
@@ -535,7 +528,7 @@ pub fn update_tower_ghost(
     state: Res<State<GameState>>,
     sel: Res<SelectedTower>,
     bounds: Res<PlayBounds>,
-    ship: Query<&Intent, With<Ship>>,
+    aim: Res<Aim>,
     core: Query<&Transform, With<Core>>,
     towers: Query<&Transform, With<Tower>>,
     mut ghost: Query<
@@ -547,10 +540,7 @@ pub fn update_tower_ghost(
         return;
     };
     let armed = matches!(state.get(), GameState::Playing);
-    let cursor = ship
-        .single()
-        .ok()
-        .and_then(|i| i.aim_active.then_some(i.aim));
+    let cursor = aim.active.then_some(aim.world);
     let (Some(kind), Some(cur)) = (sel.kind.filter(|_| armed), cursor) else {
         *gvis = Visibility::Hidden;
         return;

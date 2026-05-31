@@ -8,6 +8,7 @@
 //! Keeping input isolated here means the sim only ever reads `Intent`.
 
 use crate::components::Intent;
+use crate::resources::Aim;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -63,13 +64,14 @@ pub fn gather_input(
     }
 }
 
-/// Mouse aiming: project the cursor into world space and write it to `Intent`,
-/// flagging `aim_active`. `ship_control` then faces the ship at the cursor and
-/// the player fires along that facing. Cursor outside the window (or no camera)
-/// → `aim_active = false`. Runs after `gather_input`.
+/// Mouse aiming: project the cursor into world space and store it in the [`Aim`]
+/// resource (tower placement, the build ghost, and the crosshair read it).
+/// Cursor outside the window (or no camera) → `active = false`. Any `Intent`
+/// entities (e.g. a ship, in tests) are kept in sync too. Runs after `gather_input`.
 pub fn update_aim(
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform)>,
+    mut aim: ResMut<Aim>,
     mut q: Query<&mut Intent>,
 ) {
     let world = windows
@@ -78,6 +80,14 @@ pub fn update_aim(
         .and_then(|w| w.cursor_position())
         .zip(cameras.single().ok())
         .and_then(|(cursor, (cam, cam_tf))| cam.viewport_to_world_2d(cam_tf, cursor).ok());
+
+    match world {
+        Some(p) => {
+            aim.world = p;
+            aim.active = true;
+        }
+        None => aim.active = false,
+    }
 
     for mut intent in &mut q {
         match world {

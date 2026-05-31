@@ -18,6 +18,16 @@ impl Default for PlayBounds {
     }
 }
 
+/// World-space mouse cursor, written by `input::update_aim` every frame. In the
+/// tower-defense game there is no ship to carry the aim on its `Intent`, so the
+/// cursor lives here — read by tower placement, the build ghost, and the
+/// crosshair. `active` is false when the cursor is outside the window.
+#[derive(Resource, Debug, Default, Clone, Copy)]
+pub struct Aim {
+    pub world: Vec2,
+    pub active: bool,
+}
+
 /// Run-scoped score / economy. Ported from `core/game-state.js` +
 /// `hud/status.js` (points, gold, kill count).
 #[derive(Resource, Debug, Default)]
