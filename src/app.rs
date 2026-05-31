@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::HanabiPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 
-use crate::messages::{Collision, Damage, Death, Fire, Knockback, PlayerHurt};
+use crate::messages::{Damage, Death, Fire, Knockback, PlayerHurt};
 use crate::resources::{PlayBounds, Score};
 use crate::states::GameState;
 use crate::{audio, components, render, systems};
@@ -64,7 +64,6 @@ impl Plugin for GamePlugin {
             .init_resource::<render::flash::ScreenFlash>()
             .insert_resource(ClearColor(Color::srgb(0.015, 0.01, 0.03)))
             // ── game events (Bevy 0.18: buffered "messages") ────────────
-            .add_message::<Collision>()
             .add_message::<Damage>()
             .add_message::<Death>()
             .add_message::<Fire>()

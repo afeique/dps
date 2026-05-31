@@ -222,11 +222,7 @@ pub const FREEZE_SECS: f32 = 1.5;
 pub const CONDUCT_SECS: f32 = 3.0;
 pub const CORRODE_SECS: f32 = 4.0;
 pub const MARK_SECS: f32 = 6.0;
-pub const OIL_SECS: f32 = 5.0;
-pub const BLEED_SECS: f32 = 4.0;
 
-/// Movement-speed factor while chilled (combat-manager: ×0.7).
-pub const CHILL_SLOW: f32 = 0.7;
 /// Corrode stack cap (combat-manager: 3).
 pub const CORRODE_MAX_STACKS: u32 = 3;
 /// Per-stack incoming-damage amplification from corrode (+15%/stack).

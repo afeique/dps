@@ -173,8 +173,6 @@ pub fn activate_loadout(
                 }
                 true
             }
-            // Deferred abilities (effects land in later increments).
-            _ => false,
         };
 
         if fired {

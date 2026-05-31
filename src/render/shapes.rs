@@ -78,11 +78,6 @@ pub fn skin_for(index: usize) -> &'static Skin {
     SKINS.get(index).unwrap_or(&SKINS[0])
 }
 
-/// The default hull (Aurora skin) — the no-arg form used where no skin is known.
-pub fn ship_hull() -> Shape {
-    ship_hull_skin(&SKINS[0])
-}
-
 /// The hull rendered in a given [`Skin`]: near-black fill + the skin's emissive edge.
 pub fn ship_hull_skin(skin: &Skin) -> Shape {
     let (r, g, b) = skin.edge;
@@ -110,11 +105,6 @@ pub fn cockpit_rgb(skin: &Skin) -> (f32, f32, f32) {
     let m = r.max(g).max(b).max(0.001);
     let s = 7.0 / m; // normalize the brightest channel to ~7
     (r * s + 2.0, g * s + 2.0, b * s + 2.0) // + white floor → stays a bright highlight
-}
-
-/// Default cockpit (Aurora skin) — the no-arg form.
-pub fn ship_cockpit() -> Shape {
-    ship_cockpit_skin(&SKINS[0])
 }
 
 /// The cockpit highlight in a given [`Skin`]'s hue (see [`cockpit_rgb`]).

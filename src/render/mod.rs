@@ -1,9 +1,8 @@
 //! Rendering setup.
 //!
-//! Phase 1: an HDR `Camera2d` with bloom, and a `glow()` helper for bright
-//! emissive colors so silhouettes get a real glow halo. Phase 2 replaces the
-//! placeholder `RegularPolygon` meshes with lyon-tessellated ports of
-//! `js/modules/render/shapes.js`, and adds the particle/bullet pipelines.
+//! An HDR `Camera2d` with bloom so over-bright emissive colors bloom into a
+//! glow halo, plus the lyon-tessellated silhouette ports, particle, and bullet
+//! pipelines.
 
 pub mod asteroid_debris;
 pub mod bullets;
@@ -65,10 +64,4 @@ pub fn spawn_camera(mut commands: Commands) {
             ..Bloom::NATURAL
         },
     ));
-}
-
-/// Build an over-bright (HDR, components > 1.0) emissive color. With the
-/// camera's bloom enabled this produces a glow halo around the mesh.
-pub fn glow(r: f32, g: f32, b: f32) -> Color {
-    Color::linear_rgb(r, g, b)
 }

@@ -11,8 +11,11 @@
 //!   render/                          — HDR camera + bloom, glow helpers
 //!   app.rs                           — GamePlugin: wires it all together
 
-// Scaffold stage: several types are forward-declared for phases 3–5 (extra
-// enemy kinds, fire cooldowns, score economy) and not yet read everywhere.
+
+// Some `pub` helpers are exercised by the test suite (`#[cfg(test)]` modules)
+// but not yet wired into the tower-defense runtime — kept intentionally, so a
+// non-test build would otherwise flag them. Genuinely-dead code is removed; this
+// only covers the tested-but-not-yet-wired surface.
 #![allow(dead_code)]
 
 mod app;

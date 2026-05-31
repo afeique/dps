@@ -14,13 +14,6 @@ use bevy::prelude::*;
 use crate::combat::element::ElementSet;
 use crate::components::{EnemyKind, Faction};
 
-/// Broadphase/narrowphase output: entity `a` overlapped entity `b` this tick.
-#[derive(Message, Debug, Clone, Copy)]
-pub struct Collision {
-    pub a: Entity,
-    pub b: Entity,
-}
-
 /// Apply `amount` HP of damage to `target`. Consumed by `systems::damage`.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Damage {

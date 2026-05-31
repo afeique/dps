@@ -40,9 +40,6 @@ impl Element {
         Element::Radiant,
     ];
 
-    /// Default element for an un-attuned shot (`DEFAULT_ELEMENT`).
-    pub const DEFAULT: Element = Element::Kinetic;
-
     /// Index into a [`Resistances`] array.
     pub const fn idx(self) -> usize {
         match self {

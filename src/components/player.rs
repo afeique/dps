@@ -114,16 +114,14 @@ pub struct PlayerCorrode {
     pub secs: f32,
 }
 
-/// Player-status tuning (`player-status.js`): burn 2/tick every 0.5 s for 3 s (6
-/// ticks = 12 total), chill ×0.7 / 1.5 s, corrode +15%/stack cap 2 / 3 s.
+/// Player-status tuning (`player-status.js`): burn 2/tick every 0.5 s for 3 s
+/// (6 ticks = 12 total), chill 1.5 s, corrode cap 2 / 3 s.
 pub const PLAYER_BURN_PER_TICK: f32 = 2.0;
 pub const PLAYER_BURN_TICK_SECS: f32 = 0.5;
 pub const PLAYER_BURN_SECS: f32 = 3.0;
 pub const PLAYER_CHILL_SECS: f32 = 1.5;
-pub const PLAYER_CHILL_SLOW: f32 = 0.7;
 pub const PLAYER_CORRODE_SECS: f32 = 3.0;
 pub const PLAYER_CORRODE_MAX: u32 = 2;
-pub const PLAYER_CORRODE_PER_STACK: f32 = 0.15;
 
 /// Active **Overdrive** power-weapon buff (W, weapon-data.js): while present the
 /// primary fires faster (cooldown ×[`OVERDRIVE_FIRE_MULT`]) and harder (damage
@@ -145,8 +143,6 @@ pub struct Ship {
     pub thrust: f32,
     /// Hard speed cap (world units / sec).
     pub max_speed: f32,
-    /// Rotation rate from strafe input (rad / sec).
-    pub turn_rate: f32,
 }
 
 impl Default for Ship {
@@ -154,7 +150,6 @@ impl Default for Ship {
         Self {
             thrust: 1100.0,
             max_speed: 520.0,
-            turn_rate: 4.5,
         }
     }
 }
@@ -175,25 +170,11 @@ pub struct Intent {
     pub firing: bool,
 }
 
-/// Primary weapon state. The 5 primary + 5 power weapons (with multishot,
-/// homing, etc.) are ported in Phase 3 from `combat/weapon-data.js`.
-#[derive(Component, Debug)]
+/// Per-ship fire-cooldown timer. The actual primary/power weapon stats live in
+/// `systems::weapons` (`CurrentWeapon` + the weapon table); this only tracks
+/// when the commander may next fire.
+#[derive(Component, Debug, Default)]
 pub struct Weapon {
-    /// Seconds between shots.
-    pub cooldown: f32,
     /// Counts down to 0; ready to fire at 0.
     pub timer: f32,
-    pub bullet_speed: f32,
-    pub damage: f32,
-}
-
-impl Default for Weapon {
-    fn default() -> Self {
-        Self {
-            cooldown: 0.12,
-            timer: 0.0,
-            bullet_speed: 950.0,
-            damage: 10.0,
-        }
-    }
 }
