@@ -55,6 +55,18 @@ pub struct Crit {
     pub pos: Vec2,
 }
 
+/// A projectile / contact landed at `pos` — drives the on-hit spark burst
+/// (`render::impact_spark`) for the hit paths that *don't* go through `Damage`
+/// (the Core's integrity is subtracted directly, so without this its hits would
+/// be sparkless). `color` is the attacker's element tint (HDR), `dir` the impact
+/// normal (the burst fans *back* along it; `Vec2::ZERO` ⇒ a radial pop).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Hit {
+    pub pos: Vec2,
+    pub color: Color,
+    pub dir: Vec2,
+}
+
 /// The player collected an orb or powerup this frame (emitted by `drops::collect_orbs`
 /// / `powerups::collect_powerups`). Drives the pickup chime (`audio::play_pickup`),
 /// which collapses a same-frame cluster + throttles. Carries nothing.

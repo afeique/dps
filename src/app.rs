@@ -74,6 +74,7 @@ impl Plugin for GamePlugin {
             .add_message::<PlayerHurt>()
             .add_message::<crate::messages::Crit>()
             .add_message::<crate::messages::Pickup>()
+            .add_message::<crate::messages::Hit>()
             .add_message::<crate::messages::Dodged>()
             .add_message::<crate::messages::Shard>()
             .add_message::<crate::messages::Reaction>()
@@ -328,6 +329,9 @@ impl Plugin for GamePlugin {
                 Update,
                 (
                     render::impact_spark::spawn_impact_sparks,
+                    // Element-tinted sparks for the Core's hit paths (which bypass
+                    // the Damage event), via the explicit Hit message.
+                    render::impact_spark::spawn_hit_sparks,
                     render::impact_spark::fade_impact_sparks,
                     // Asteroid death burst: hue-matched 3D wireframe shards + a
                     // colored ring on every shatter (port of `createDebris` §7b).

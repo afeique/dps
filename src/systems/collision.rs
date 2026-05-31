@@ -12,7 +12,7 @@
 use crate::combat::element::{Element, Resistances};
 use crate::combat::reaction::{flare_damage, shatter_triggers, PendingReactions, ReactionSeed};
 use crate::components::*;
-use crate::messages::{Damage, Knockback};
+use crate::messages::{Damage, Hit, Knockback};
 use crate::resources::{crit_chance, roll_crit, EnergyMeter, GameRng, ENERGY_PER_HIT};
 use crate::systems::asteroids::Asteroid;
 use crate::systems::items::{AffixKind, Equipment};
@@ -648,19 +648,31 @@ pub const CORE_LEAK_BOSS: f32 = 200.0;
 /// the enemy. `tower::core_lose_check` reads the depleted `Health` and ends the run.
 pub fn enemy_contact_core(
     mut commands: Commands,
+    mut hits: MessageWriter<Hit>,
     mut core: Query<(&Transform, &Collider, &mut Health), With<Core>>,
-    enemies: Query<(Entity, &Transform, &Collider, Has<Boss>), (With<Enemy>, Without<Core>)>,
+    enemies: Query<
+        (Entity, &Transform, &Collider, Has<Boss>, &Enemy),
+        (With<Enemy>, Without<Core>),
+    >,
 ) {
     let Ok((ctf, cc, mut chp)) = core.single_mut() else {
         return;
     };
     let cpos = ctf.translation.truncate();
-    for (e, etf, ec, is_boss) in &enemies {
+    for (e, etf, ec, is_boss, enemy) in &enemies {
         let reach = cc.radius + ec.radius;
-        if cpos.distance_squared(etf.translation.truncate()) >= reach * reach {
+        let epos = etf.translation.truncate();
+        if cpos.distance_squared(epos) >= reach * reach {
             continue; // not yet at the Core
         }
         chp.current -= if is_boss { CORE_LEAK_BOSS } else { CORE_LEAK_DAMAGE };
+        // A burst of element-tinted sparks where the enemy detonates on the Core
+        // (this path subtracts HP directly, so it needs an explicit hit signal).
+        hits.write(Hit {
+            pos: cpos + (epos - cpos).normalize_or_zero() * cc.radius,
+            color: crate::systems::enemy::element_for(enemy.kind).color(),
+            dir: (cpos - epos).normalize_or_zero(),
+        });
         // `try_despawn`: the same enemy may have been killed by a turret/commander
         // shot this very tick (it's at the Core, under fire), so a plain despawn
         // would race with `apply_damage` and warn.
@@ -673,20 +685,32 @@ pub fn enemy_contact_core(
 /// bullets are ignored here (they're handled by `bullet_hits_enemy`).
 pub fn enemy_bullet_hits_core(
     mut commands: Commands,
+    mut hits: MessageWriter<Hit>,
     mut core: Query<(&Transform, &Collider, &mut Health), With<Core>>,
-    bullets: Query<(Entity, &Transform, &Collider, &Bullet)>,
+    bullets: Query<(Entity, &Transform, &Collider, &Bullet, Option<&BulletElements>)>,
 ) {
     let Ok((ctf, cc, mut chp)) = core.single_mut() else {
         return;
     };
     let cpos = ctf.translation.truncate();
-    for (e, btf, bc, bullet) in &bullets {
+    for (e, btf, bc, bullet, belems) in &bullets {
         if bullet.kind != BulletKind::Enemy {
             continue;
         }
         let reach = cc.radius + bc.radius;
-        if cpos.distance_squared(btf.translation.truncate()) <= reach * reach {
+        let bpos = btf.translation.truncate();
+        if cpos.distance_squared(bpos) <= reach * reach {
             chp.current -= bullet.damage;
+            // Spark off the Core's surface, tinted to the bullet's element.
+            let color = belems
+                .and_then(|b| b.0.iter().next())
+                .unwrap_or(Element::Kinetic)
+                .color();
+            hits.write(Hit {
+                pos: cpos + (bpos - cpos).normalize_or_zero() * cc.radius,
+                color,
+                dir: (cpos - bpos).normalize_or_zero(),
+            });
             commands.entity(e).try_despawn();
         }
     }
